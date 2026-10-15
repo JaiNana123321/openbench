@@ -15,6 +15,7 @@ node_modules/
 *.iml
 .vscode/
 .claude/settings.local.json
+.claude/worktrees/
 
 # macOS
 .DS_Store
