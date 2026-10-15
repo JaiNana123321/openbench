@@ -1,0 +1,69 @@
+% 09-evolution.tex — OpenBench Software Design Document, short edition (condensed from sections/09-evolution.tex on 2026-10-05).
+\section{Maintenance and Evolution}\label{sec:evo}
+
+Release~1 is fixed. Stretch items are built only if time allows, and Future items have no requirements yet. For each of them, and for the operational changes a successful deployment would bring, the design names the one place it lands, so none of them is a precondition for Release~1 and none changes the dependency direction of Section~\ref{sec:arch}.
+
+\subsection{Extension Points}
+
+Table~\ref{tab:evo-extensions} covers every Stretch and Future item of the SRS scope table plus two operational changes. Most rows add a class or a column behind an interface that already exists; the longer edition also lists, for each row, what does not change.
+
+{\footnotesize\setlength{\tabcolsep}{4pt}\renewcommand{\arraystretch}{1.08}
+\begin{longtable}{@{}L{0.27\textwidth}L{0.08\textwidth}L{0.17\textwidth}L{\dimexpr0.48\textwidth-6\tabcolsep\relax}@{}}
+\caption{Extension points for the Stretch, Future, and operational items.}\label{tab:evo-extensions}\\
+\toprule
+\textbf{Item} & \textbf{Tier} & \textbf{Where it lands} & \textbf{What changes} \\
+\midrule
+\endfirsthead
+\toprule
+\textbf{Item} & \textbf{Tier} & \textbf{Where it lands} & \textbf{What changes} \\
+\midrule
+\endhead
+\midrule\multicolumn{4}{@{}r@{}}{\itshape continued on the next page}\\
+\endfoot
+\bottomrule
+\endlastfoot
+Service tiers and preemption on Metered pools (\req{Metered.Tier.Define}, \req{Metered.Tier.Bump}) & Stretch & \module{Allocation}, \module{Ledger}, \module{Settings}, \module{Requests} & \code{MeteredAllocator} also implements \code{Bumpable}; a tier premium multiplies the Unit Price in \code{Pricing.quote} as the priority premium does; tiers per type become settings; \code{request\_line} gains a tier. The lifecycle, which already asks \code{AllocatorRegistry} for \code{Bumpable}, does not change \\
+Demand surcharge (\req{Ledger.Surcharge}) & Stretch & \module{Requests}, \module{Ledger}, \module{Settings} & \module{Requests} reads the requested window's fullness from \code{AllocationQueries} and passes it into \code{Pricing.quote} as an extra input; one multiplier inside \code{quote}. \code{Pricing} stays pure and \module{Ledger} never calls \module{Allocation} \\
+Actual usage recording and comparison (\req{Metered.Usage.Record}, \req{Metered.Usage.Compare}, \req{Dashboard.Usage}) & Stretch & \module{Allocation}, \module{Dashboard} & a \code{used\_units} column on \code{metered\_allocation}, written by a new Resource Owner operation in \module{Allocation}; one \module{Dashboard} view comparing requested and used units. \module{Ledger} is untouched \\
+Email notifications (\req{CI-inapp}) & Stretch & \module{Notifications}, \module{Settings} & \code{EmailDelivery} implements \code{Delivery} and sends after commit; SMTP settings become settings the Administrator edits. No caller of \code{Notifier} changes \\
+Demand analytics on declined Suggestions & Future & \module{Dashboard} & one view over Declined \code{suggestion} rows per Period; Suggestions keep their original ask and are never deleted \\
+Person consent (lifts \req{LI-consent}) & Future & \module{Allocation} & \code{MatchedAllocator.select} first creates a consent approval addressed to the Person, then the Manager's; \code{approval} gains a kind \\
+Skill-based Day Rate & Future & \module{Settings}, \module{Ledger} & a rate per skill in Settings with the one Day Rate as the default; a rate lookup next to \code{Pricing} computes a Loan's Earning from its skills \\
+Team rank priority & Future & \module{Allocation}, \module{Settings} & a rank per Team set by the Capacity Planner; one comparator in the Bump plan of \code{ExclusiveAllocator} consults it \\
+Inter-Team transfers & Future & \module{Ledger} & a fifth Transaction kind, Transfer, and one operation posting a pair of Transactions between two Teams with a reason \\
+Forecasting accuracy reward & Future & \module{Ledger}, \module{Jobs} & at rollover, a Grant computed from requested versus used units (needs usage recording) \\
+Usage feeds & Future & \module{Allocation} & an adapter fills \code{used\_units} from a scheduler or license server instead of the Resource Owner \\
+Auctions & Future & \module{Allocation} & a new Allocation Class whose allocator defers, as \code{ApprovalDriven} does, until bidding closes, with the winning bid as the Quote \\
+SSO (lifts \req{LI-integrations}) & Future & \code{security} & a Spring Security authentication provider (OpenID Connect or SAML) mapping the identity provider's subject to \code{member.username} \\
+Calendar integration (lifts \req{AS-calendar}) & Future & \module{Members} & an adapter behind \code{isAvailable} and \code{availableWithSkills} that also removes calendar busy days \\
+HR integration & Future & \module{Members} & an import adapter that creates, moves, and deactivates Members and Teams from the HR system \\
+Cluster-scheduler integration & Future & \module{Inventory}, \module{Jobs} & an adapter sets Resource units through \code{setUnits} and its guard; a polling step in \module{Jobs} pushes committed Metered allocations to the scheduler \\
+A second application instance & Oper\-ational & \module{Jobs}, \code{security} & a job lock table each job claims with a conditional update before it runs; sticky sessions at nginx or a shared session store. Allocation correctness already holds across instances, since type locks and exclusion constraints live in the database \\
+A new Allocation Class (\req{QA-extensible}, \req{CO-plugin}) & Oper\-ational & \module{Allocation} & one \code{Allocator} bean and the capability interfaces it needs; its name in the \code{AllocationClass} enumeration and the check on \code{resource\_type}. \module{Requests}, \module{Ledger}, and the existing allocators do not change \\
+\end{longtable}
+}
+
+\textbf{One dependency added during design.} \module{Ledger} calls \module{Notifications} to tell each Manager about Period rollover and mid-Period Grants; \module{Notifications} sits in the bottom layer, so the dependency rule still holds and the ArchUnit test allows it.
+
+\subsection{Assumptions That Would Break the Design}
+
+\begin{itemize}
+  \item \textbf{One company in one time zone} (\req{LI-company}): Price Bands, Period boundaries, person-days, the rollover time, and the API's offsets all use one configured zone; a zone per Team or Resource would change Price Band lookup, Periods, and rollover.
+  \item \textbf{One server instance, no high availability} (\req{LI-company}, \req{QA-available}): each job runs once because one process runs it, and sessions live in memory; a second instance needs a job lock table and shared sessions (Table~\ref{tab:evo-extensions}), and allocation correctness is unaffected.
+  \item \textbf{Hour granularity for Metered pricing and checks; day granularity for Loans}: finer windows multiply the hourly check's buckets and change Quote arithmetic; half-day Loans change person-days, the Day Rate, and the date-range constraint.
+  \item \textbf{The Capacity Planner sets Grants before the first Period} (\req{AS-planner}): without Grants only Matched lines can be submitted (\code{INSUFFICIENT\_BALANCE}); the design invents no default Grant.
+  \item \textbf{Loans are recorded honestly} (\req{AS-honest}): the Earning posts when the Loan forms and is corrected only by an early end; confirming the work would need a record of days actually worked.
+  \item \textbf{The scale of \req{PE-scale}}: the Shortlist is built on read, hourly sums are computed by query, and the Waitlist is walked inside the releasing transaction; at a hundred times the scale, stored hourly totals per type, a precomputed Shortlist, and a Waitlist fill moved to \code{DueWorkJob}.
+\end{itemize}
+
+\subsection{Risks}
+
+Likelihood and impact are low, medium, or high, as in the SRS.
+\begin{itemize}
+  \item \textbf{Lock-order discipline breaks} (medium; high: an oversold Metered pool, or deadlocks): \code{AllocationLock.\allowbreak lockTypes} takes a sorted set, so the order holds by construction; every path that consumes or reduces capacity runs through \code{RequestLifecycleService} or \code{ReductionGuard}, which lock first; the exclusion constraints backstop Exclusive instances and Loans; \code{lock\_timeout} turns a stuck wait into a 503. Metered pools have no constraint backstop, so the Metered race test and code review guard them.
+  \item \textbf{The exclusion constraints depend on the \code{btree\_gist} extension} (low; high: the server does not start): the first Flyway migration creates the extension, so a missing privilege fails at start-up and not at the first Request; every test run proves it on PostgreSQL~16.
+  \item \textbf{Waitlist walk cost grows with the Waitlist} (low at \req{PE-scale}; medium): \code{waitingFor(type, freed)} reads only entries whose window overlaps the freed one, through an index on type and start; the walk stops at the first Request that allocates; if needed, the fill moves to \code{DueWorkJob} and still meets \req{PE-jobs}.
+  \item \textbf{The single polling job stalls or fails} (low; medium: lapses and expiries come late): one transaction per Request, so one failure does not stop the rest; due work is found by query, so a missed run or a restart is caught up on the next run.
+  \item \textbf{The front end drifts from the API} (medium; medium): client types are generated from the OpenAPI document on every build, so a changed endpoint fails the TypeScript compile; Quotes and rules live only on the server.
+  \item \textbf{Four students, one semester} (\req{RI-5}; high; high): Release~1 is fixed and every Stretch and Future item is an extension point, never a precondition; modules are built bottom-up in the layer order against the interfaces of Section~\ref{sec:modules}, each testable alone; Stretch work starts only after the end-to-end test of the three-line Request passes.
+\end{itemize}

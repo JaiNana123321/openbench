@@ -1,0 +1,28 @@
+\subsection{Exclusive Allocation}\label{feat:exclusive}
+
+\subsubsection{Description and Priority}
+An Exclusive line asks for Resources that are held whole over a time window: a room, an instrument, a dedicated node. The system detects conflicts against existing allocations and Holds, picks a free instance when none is named, and requires every occurrence of a recurring line to be free. A Required line that cannot be satisfied joins the waitlist for its Resource Type and window; when a slot frees, the waitlist fills it automatically. A Manager may mark a line as a Priority line, at a premium on the Unit Price; a Priority line can Bump a standard line outside the bump cutoff and cannot itself be Bumped. This feature realizes \FE{exclusive} and is exercised by \UC{draft}, \UC{bump}, and \UC{waitlist}. \priority{High; the Priority and Bump requirements are Medium.}
+
+\subsubsection{Stimulus/Response Sequences}
+\begin{itemize}
+  \item \textbf{Stimulus:} A Request with an Exclusive line is evaluated. \textbf{Response:} If a free instance exists for the whole window the line is held or allocated; otherwise a Required line joins the waitlist and the Manager sees its position.
+  \item \textbf{Stimulus:} A Priority line finds no free instance. \textbf{Response:} Outside the bump cutoff the system Bumps the standard line that blocks it, refunds that line in full, moves it to the head of the waitlist, and notifies its Manager.
+  \item \textbf{Stimulus:} An allocation or Hold ends early. \textbf{Response:} The system offers the slot to the waitlist in order (Section~\ref{feat:lifecycle}).
+\end{itemize}
+
+\subsubsection{Functional Requirements}
+\fr{Exclusive.Line.Form}{An Exclusive line shall name a Resource Type and optionally one specific Resource of that type, a quantity of instances, a window, and optionally a weekly recurrence.}
+\fr{Exclusive.Conflict}{An instance shall be free for a window when no allocation and no Hold on that instance overlaps any part of the window; a line shall be satisfiable when its quantity of free instances exists for every occurrence (\BR{line-atomic}).}
+\fr{Exclusive.Recurrence}{For a recurring line every occurrence shall be free on the same instance; if any occurrence is not free the whole line is unsatisfiable (\BR{line-atomic}). To accept fewer occurrences the Manager splits the line (\FR{Draft.Line.Split}).}
+\fr{Exclusive.Pick}{When no specific Resource is named the system shall choose, among the free instances, the one with the fewest allocated hours in the current Period, and shall record the choice on the line.}
+\fr{Exclusive.Waitlist.Join}{A Required Exclusive line that is unsatisfiable shall join the waitlist for its Resource Type and window; an Optional line shall never join a waitlist (\BR{waitlist-order}).}
+\fr{Exclusive.Waitlist.Order}{Each waitlist shall be ordered with Priority lines first, then by the submission time of the Request; a Bumped line shall be placed at the head (\BR{waitlist-order}).}
+\fr{Exclusive.Waitlist.Fill}{When capacity frees through a Release, a Bump, an expired Hold, or a retirement being undone, the system shall offer it to the waiting lines in order and satisfy the first line whose window fits, as specified by \FR{Lifecycle.Waiting.Reevaluate}; the Manager of that line shall be notified.}
+\fr{Exclusive.Waitlist.Expire}{A waiting line shall leave the waitlist when its window start passes; its Request shall stay Waiting until the Manager edits or withdraws it.}
+\fr{Exclusive.Waitlist.View}{The Manager shall see each waiting line's position and the number of lines ahead of it.}
+\fr{Exclusive.Priority.Mark}{The system shall let the Manager mark an Exclusive line as a Priority line while drafting; its Quote shall include the priority premium (\BR{priority-premium}). Priority lines shall be offered for Exclusive lines only in Release~1 (\BR{priority-exclusive-only}).}
+\fr{Exclusive.Priority.Bump}{When a Priority line finds no free instance, the system shall Bump the standard lines, allocated or on Hold, that block the instance needing the fewest Bumps, preferring among equal counts the lines with the latest submission time, provided every Bump satisfies \FR{Exclusive.Priority.Cutoff}.}
+\fr{Exclusive.Priority.Cutoff}{The system shall not Bump a line whose window, or any occurrence of it, starts within the bump cutoff of the Resource Type from the current time (example default 24~hours; \BR{bump-cutoff}). A Priority line that cannot Bump shall join the waitlist ahead of all standard lines.}
+\fr{Exclusive.Priority.NoBump}{A Priority line shall never be Bumped, and a Priority line shall never Bump another Priority line; among Priority lines the earlier submission wins (\BR{priority-premium}).}
+\fr{Exclusive.Bump.Effect}{When a line is Bumped the system shall, in one transaction: post a Refund equal to the full Charge (no Refund Schedule applies; a Hold has no Charge and gets none), place the line at the head of its waitlist, notify its Manager with the reason, and if the line was Required in an Allocated Request move that Request to Waiting while its other lines stay allocated (\BR{bumped-line}).}
+\fr{Exclusive.Bump.Audit}{Every Bump shall be recorded with the Priority line, the Bumped line, the actor who submitted the Priority line, and the timestamp.}

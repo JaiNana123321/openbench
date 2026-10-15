@@ -1,0 +1,51 @@
+\section{Data Dictionary and Data Model}\label{app:data}
+
+\subsection{Data Model}
+
+\figref{fig:datamodel} shows the entities the requirements name and the relationships between them. Attributes are the ones that appear in requirements; the data dictionary below gives their meaning and type. The Inventory is the Resource Type and Resource entities together with the Holds and allocations on them; the Ledger is the Account and Transaction entities. Neither holds the other's information (\BR{transactions}).
+
+\begin{landscape}
+  \centering
+  \includegraphics[width=\linewidth,height=0.86\textheight,keepaspectratio]{data-model.pdf}
+  \captionof{figure}{Data model. Multiplicities read along each line; a Statement is a per-Period view over Transactions and is not stored.}
+  \label{fig:datamodel}
+\end{landscape}
+
+\subsection{Data Dictionary}
+
+{\small
+\begin{longtable}{@{}L{2.9cm}L{7.2cm}L{5.4cm}@{}}
+\toprule
+\textbf{Element} & \textbf{Meaning} & \textbf{Composition and type} \\
+\midrule
+\endfirsthead
+\multicolumn{3}{@{}l}{\itshape Data dictionary (continued)}\\ \toprule
+\textbf{Element} & \textbf{Meaning} & \textbf{Composition and type} \\
+\midrule
+\endhead
+\bottomrule
+\endlastfoot
+Team & The organizational unit that owns an Account and its Requests. & name (text, unique); Manager (one Member); retired (yes or no) \\
+Member & Any user; belongs to one Team; lendable as a Person. & name; email (text, unique); username; password hash; Team; skills (set of Skill); availability (set of date ranges); roles (subset of Manager, Resource Owner, Capacity Planner, Administrator); active (yes or no) \\
+Skill & An entry of the Administrator-maintained skill list. & name (text, unique) \\
+Resource Type & A named definition that fixes an Allocation Class and attributes. & name (unique); Allocation Class (Matched, Exclusive, Metered); attribute definitions (name and type: text, number, date, list); Unit Price (credits per instance-hour or unit-hour; none for Matched); bump cutoff (duration; Exclusive only); Refund Schedule (list of steps: minimum lead time, fraction $<$ 100\%); retired \\
+Resource & One thing that can be allocated. & name (unique within type); Resource Type; attribute values; Resource Owner (Member); units (integer, Metered only); retired from (date or none) \\
+Pool Capacity & Derived: sum of units of a Metered type's unretired Resources. & integer, per Resource Type \\
+Price Band & A time window carrying a multiplier on the Unit Price. & Resource Type; weekdays (subset of Mon--Sun); start and end time of day; multiplier (decimal $>$ 0) \\
+Quota & Optional per-Team cap on concurrent units of a Metered type. & Team; Resource Type; maximum concurrent units (integer) \\
+Request & One request of a Team, submitted by its Manager. & Team; state (Draft, Submitted, Pending, Allocated, Waiting, Withdrawn, Refused); created at; submitted at; Objection Window end (timestamp or none); lines (one or more Request Lines); state history (list of: timestamp, actor, from state, to state) \\
+Request Line & One need inside a Request. & Resource Type; Allocation Class (derived); quantity (integer $\ge$ 1; one for a named Person); window (start and end timestamp); recurrence (weekday, time of day, first and last week; or none); Required or Optional; Priority line (yes or no; Exclusive only); skills (set) or named Person (Matched only); specific Resource (Exclusive, optional); locked Quote (credits or none until submitted); allocated instance (Resource or none); state (see below) \\
+Line state & The state of one Request Line. & Open (in a Draft); Awaiting approval (Matched, approvals outstanding); Approved (Matched, all approvals in, Request not yet Allocated); Held (Exclusive or Metered, on Hold); Waitlisted; Allocated; Dropped (Optional, could not be satisfied); Released (in whole); Bumped (displaced, now Waitlisted at head); Expired (waitlisted past its window start) \\
+Suggestion & A single proposed line from a Member to their Manager. & Member; Manager; proposed line (same fields as a Request Line); note; state (Open, Accepted, Declined); accepted into (Request Line or none); decline reason; created at \\
+Candidate & A Person on a Shortlist for a Matched line, and the approval asked of their Manager. & Request Line; Member; person-days lent in the current Period (integer, at Shortlist time); selected (yes or no); decision (none, Approved, Refused); decided by (Member, or Capacity Planner on escalation); decided at; reason \\
+Hold & A tentative, uncharged allocation. & Request Line; Resource (Exclusive) or units (Metered); placed at; expires at (Objection Window end) \\
+Loan & A Person allocated to another Team for a window. & Request Line; Member (Person); lending Team; borrowing Team; start; end (may be shortened); person-days (derived) \\
+Waitlist entry & A Required line waiting for a Resource Type and window. & Request Line; Resource Type; window; position (derived from Priority, Bump, submission time); joined at \\
+Account & A Team's standing in the Ledger. & Team; granted (credits); earned (credits); held (credits, derived from Holds); Balance and Available Balance (derived) \\
+Transaction & One append-only entry against an Account. & Team; kind (Grant, Charge, Earning, Refund); amount (credits; negative only for an Earning correction); drawn from granted and from earned (Charge and Refund); Period; posted at; actor or job; Request Line (where applicable); corrects (Transaction or none); reason (Grant adjustment) \\
+Period & The interval over which Grants are issued and expire. & start; end; Grants set per Team (credits); Day Rate in force (credits per person-day) \\
+Statement & Derived per Team and Period from Transactions. & opening granted and earned; Grants; Charges; Earnings; Refunds; expired; closing granted and earned \\
+Setting change & Audit record of a configuration change. & setting; old value; new value; actor; timestamp \\
+Notification & An in-app message to a Member. & recipient; text; link to Request, line, or Suggestion; created at; read at \\
+\end{longtable}
+}

@@ -1,0 +1,54 @@
+@startuml deployment
+' F4 Deployment of Release 1: one container running the Spring Boot jar, one PostgreSQL 16
+' database, an optional nginx in front for TLS. Single instance (no high availability).
+skinparam shadowing false
+skinparam defaultFontName Helvetica
+skinparam defaultFontSize 12
+skinparam ArrowFontSize 10
+skinparam ArrowColor #223
+skinparam nodesep 30
+skinparam ranksep 40
+skinparam node {
+  BackgroundColor #F4F6FA
+  BorderColor #223
+}
+skinparam artifact {
+  BackgroundColor White
+  BorderColor #223
+}
+skinparam component {
+  BackgroundColor White
+  BorderColor #223
+}
+skinparam database {
+  BackgroundColor #F4F6FA
+  BorderColor #223
+}
+
+node "User workstation" as WS {
+  node "Web browser\n(current Chrome, Firefox,\nSafari, Edge)" as Browser {
+    artifact "React SPA\n(downloaded bundle)" as SPAcopy
+  }
+}
+
+node "On-site server" as Server {
+  node "nginx <<optional>>\nTLS termination" as Nginx
+  node "Docker container (Java 17 runtime)" as Container {
+    artifact "openbench.jar (Spring Boot 3)" as Jar {
+      component "embedded Tomcat\n:8080" as Tomcat
+      component "REST API /api\n(nine modules)" as Api
+      component "static SPA\n(index.html, assets)" as Static
+      component "scheduled jobs\nDueWorkJob,\nPeriodRolloverJob" as Jobs
+    }
+  }
+  database "PostgreSQL 16\n(Flyway-migrated schema)" as DB
+}
+
+Browser --> Nginx : HTTPS :443
+Nginx --> Tomcat : HTTP :8080\n(local)
+Browser ..> Tomcat : HTTPS (TLS in Tomcat\nwhen nginx is absent)
+Tomcat --> Api
+Tomcat --> Static
+Api --> DB : JDBC :5432
+Jobs --> DB : JDBC :5432
+@enduml

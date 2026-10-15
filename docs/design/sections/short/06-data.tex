@@ -1,0 +1,62 @@
+% 06-data.tex (short edition): OpenBench Software Design Document, Section 6 (Data Design).
+% Condensed from sections/06-data.tex on 2026-10-05; table names, constraint names, and figure captions are the same in both editions.
+% Every SQL statement below was run on PostgreSQL 16.15 on 2026-10-05, with the behavior described in the text.
+% The group below only sets \emergencystretch so that long \code{} identifiers do not overrun the margin.
+\begingroup\setlength{\emergencystretch}{2em}
+\section{Data Design}\label{sec:data}
+
+OpenBench keeps all its state in one PostgreSQL~16 database (\req{CO-db}, \req{SI-db}).
+
+% ======================================================================== 6.1
+\subsection{Schema by owner}
+
+Figure~\ref{fig:schema-core} shows the tables of the core modules grouped by owning module, and the list below gives every table and view by its owner with its purpose. Conventions: primary keys are \code{bigint GENERATED ALWAYS AS IDENTITY} (join tables and per-Team or per-type settings use their natural keys); instants are \code{timestamptz}, mapped to \code{Instant}, and windows are half-open, so back-to-back windows do not overlap; Loan, availability, and Period days are \code{date}, inclusive at both ends; credits are \code{numeric(12,2)}; every row has \code{created\_at} and \code{created\_by} (null when a job writes it); states and kinds are \code{text} with a CHECK on the allowed values. A foreign key may cross a module boundary as a read-only reference (\code{request\_line.type\_id} references \code{resource\_type}), but only the owning module writes a table: its repositories are package-private, and the ArchUnit test checks it (Section~\ref{sec:arch}).
+
+\begin{figure}[htbp]\centering
+\includegraphics[width=0.46\textwidth,keepaspectratio]{schema-c.pdf}\par\medskip
+\includegraphics[width=0.78\textwidth,keepaspectratio]{schema-d.pdf}
+\caption[Database schema, core modules (entity-relationship diagram)]{Database schema, core modules: above, the tables owned by \module{Requests} and \module{Ledger}; below, those owned by \module{Allocation}. Foundation tables they reference appear as stubs; a key that crosses a module boundary is a read-only reference. The notes quote the two exclusion constraints and the append-only rule.}
+\label{fig:schema-core}
+\end{figure}
+
+{\footnotesize
+\begin{itemize}
+\item \module{Members}: \code{team} (Team); \code{member} (Member, login identity); \code{member\_role} (Granted roles); \code{skill} (Skill list); \code{member\_skill} (A Member's skills); \code{availability\_range} (Days a Member may be lent).
+\item \module{Inventory}: \code{resource\_type} (Resource Type; the row \code{AllocationLock} locks); \code{resource\_type\_\allowbreak attribute} (Attribute definitions); \code{resource} (Exclusive instance or Metered unit source); \code{resource\_attribute\_\allowbreak value} (Attribute values).
+\item \module{Settings}: \code{period} (Period); \code{grant\_plan} (Grant per Team and Period); \code{type\_pricing} (Unit Price, bump cutoff); \code{price\_band} (Price Band); \code{refund\_step} (Refund Schedule step); \code{quota} (Quota per Team and Metered type); \code{planner\_setting} (Single-valued settings); \code{setting\_change} (Setting change log).
+\item \module{Requests}: \code{request} (Request); \code{request\_line} (Request Line, locked Quote); \code{suggestion} (Suggestion); \code{request\_event} (State history).
+\item \module{Allocation}: \code{exclusive\_occurrence} (One occurrence on one instance); \code{metered\_allocation} (Units over a window); \code{waitlist\_entry} (A waiting Required line); \code{candidate} (Shortlist entry); \code{approval} (Approval of a Candidate); \code{loan} (Loan).
+\item \module{Ledger}: \code{account} (Account); \code{transaction} (Grant, Charge, Earning, Refund); \code{held\_credit} (Held credits per line on Hold); \code{period\_close} (Expired and closing credits).
+\item \module{Notifications}: \code{notification} (In-app notification).
+\item \module{Dashboard} (views; owns no table): \code{v\_type\_hours} (Allocated and available hours per type and day); \code{v\_team\_credits} (Credits per Team and Period by kind, expired amount); \code{v\_waiting} (Waiting lines per type).
+\end{itemize}
+}
+
+% ======================================================================== 6.2
+\subsection{Constraints that carry business rules}
+
+A rule between two rows, or between one row and a fixed bound, is stated in the schema, where no code path can skip it. A rule over a sum of rows is a query run under the type lock of Section~\ref{sec:runtime}.
+
+\begin{lstlisting}[language=SQL]
+CREATE EXTENSION IF NOT EXISTS btree_gist;
+ALTER TABLE exclusive_occurrence ADD CONSTRAINT exclusive_occurrence_no_overlap EXCLUDE USING gist
+  (resource_id WITH =, tstzrange(starts_at, ends_at, '[)') WITH &&) WHERE (state IN ('HELD', 'ALLOCATED'));
+ALTER TABLE loan ADD CONSTRAINT loan_one_at_a_time EXCLUDE USING gist
+  (member_id WITH =, daterange(starts_on, ends_on, '[]') WITH &&);
+REVOKE UPDATE, DELETE ON transaction, request_event, setting_change FROM openbench_app;
+\end{lstlisting}
+
+\paragraph{No overlapping allocation, no double Loan.} A row with the same Resource as a live row and an overlapping window is rejected. The second constraint keeps a Person in at most one Loan at a time on every code path, with no exception for \code{ended\_early}, which only marks that an Earning correction was posted. Only HELD and ALLOCATED rows take part in the first constraint; RELEASED, BUMPED, and EXPIRED rows stay as history and block nothing.
+
+\paragraph{The append-only Ledger.} Flyway connects as the schema owner; the application connects as \code{openbench\_app}, which owns nothing. The application can insert and read Transactions but never change or delete one, so \req{Ledger.Transaction.Kinds} and \req{QA-audit} hold even against a bug. A correction is a new row whose \code{corrects\_id} names the one it corrects; the only one in Release~1, the Earning correction of an early Loan end, is the only negative amount and the only Transaction that may take a Balance below zero.
+
+\paragraph{Check constraints.} A Refund Schedule never reaches 100\% (\req{Release.Refund}): \code{CHECK (fraction >= 0 AND fraction < 1)} on \code{refund\_step}.
+
+\paragraph{The Metered hourly sum.} \req{Metered.Pool.Check} needs, in every hour of the window, the units of live rows on the type plus the requested units within Pool Capacity, and the Team's share within its Quota. \code{MeteredAllocator} runs a native query after \code{lockTypes}, in the same READ COMMITTED transaction, and reads Pool Capacity after the lock too. The pure class \code{HourlyLoad} (Section~\ref{mod:allocation}) then walks the hours in order and returns the earliest one in which \code{pool\_used} plus the requested units exceed Pool Capacity (\code{POOL\_FULL}) or, when the Team has a Quota on the type, \code{team\_used} plus them exceed it (\code{QUOTA\_EXCEEDED}); no such hour means the line fits. With zero requested units and the reduced capacity, the same query and \code{HourlyLoad} answer \code{ReductionGuard.earliestHourExceeding} (\req{Inventory.Resource.Add}).
+
+
+% ======================================================================== 6.3
+\subsection{Migrations and the test database}
+
+Spring Boot runs Flyway at start-up, before Hibernate, because the \code{EntityManagerFactory} depends on database initialization. \code{spring.jpa.hibernate.ddl-auto=validate} then checks every entity against the migrated tables and stops start-up on a mismatch; Hibernate never creates a table, and the migrations alone own the extension, the exclusion constraints, the partial indexes, and the grants. The SRS first required tests on H2 in memory with the same migrations. H2 cannot run them: in PostgreSQL mode it rejects \code{CREATE EXTENSION}, has no range types or \code{EXCLUDE}, and cannot parse the hourly sum's interval arithmetic. SRS 0.3 therefore changes \req{CO-db} and \req{SI-db} to PostgreSQL~16 in a container started by the test suite (\rc{3}). Integration tests extend one base class with \code{@Testcontainers} and a \code{PostgreSQLContainer} (\code{postgres:16-alpine}); \code{@ServiceConnection} points the data source at the container, so Flyway runs the production migrations, extension and constraints included. The concurrency test runs two allocations on two threads against one pool and asserts that exactly one succeeds; another connects as \code{openbench\_app} (created by the container's init script) and checks that updating a Transaction is refused (Section~\ref{sec:cross}). Nothing is purged in Release~1 (\req{QA-retention}): no code path deletes a Request, a line, a Suggestion, a \code{request\_event}, or a Transaction, and Teams, skills, Resource Types, and Resources are retired, not deleted.
+\endgroup

@@ -1,0 +1,24 @@
+\subsection{Inventory and Resource Types}\label{feat:inventory}
+
+\subsubsection{Description and Priority}
+The Inventory is the record of every Resource that exists, its Resource Type, and who currently holds it or has it on Hold. A Resource Type is data, created by an Administrator, that fixes a Resource's Allocation Class and attributes; adding a new kind of room, instrument, or pool therefore needs no code. Resource Owners maintain the records of Exclusive and Metered Resources, including Pool Capacity. This feature realizes \FE{inventory} and is exercised by \UC{define-type} and \UC{inventory}. \priority{High.}
+
+\subsubsection{Stimulus/Response Sequences}
+\begin{itemize}
+  \item \textbf{Stimulus:} An Administrator defines a Resource Type. \textbf{Response:} The system stores it and Request Lines can name it immediately.
+  \item \textbf{Stimulus:} A Resource Owner adds a Resource or changes the units of a Metered Resource. \textbf{Response:} The system updates the Inventory, refusing a reduction that would fall below what is already allocated or held.
+  \item \textbf{Stimulus:} A Member with any role views a Resource for a time window. \textbf{Response:} The system shows whether it is free, on Hold, or allocated, and to which Team.
+\end{itemize}
+
+\subsubsection{Functional Requirements}
+\fr{Inventory.Type.Define}{The system shall let an Administrator define a Resource Type as data consisting of a unique name, exactly one Allocation Class (Matched, Exclusive, or Metered), and zero or more named attributes, each of type text, number, date, or a list of allowed values.}
+\fr{Inventory.Type.NoCode}{Defining, changing the attributes of, or retiring a Resource Type shall require no change to program code or deployment configuration.}
+\fr{Inventory.Type.Person}{The system shall provide one built-in Resource Type named Person, of class Matched, whose Resources are the Members; it shall not be retired.}
+\fr{Inventory.Type.Retire}{The system shall let an Administrator retire a Resource Type. A retired type shall accept no new Request Lines; existing allocations and Transactions that reference it shall be unaffected. A Resource Type shall never be deleted once any Request Line references it.}
+\fr{Inventory.Resource.Add}{The system shall let a Resource Owner add an Exclusive or Metered Resource by giving it a unique name within its Resource Type, choosing the type, and filling in the type's attributes. The Resource Owner who adds a Resource becomes its owner and may transfer ownership to another Resource Owner.}
+\fr{Inventory.Resource.Retire}{The system shall let a Resource Owner retire a Resource from a date onward. The system shall refuse the retirement while any allocation or Hold on that Resource lies on or after that date, and shall name the blocking Request Lines.}
+\fr{Inventory.Pool.Units}{A Metered Resource shall record the number of units it supplies at once. The Pool Capacity of a Metered Resource Type shall be the sum of the units of its Resources that are not retired.}
+\fr{Inventory.Pool.Reduce}{When a Resource Owner reduces the units of a Metered Resource, the system shall refuse the change if, in any future hour, the units already allocated or held for that Resource Type would exceed the new Pool Capacity, and shall report the earliest such hour and the shortfall.}
+\fr{Inventory.View.Holder}{The system shall show, for any Resource and any time window, whether it is free, on Hold, or allocated in each part of the window, and for Holds and allocations the holding Team and Request.}
+\fr{Inventory.View.Filter}{The system shall let a Member list Resources filtered by Resource Type, by attribute value, and by being free for a given window.}
+\fr{Inventory.Owner.NoApprove}{The system shall place no approval step for a Resource Owner in the allocation of any line (\BR{roles}).}

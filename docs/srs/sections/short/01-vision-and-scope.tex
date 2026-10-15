@@ -1,0 +1,97 @@
+% Short-edition copy of Section 1, reworded after the 2026-09-21 review. The full edition keeps its own copy
+% at sections/01-vision-and-scope.tex. The scope content (FE-n, the Release 1 / Stretch / Future table, LI-n,
+% RI-n) must stay identical in both editions; only the wording differs.
+\section{Vision and Scope}\label{sec:vision}
+
+\subsection{Background, Business Opportunity, and Customer Needs}
+
+Companies hold several types of scarce internal capacity: their people's time, rooms and lab equipment, GPU hours, and license seats. Much of it goes unused because no one can see it. Managers keep engineers on the books between projects, rooms are reserved for long periods but never used, and the shared GPU pool creates queues where the loudest Team prevails. Every existing solution deals with only one aspect of this problem: calendaring systems schedule manually, talent marketplaces connect people, and cluster schedulers ration compute. There is no central system where a Manager can ask for ``two engineers with PyTorch experience for six weeks, four GPUs for two of these weeks, and a lab room on Thursdays'' and receive a single response. Our proposal cites two internal talent marketplaces as evidence that making capacity visible recovers much of it: Unilever redeployed over 8{,}000 employees and 300{,}000 hours, and Schneider Electric identified about 127{,}000 idle hours within weeks of launch.
+
+\subsection{Business Objectives and Success Criteria}
+
+\bo{utilization}{Enhance usage of shared Exclusive and Metered Resources by highlighting their availability and making requests easy in one platform.}
+\bo{lending}{Make lending a person worthwhile for the Manager, who will then let go of the person between projects rather than retain them.}
+\bo{process}{Replace the piecemeal negotiating over capacity with a single process that is time-bound and auditable, with results visible to all parties involved.}
+
+\scc{demo}{The final demonstration takes a Request spanning all three Allocation Classes to Allocated and shows its Charges and Earnings in both Teams' Statements.}
+\scc{dashboard}{From the first Period of use, the dashboard shows how much of each Resource Type was used or sat idle and how many credits each Team earned and spent.}
+\scc{bounded}{No Request waits on an unresponsive Manager beyond the Objection Window, and every Request finishes in Allocated, Waiting, Refused, or Withdrawn with its complete history kept.}
+\scc{usability}{A Manager with no training can make and submit a three-line Request within five minutes, tested with at least three people from outside our team.}
+
+\subsection{Vision Statement}
+
+For Managers seeking people, rooms, and compute controlled by another Team, \SRSproduct{} serves as an internal marketplace. The Manager makes one Request covering all three categories, and each part is allocated under the policy that fits it: people by skill and their own Manager's approval; rooms and instruments with conflict detection, a waitlist, and priority bumping; metered pools with capacity and quota checks. A booking calendar, a talent marketplace, and a cluster scheduler each cover one category. \SRSproduct{} covers all three within one Request and binds them together through a Ledger of credits, where lending a person earns the credits that a room or a GPU allocation costs. Credits are for showback only; no money changes hands.
+
+\Needspace*{9\baselineskip}
+\subsection{Major Features}
+
+{\small
+\begin{multicols}{2}
+\fe{inventory}{Inventory and Resource Types as data}
+\fe{profiles}{Member profiles, skills and availability}
+\fe{suggestions}{Suggestions from Members to their Manager}
+\fe{draft}{Draft and submit a Request with a locked Quote}
+\fe{matched}{Matched allocation, Shortlist and one approval}
+\fe{exclusive}{Exclusive allocation, conflicts, waitlist, Bump}
+\fe{metered}{Metered allocation, Pool Capacity and Quota}
+\fe{lifecycle}{Request lifecycle with bounded Holds}
+\fe{release}{Release with a partial Refund}
+\fe{ledger}{Ledger and pricing, Grants, Charges, Earnings, Price Bands}
+\fe{dashboard}{Showback dashboard and Statement}
+\fe{admin}{Administration and Capacity Planner settings}
+\end{multicols}
+}
+
+\subsection{Scope of Initial and Subsequent Releases}
+
+Release~1 is what we promise to deliver this semester. Stretch features are Low-priority requirements in Section~\ref{sec:features}, built only if time allows. Future features are named so the design is prepared for them; they have no requirements.
+
+{\footnotesize\renewcommand{\arraystretch}{1.05}
+\begin{tabularx}{\textwidth}{@{}L{1.7cm}>{\hsize=1.4\hsize}Y>{\hsize=0.8\hsize}Y>{\hsize=0.8\hsize}Y@{}}
+\toprule
+\textbf{Area} & \textbf{Release 1} & \textbf{Stretch} & \textbf{Future} \\
+\midrule
+Request & One Request including all three classes. Required and Optional lines. Suggestions. Dashboard and Statement & --- & Demand analytics on declined Suggestions \\
+Matched & Skill filter, availability, Shortlist, one approval by the lending Manager & --- & Person consent. Skill-based Day Rate \\
+Exclusive & Conflict detection, waitlist, Priority lines that Bump & --- & Team rank set by the Capacity Planner \\
+Metered & Pool Capacity check. Per-Team Quota & Service tiers and preemption (Priority lines on Metered pools) & --- \\
+Ledger and pricing & Grant, Charge, Earning, Refund. Grants expire at Period end, Earnings carry over. Refund Schedule. Unit Price, Price Bands, priority premium. Locked Quote & Actual usage recording. Requested and actual usage comparison. Demand surcharge & Inter-Team transfers. Forecasting accuracy reward. Usage feeds. Auctions \\
+Platform & Username and password. In-app notifications. Web browser only. No integrations & Email notifications & SSO; calendar, HR, and cluster-scheduler integration \\
+\bottomrule
+\end{tabularx}
+}
+
+\subsection{Limitations and Exclusions}
+
+\li{company}{One company, one time zone, one deployment. Desktop web browser only, with no mobile layout and no high-availability configuration.}
+\li{money}{No real money transactions occur. Credits exist for showback only, so there are no invoices and no finance system.}
+\li{integrations}{No external system integrations in Release~1: no calendar, HR, identity, or cluster scheduler.}
+\li{consent}{A Person is informed of the Loan but cannot refuse it in Release~1.}
+
+\Needspace*{8\baselineskip}
+\subsection{Stakeholder Profiles}
+
+{\footnotesize\renewcommand{\arraystretch}{1.05}
+\begin{tabularx}{\textwidth}{@{}L{2.4cm}YY@{}}
+\toprule
+\textbf{Stakeholder} & \textbf{Major value} & \textbf{Attitudes, interests, constraints} \\
+\midrule
+Management & Idle capacity back in productive use, less hoarding, and visibility of who uses what and who wants what & Wants showback information without a billing process, and will not pay for chargeback. \\
+Managers & A single point to request people, rooms, and compute, and a reply within a certain timeframe & Concerned about losing their people. Want Priority left open for emergencies. Have little time to learn a new tool. \\
+Members (as Persons) & To be able to see their own skills and Loans and to make Suggestions to their Manager & Would like to be consulted before being loaned. Cannot decline a Loan in Release~1. \\
+Resource Owners & Correct Inventory information and no approval chores & Would like allocations to account for changes in capacity. Manage only their own Resources. \\
+Capacity Planner & Grants, prices, and Refund Schedules to shape demand & Would like to have few escalations, and those solvable with a Grant. Sets policies but does not administer users. \\
+Administrator & Ability to create Resource Types without coding; simple role management & Does not want to make policy decisions. Configures the system but does not set prices. \\
+\bottomrule
+\end{tabularx}
+}
+
+\subsection{Business Risks}
+
+Each risk gives its probability, then its impact: low, medium, or high.
+
+\ri{nolending}{Managers don't lend, so the marketplace is always empty (medium, high). Mitigation: Matched lines cost the borrower nothing, every Loan earns the full Day Rate, and earned credits never expire.}
+\ri{holds}{Holds tie up rooms for Requests that end up not going ahead (medium, medium). Mitigation: Holds never survive the Objection Window, and the waitlist fills the freed room.}
+\ri{prices}{Incorrect Grants or price settings can result in hoarding or wasted capacity (medium, medium). Mitigation: Price Bands, mid-Period Grant adjustments, and the dashboard's idle-capacity view.}
+\ri{gaming}{Managers over-reserve rooms and Release them late (medium, medium). Mitigation: the Refund Schedule never refunds 100\% and drops sharply inside seven days of the booked window's start.}
+\ri{scope}{Four students, one semester (high, high). Mitigation: Release~1 is fixed; Stretch and Future items are plug-ins behind the same allocation interface.}

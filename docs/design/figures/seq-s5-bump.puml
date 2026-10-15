@@ -1,0 +1,82 @@
+@startuml seq-s5-bump
+' F15 Scenario S5: a Priority line Bumps a standard Exclusive line (UC-8). One transaction.
+skinparam shadowing false
+skinparam defaultFontName Helvetica
+skinparam defaultFontSize 11
+skinparam ArrowColor #223
+skinparam sequenceMessageAlign left
+skinparam responseMessageBelowArrow true
+skinparam sequence {
+  ParticipantBackgroundColor #F4F6FA
+  ParticipantBorderColor #223
+  ActorBackgroundColor White
+  ActorBorderColor #223
+  LifeLineBorderColor #223
+  LifeLineBackgroundColor #DDE3EE
+  GroupBorderColor #223
+  GroupBackgroundColor #DDE3EE
+  DividerBackgroundColor #F4F6FA
+  DividerBorderColor #223
+}
+skinparam database {
+  BackgroundColor #F4F6FA
+  BorderColor #223
+}
+skinparam note {
+  BackgroundColor White
+  BorderColor #223
+}
+hide footbox
+autonumber
+
+actor Manager
+participant "Web\nclient" as Web
+participant RequestLifecycleService as RLS
+participant AllocationLock as Lock
+participant "ExclusiveAllocator\n(Allocator, Bumpable,\nWaitlistable)" as Ex
+participant LedgerService as Ledger
+participant Notifier
+database PostgreSQL as DB
+
+Manager -> Web : submit
+Web -> RLS : submit(r, actor)
+activate RLS
+note over Lock, Ledger
+  one transaction; lock order: Resource Type
+  rows by ascending id, then accounts
+end note
+RLS -> Ledger : requireAffordable(team, Required sum incl. premium)
+RLS -> Lock : lockTypes(types)
+Lock -> DB : SELECT ... FROM resource_type ORDER BY id FOR UPDATE
+RLS -> Ex : evaluate(priority line)
+Ex --> RLS : UNSATISFIABLE (slot taken)
+RLS -> Ex : planBump(priority line)
+note over Ex, Ledger
+  via AllocatorRegistry.capability;
+  fewest Bumps, latest submitted,
+  none inside the bump cutoff
+end note
+Ex --> RLS : Optional<BumpPlan>
+alt BumpPlan found
+  RLS -> Ex : applyBump(plan)
+  Ex -> DB : UPDATE old occurrences SET state = BUMPED; flush
+  Ex -> DB : INSERT new occurrence (exclusion constraint guards)
+  alt Allocated: refund
+    RLS -> Ledger : refund(bumped Team, bumped line, full Charge)
+  else Held: releaseCredits
+    RLS -> Ledger : releaseCredits(bumped Team, bumped line)
+  end
+  opt the bumped line is Required
+    RLS -> Ex : join(bumped line)
+    note over Ex : bumped: head of Waitlist
+    RLS -> RLS : record(event)
+    note over Lock, Ex : bumped Request -> Waiting
+  end
+  RLS -> Notifier : notify(bumped Team's Manager)
+  RLS -> RLS : allocate (S2)
+else no plan (inside the bump cutoff, or only Priority holders)
+  RLS -> RLS : toWaiting
+end
+RLS --> Web : SubmitOutcome
+deactivate RLS
+@enduml

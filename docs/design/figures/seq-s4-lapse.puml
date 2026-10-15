@@ -1,0 +1,82 @@
+@startuml seq-s4-lapse
+' F14 Scenario S4: the Objection Window lapses and the Capacity Planner resolves the
+' escalation (UC-7). No Hold is placed after the lapse.
+skinparam shadowing false
+skinparam defaultFontName Helvetica
+skinparam defaultFontSize 11
+skinparam ArrowColor #223
+skinparam sequenceMessageAlign left
+skinparam responseMessageBelowArrow true
+skinparam sequence {
+  ParticipantBackgroundColor #F4F6FA
+  ParticipantBorderColor #223
+  ActorBackgroundColor White
+  ActorBorderColor #223
+  LifeLineBorderColor #223
+  LifeLineBackgroundColor #DDE3EE
+  GroupBorderColor #223
+  GroupBackgroundColor #DDE3EE
+  DividerBackgroundColor #F4F6FA
+  DividerBorderColor #223
+}
+skinparam database {
+  BackgroundColor #F4F6FA
+  BorderColor #223
+}
+skinparam note {
+  BackgroundColor White
+  BorderColor #223
+}
+hide footbox
+autonumber
+
+actor "Capacity\nPlanner" as CP
+participant "Web\nclient" as Web
+participant DueWorkJob as Job
+participant RequestLifecycleService as RLS
+participant AllocationLock as Lock
+participant "Allocator\n(Exclusive,\nMetered)" as Alloc
+participant "MatchedAllocator\n(ApprovalDriven)" as MA
+participant LedgerService as Ledger
+participant Notifier
+
+note over Job, Ledger
+  every 60 s the job calls lapsedWindows(now), then onWindowLapse per returned Request
+  (Pending or Waiting with an approval still Outstanding and not yet escalated); one transaction each
+end note
+Job -> RLS : lapsedWindows(now)
+RLS --> Job : List<RequestId>
+loop each returned Request
+  Job -> RLS : onWindowLapse(r)
+  RLS -> Lock : lockTypes(types)
+  alt Pending: toWaiting (release Holds and credits) then escalate
+    RLS -> RLS : toWaiting: Pending -> Waiting
+    RLS -> Alloc : cancel(line), each held line
+    RLS -> Ledger : releaseCredits(team, line)
+    RLS -> Notifier : notify(Manager, Holds released)
+  else Waiting: escalate only
+  end
+  RLS -> MA : escalate(r)
+  MA -> Notifier : notify(PLANNER,\nescalated Request)
+  RLS -> RLS : record(event)
+end
+... later: the Planner resolves the escalation ...
+CP -> Web : open\nescalations
+Web -> RLS : escalations()
+CP -> Web : approve\nor refuse
+Web -> RLS : decideApproval(a, d, reason, actor):\nnew transaction
+RLS -> Lock : lockTypes(types)
+RLS -> MA : decide(a, d, reason, actor)
+alt refused
+  RLS -> RLS : as in S3
+  note over Lock, MA : replacement asked, or Refused
+else approved
+  RLS -> RLS : evaluateAll
+  alt all Required lines fit at once
+    RLS -> RLS : allocate (S2)
+  else a Required line does not fit now
+    RLS -> RLS : record(event)
+    note over Lock, MA : stays Waiting; no Hold; onCapacityFreed retries
+  end
+end
+@enduml

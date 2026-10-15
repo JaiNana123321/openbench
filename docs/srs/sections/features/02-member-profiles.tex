@@ -1,0 +1,19 @@
+\subsection{Member Profiles}\label{feat:profiles}
+
+\subsubsection{Description and Priority}
+Every Member has a profile: their Team, a list of skills, and their availability. Profiles are the data against which Matched lines are evaluated. Members maintain their own skills and availability; the Administrator sets Team membership. This feature realizes \FE{profiles}. \priority{High.}
+
+\subsubsection{Stimulus/Response Sequences}
+\begin{itemize}
+  \item \textbf{Stimulus:} A Member edits their skills or availability. \textbf{Response:} The system saves the profile and, for any Waiting Matched line the Member now qualifies for, rebuilds that line's Shortlist (\FR{Matched.Shortlist.Rebuild}).
+  \item \textbf{Stimulus:} A Manager opens their Team's roster. \textbf{Response:} The system shows each Member's skills, availability, and current and upcoming Loans.
+\end{itemize}
+
+\subsubsection{Functional Requirements}
+\fr{Profile.Team}{Every Member shall belong to exactly one Team, set by an Administrator, and the profile shall show it.}
+\fr{Profile.Skills}{A Member shall maintain their own list of skills, each chosen from the skill list maintained by an Administrator (\FR{Admin.Skill.List}), so that skill matching is exact.}
+\fr{Profile.Availability}{A Member shall record their availability as a set of date ranges during which they may be lent. A Member is available for a window when every day of the window lies inside a recorded range. Forming, shortening, or ending a Loan shall not change these ranges.}
+\fr{Profile.Availability.Loans}{A Person shall be in at most one Loan at a time: a Member with a Loan overlapping any day of a Matched line's window shall not be a Candidate for that line, even when available for the whole window (\FR{Matched.Shortlist.Build}, \BR{shortlist}). A Loan that ends early (\FR{Release.Loan.End}) shall free the Person from the day after its new last day.}
+\fr{Profile.View.Own}{A Member shall see their own profile and their current and upcoming Loans, with the borrowing Team and window of each.}
+\fr{Profile.View.Manager}{A Manager shall see the profiles, availability, and Loans of every Member of their own Team, and shall be able to edit a Member's availability on their behalf.}
+\fr{Profile.Data.Limit}{A profile shall hold no personal data other than name, email address, Team, skills, and availability (\seref{data}).}

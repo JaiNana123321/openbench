@@ -1,0 +1,29 @@
+\section{Analysis Models}\label{app:models}
+
+\subsection{Request State Diagram}
+
+\figref{fig:states} shows the states of a Request and every transition between them; Section~\ref{feat:lifecycle} gives the guards in full. Three properties of the diagram carry the design: a Hold exists only while the Request is Pending, so no Hold outlives the Objection Window; Charges and Earnings post only on the transitions into Allocated; and Waiting is the single state from which a Request recovers, whether it lost a line to a refusal, a lapse, or a Bump.
+
+\begin{landscape}
+  \centering
+  \includegraphics[width=\linewidth,height=0.86\textheight,keepaspectratio]{request-states.pdf}
+  \captionof{figure}{Request state-transition diagram. Submitted is a transient evaluation state left in the same transaction as it is entered. Withdraw is drawn once, from Draft; a Manager may also withdraw from Pending and Waiting. Allocated, Withdrawn, and Refused are final, except that Allocated returns to Waiting when a Required line is Bumped.}
+  \label{fig:states}
+\end{landscape}
+
+A typical Request with all three classes runs Draft $\to$ Submitted $\to$ Pending (room and GPUs on Hold, engineers awaiting approval) $\to$ Allocated (last approval arrives; Holds commit; Charges and Earnings post). The two failure paths are: a refusal, after which the Manager picks a replacement and the Request returns to Pending if the Objection Window is still running; and a lapse, after which the Capacity Planner decides the outstanding approvals and the Request is Allocated only when every Required line can be satisfied at once, with no Hold in between.
+
+\subsection{Use Case Diagram}
+
+\figref{fig:usecases} shows the twelve use cases of Appendix~\ref{app:usecases} and the actors that start them. The Clock actor stands for the scheduled jobs that fire when an Objection Window lapses or a Hold expires; it has no user interface.
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=\textwidth,height=0.85\textheight,keepaspectratio]{use-cases.pdf}
+  \caption{Use case diagram. All human actors are Members; the roles are additive.}
+  \label{fig:usecases}
+\end{figure}
+
+\subsection{Context Diagram and Data Model}
+
+The context diagram is \figref{fig:context} in Section~\ref{sec:overall}; the data model is \figref{fig:datamodel} in Appendix~\ref{app:data}.

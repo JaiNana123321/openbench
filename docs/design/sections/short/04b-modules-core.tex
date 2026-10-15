@@ -1,0 +1,211 @@
+% 04b-modules-core.tex: OpenBench Software Design Document, short edition. Condensed from sections/04b-modules-core.tex on 2026-10-05;
+% the signatures are identical to the full edition. Module specifications of the three core modules: Allocation, Ledger, Requests.
+% Labels: mod:* and the three class figures only.
+
+% ============================================================================================ Allocation
+\modulespec{Allocation}{allocation}{allocation}
+
+\begin{figure}[htbp]\centering
+\includegraphics[width=\textwidth,height=0.42\textheight,keepaspectratio]{class-allocation.pdf}
+\caption[Classes of \module{Allocation} (class diagram)]{Classes of \module{Allocation}: the \code{Allocator} interface with its five operations, the three capability interfaces, the registry, the three allocators and the capabilities each realizes, the shared lock and query services, and the six entities the module owns. Dashed arrows are dependencies; hollow-triangle dashed arrows are realizations.}
+\label{fig:class-allocation}
+\end{figure}
+
+\field{Purpose}
+Allocation decides, one Request Line at a time, whether the capacity it asks for can be had now, and records the answer as rows; a Hold is simply the state \code{HELD} of such a row. Everything that differs between Allocation Classes lives here, behind one interface that \module{Requests} drives without branching on the class.
+
+\field{Provided interface}
+\begin{lstlisting}[language=Java]
+interface Allocator {
+  AllocationClass allocationClass();
+  Evaluation evaluate(LineSnapshot line);                    // SATISFIABLE | NEEDS_APPROVAL | UNSATISFIABLE(reason)
+  void hold(LineSnapshot line);                              // Exclusive, Metered: rows in state HELD; Matched: no-op
+  void commit(LineSnapshot line);                            // HELD -> ALLOCATED; Matched: form Loans
+  void release(LineSnapshot line, ReleasePart part);         // whole or part; Matched: end Loan early
+  void cancel(LineSnapshot line);                            // drop Holds, approvals, waitlist entries
+}
+interface Waitlistable { void join(LineSnapshot line); void leave(LineSnapshot line);
+  List<WaitingLine> waitingFor(ResourceTypeId type, TimeWindow freed); void expirePastStart(Instant now); }
+interface Bumpable { Optional<BumpPlan> planBump(LineSnapshot priorityLine); void applyBump(BumpPlan plan); }  // Exclusive only
+interface ApprovalDriven {
+  Shortlist buildShortlist(LineSnapshot line);               // eligible = skills, available, no overlapping Loan, other Team, active; order by person-days lent this Period, then name
+  void select(LineSnapshot line, List<MemberId> candidates); // exactly the line's quantity; creates one approval per Candidate
+  ApprovalOutcome decide(ApprovalId id, Decision d, String reason, Actor actor);  // lending Manager or PLANNER (escalated)
+  List<Approval> outstanding(RequestId request); void escalate(RequestId request);
+}
+interface AllocatorRegistry { Allocator forClass(AllocationClass c); <T> Optional<T> capability(AllocationClass c, Class<T> cap); }
+interface AllocationLock { void lockTypes(SortedSet<ResourceTypeId> types); }   // SELECT ... FOR UPDATE on resource_type, ascending id
+interface AllocationQueries {                                // read-only
+  List<Holding> holders(ResourceId resource, TimeWindow window);   // free / HELD / ALLOCATED segments with Team and Request
+  List<Loan> loansOf(MemberId member); Optional<Integer> waitlistPosition(RequestLineId line);
+  List<Loan> loansFor(RequestLineId line);                   // the Loans a Matched line's commit formed (for postEarning)
+  int peakUnitsInUse(ResourceTypeId type, Optional<ResourceId> instance, Instant from);  // backs ReductionGuard
+  List<Approval> approvalsAwaiting(MemberId approver);       // outstanding approvals addressed to this Manager; every escalated one for a PLANNER
+}
+\end{lstlisting}
+\code{LineSnapshot} is an immutable copy of a line built by \module{Requests} (ids, type and class, quantity or units, window and recurrence, named Resource or Person, skills, Required and Priority marks, submission time, a \code{bumped} flag); \code{ReleasePart} is the whole line, some occurrences, an earlier end, fewer units, or one Loan with a new last day.
+
+\textbf{Registry and extension.} \code{AllocatorRegistry} receives \code{List<Allocator>}, which Spring fills with every \code{Allocator} bean, and indexes it by \code{allocationClass()}. \code{capability(c, cap)} returns the allocator cast to \code{cap} if it implements it, so \module{Requests} never names a class: the Priority mark is offered for a \code{Bumpable} class, waiting for a \code{Waitlistable} one, and a Quote whenever the type has pricing settings. A fourth Allocation Class is one new \code{@Component} implementing \code{Allocator} and its capabilities, plus one \code{AllocationClass} constant; \module{Requests}, \module{Ledger}, and the existing allocators do not change (\req{CO-plugin}, \req{QA-extensible}).
+
+\field{Required interfaces}
+\module{Inventory}: \code{InventoryQueries.type}, \code{instancesOf}, \code{poolCapacity}. \module{Members}: \code{MemberService.availableWithSkills}, \code{isAvailable}, \code{summary}, \code{managerOf}, \code{withRole(PLANNER)}. \module{Settings}: \code{SettingsService.current}. \module{Notifications}: \code{Notifier.notify}.
+
+\field{Data owned}
+\code{exclusive\_occurrence}, \code{metered\_allocation}, \code{waitlist\_entry}, \code{candidate}, \code{approval}, \code{loan}.
+
+\field{Invariants}
+\begin{itemize}
+\item No two live (\code{HELD} or \code{ALLOCATED}) occurrences on one Exclusive instance overlap; in no hour do a Metered type's live units exceed its Pool Capacity, or a Team's its Quota (\req{QA-correct}).
+\item Every write that consumes capacity, and every capacity reduction, comes after the lock on that Resource Type in the same transaction.
+\item A line's live rows are all or nothing: every occurrence on the same instances, or the full units for the full window.
+\item A Priority line is never Bumped, and no line is Bumped inside the bump cutoff.
+\item A Person is in at most one Loan on any day. A Candidate is active and outside the requesting Team, and until escalation only the Manager of the Candidate's Team decides.
+\end{itemize}
+
+\field{Failure behavior}
+{\sloppy A misfit is a result of \code{evaluate}, never an exception, with reason \code{NO\_FREE\_INSTANCE}, \code{POOL\_FULL}, \code{QUOTA\_EXCEEDED}, \code{SHORTLIST\_TOO\_SHORT}, or \code{NOT\_A\_CANDIDATE}; the codes \code{NOT\_ALLOCATED}, \code{INSIDE\_BUMP\_CUTOFF}, \code{LINE\_NOT\_ATOMIC}, \code{OWN\_TEAM}, \code{ALREADY\_DECIDED}, and \code{WINDOW\_LAPSED} report bad input or a precondition the caller should have established. A lock wait past \code{lock\_timeout} (5\,s) or a deadlock is retried once, then reported as \code{ConcurrencyRetryException} (503).\par}
+
+\subsubsection*{Shared parts}
+{\sloppy \code{AllocationLock} runs one \code{SELECT ... FOR UPDATE} on \code{resource\_type} per id, ascending (\code{@Lock(PESSIMISTIC\_WRITE)}), at the default READ COMMITTED isolation; a transition calls it once, first, for the types of its own lines, and keeps the locks to commit, so allocation on a type is serial. \code{AllocationQueries} reads live rows: \code{holders} cuts a window into free, held, and allocated segments; \code{peakUnitsInUse} is the largest hourly sum of live units, Holds counted, from an instant on. The \code{ReductionGuard} implementation locks the type, computes the capacity after the change, and, if \code{peakUnitsInUse} exceeds it, names the earliest failing hour with the hourly query.\par}
+
+\subsubsection*{ExclusiveAllocator}
+The window and weekly recurrence expand into occurrences; an instance is free when no live row on it overlaps any of them. \code{hold} inserts one \code{HELD} row per occurrence and instance, \code{commit} turns them \code{ALLOCATED}, and \code{release} marks given-back occurrences (or a shortened tail) \code{RELEASED}, so history stays. For a Priority line with no free instance, \code{planBump} collects per instance the lines whose live rows overlap its occurrences. An instance can be cleared when all are standard and none has an occurrence starting before now plus the bump cutoff; the plan takes the instances needing the fewest Bumps, ties toward the latest-submitted lines. \code{applyBump} marks the Bumped lines' live rows \code{BUMPED} with a bulk JPQL update and only then inserts the Priority occurrences as \code{HELD}: Hibernate runs inserts before updates, so without the flush the insert would meet the NOT DEFERRABLE constraint while the old rows are still live. \code{waitingFor} returns the type's entries overlapping the freed window ordered by \code{bumped}, then Priority, then \code{joined\_at}, then id; \code{joined\_at} holds the Request's submission time, not the moment of joining.
+
+\subsubsection*{MeteredAllocator}
+A line asks for units held concurrently over its whole window, one \code{metered\_allocation} row. Under the type lock, \code{evaluate} runs the hourly query of Section~\ref{sec:data} and \code{HourlyLoad} finds the earliest hour where \code{used} plus the line's units exceed \code{poolCapacity(type)} (\code{POOL\_FULL}) or, when the Team has a Quota on the type, where \code{team\_used} plus the units exceed it (\code{QUOTA\_EXCEEDED}). The line fits with full units in every hour or not at all. Holds, \code{release} (fewer units or an earlier end), and the waitlist follow the Exclusive rules; there is no Bump.
+
+\subsubsection*{MatchedAllocator}
+A Candidate holds every listed skill, is available on every day of the window, has no Loan overlapping any day of it, belongs to another Team, and is active. \code{buildShortlist} takes \code{availableWithSkills(skills, window, requestingTeam)} from \module{Members}, drops Members with an overlapping Loan, and orders the rest by person-days lent in the current Period (weekdays of formed Loans inside it), then name: two indexed queries and a sort of at most 500 Members (\req{PE-shortlist}). A Person can be approved on two Requests with overlapping windows before either Loan forms. \module{Requests} therefore re-evaluates the line under the type lock at the start of \code{allocate}, before any commit, where \code{evaluate} reports an Approved Candidate who is no longer available every day, or now has an overlapping Loan, as \code{UNSATISFIABLE(NOT\_A\_CANDIDATE)}: a Required line is then unsatisfied and the Request goes to Waiting with a replacement asked; an Optional line is Dropped. \code{commit} repeats the check immediately before forming each Loan only as a guard: a failure there means a path skipped the re-evaluation, so it throws \code{RuleViolation("ALLOCATION\_CONFLICT")} and the transition rolls back.
+
+% ============================================================================================ Ledger
+\modulespec{Ledger}{ledger}{ledger}
+
+\begin{figure}[htbp]\centering
+\includegraphics[width=\textwidth,height=0.42\textheight,keepaspectratio]{class-ledger.pdf}
+\caption[Classes of \module{Ledger} (class diagram)]{Classes of \module{Ledger}: \code{LedgerService}, the pure \code{Pricing} functions, the \code{Account} with its three numbers, the append-only \code{Transaction} with its four kinds, and the value types \code{Quote}, \code{PriceBand}, and \code{RefundSchedule}.}
+\label{fig:class-ledger}
+\end{figure}
+
+\field{Purpose}
+Ledger keeps every Team's Account and the append-only record of Transactions, prices lines, and computes Refunds. It knows credits only: it holds no capacity information and never decides whether a line can be allocated.
+
+\field{Provided interface}
+\begin{lstlisting}[language=Java]
+final class Pricing {                                       // pure, no Spring, no database
+  static Quote quote(LineSpec line, TypePricing pricing, BigDecimal priorityPremium);  // sum over hours of quantity x unitPrice x band, x premium if Priority
+  static Credits refund(Credits charge, RefundSchedule schedule, Duration leadTime);  // step function, never 100%
+}
+interface LedgerService {
+  AccountView account(TeamId team);                         // (read-only) granted, earned, held, balance, available
+  void requireAffordable(TeamId team, Credits requiredSum); // no lock, early refusal; throws RuleViolation("INSUFFICIENT_BALANCE")
+  void holdCredits(TeamId team, RequestLineId line, Credits quote);     // held += quote (locks account row, repeats the check)
+  void releaseCredits(TeamId team, RequestLineId line);                 // held -= that line's quote
+  void commitCharges(RequestId request, List<ChargeSpec> charges);      // for each line: held -> Charge, granted first then earned, split recorded
+  void postEarning(TeamId lendingTeam, LoanId loan, Credits amount);    // earned += amount
+  void refund(TeamId team, RequestLineId line, Credits amount);         // returns in the Charge's proportions
+  void correctEarning(TeamId lendingTeam, LoanId loan, Credits delta);  // only Transaction that may make Balance negative
+  void postGrant(TeamId team, PeriodId period, Credits amount, String reason, Actor actor);  // PLANNER or rollover
+  void rollover(PeriodId ending, PeriodId starting);        // expire granted, record on Statement, post planned Grants; idempotent (no-op if already rolled)
+  Statement statement(TeamId team, PeriodId period);        // (read-only) own Manager or PLANNER
+}
+\end{lstlisting}
+With $q$ the quantity, $p$ the Unit Price, $b(h)$ the multiplier of the Price Band containing hour $h$ (1.0 if none), and $\pi$ the priority premium for a Priority line (1 otherwise):
+\[ \textit{Quote} = \pi \cdot \textstyle\sum_{\mbox{\scriptsize occurrence } o}\ \sum_{\mbox{\scriptsize hour } h \in o}\ q \cdot p \cdot b(h). \]
+Credits carry two decimals; a Quote is rounded half-up once per line. \code{refund} takes the step with the largest lead time not above \code{leadTime} and returns that fraction of \code{charge}, rounded down; a part already started returns 0.
+
+\field{Required interfaces}
+\module{Settings}: \code{SettingsService.current}. \module{Members}: a Team's Manager, for Statement scoping. \module{Notifications}: \code{Notifier.notify}.
+
+\field{Data owned}
+\code{account}, \code{transaction}, \code{held\_credit}, \code{period\_close}.
+
+\field{Invariants}
+\begin{itemize}
+\item Granted and held credits are never negative; the Balance is never negative except after an Earning correction.
+\item Held credits equal the Team's \code{held\_credit} rows, which equal the locked Quotes of its Held lines.
+\item The account row equals the fold of the Team's Transactions and \code{period\_close} rows (a test recomputes it).
+\item A Charge equals its locked Quote and its two parts sum to it, granted first; a line's Refunds stay within its Charge, in its proportions. Transaction rows never change.
+\item \code{rollover} is idempotent: rolling into a Period already rolled into is a no-op (the key of \code{period\_close}), so the start-up catch-up in \module{Jobs} is safe.
+\end{itemize}
+
+\field{Failure behavior}
+{\sloppy \code{INSUFFICIENT\_BALANCE} is the refusal a Manager sees, with the shortfall; the other codes are \code{REFUND\_EXCEEDS\_CHARGE} and \code{INVALID\_AMOUNT}. The methods join the caller's transaction, so a failed Charge rolls back the commit of every Hold (\req{CO-tx}).\par}
+
+% ============================================================================================ Requests
+\modulespec{Requests}{requests}{requests}
+
+\begin{figure}[htbp]\centering
+\includegraphics[width=\textwidth,height=0.42\textheight,keepaspectratio]{class-requests.pdf}
+\caption[Classes of \module{Requests} (class diagram)]{Classes of \module{Requests}: the Draft-editing and Suggestion services, the orchestrating \code{RequestLifecycleService}, the entities and state enums, and the module's dependencies on \code{Allocator}, \code{AllocatorRegistry}, \code{AllocationLock}, \code{LedgerService}, and \code{Notifier}.}
+\label{fig:class-requests}
+\end{figure}
+
+\field{Purpose}
+Requests owns the Request from Draft to a final state and the Suggestions that feed it. It alone changes a Request's state and alone calls both \module{Allocation} and \module{Ledger}, so the order of locks, checks, writes, and notices lives in one class.
+
+\field{Provided interface}
+\begin{lstlisting}[language=Java]
+interface RequestService {                                   // Draft editing; MANAGER of the owning Team
+  Request create(TeamId team);
+  RequestLine addLine(RequestId r, NewLine line);           // window in the future, type not retired
+  void editLine(RequestLineId l, LineEdit e); void removeLine(RequestLineId l);
+  RequestLine splitLine(RequestLineId l, int quantityForNewLine);   // new line same type, marked Optional by default
+  void setRequired(RequestLineId l, boolean required); void setPriority(RequestLineId l, boolean priority);  // Priority: Exclusive only
+  DraftView view(RequestId r);                               // (read-only) lines with current Quotes, sums, Available Balance, shortfall
+  Page<RequestSummary> list(TeamId team, Optional<RequestState> state, PageRequest page);  // (read-only) scoped to the caller
+}
+interface SuggestionService {
+  Suggestion create(MemberId by, NewLine proposal, String note);       // MEMBER, to own Manager
+  void acceptIntoNewLine(SuggestionId s, RequestId draft); void acceptIntoLine(SuggestionId s, RequestLineId line);  // MANAGER
+  void decline(SuggestionId s, String reason);               // MANAGER; notifies the Member
+  List<Suggestion> forManager(TeamId team); List<Suggestion> mine(MemberId me);   // (read-only)
+}
+interface RequestLifecycleService {                          // one transaction per call; locks types then account
+  SubmitOutcome submit(RequestId r, Actor actor);            // affordability, lock Quotes, evaluate, -> Allocated | Pending (Holds, approvals) | Waiting
+  void selectCandidates(RequestLineId l, List<MemberId> members, Actor actor);
+  void decideApproval(ApprovalId a, Decision d, String reason, Actor actor);   // last Required approval allocates; refusal -> replacement asked
+  void releaseLine(RequestLineId l, ReleasePart part, Actor actor);           // Refund, free capacity, offer to waitlist
+  void endLoanEarly(LoanId loan, LocalDate newEnd, Actor actor);              // Earning correction
+  void withdraw(RequestId r, Actor actor);                   // from Draft, Pending, Waiting; cancels all lines
+  void reopenForEdit(RequestId r, Actor actor);              // Waiting -> Draft
+  List<RequestId> lapsedWindows(Instant now);                // (read-only) jobs: Requests, Pending or Waiting, whose Objection Window ended at or before now with an approval still Outstanding and not yet escalated
+  void onWindowLapse(RequestId r);                           // jobs, idempotent: Pending: toWaiting, then escalate; Waiting: escalate only; skips a Request with no unescalated Outstanding approval
+  void expireWaitingLines(Instant now);                      // jobs
+  List<EscalatedRequest> escalations();                      // (read-only) PLANNER
+  RequestDetail detail(RequestId r);                         // (read-only) states, lines, Holds, events timeline
+  Shortlist shortlist(RequestLineId l);                      // (read-only) pass-through to ApprovalDriven.buildShortlist for the requesting Manager
+}
+\end{lstlisting}
+
+\textbf{\code{RequestLifecycleService}} is the orchestrator: one \code{@Transactional} method per transition, retried once after a deadlock or lock timeout, always in this order: (1) lock the Resource Types of its own lines with one ascending \code{AllocationLock.lockTypes}; (2) lock the Team's account row through the first locking Ledger call (\code{holdCredits} or \code{commitCharges}); (3) read; (4) write; (5) \code{record}; (6) \code{Notifier}, whose rows share the transaction, so a rolled-back transition tells nobody.
+
+\textbf{Private steps.}
+\begin{description}[leftmargin=0pt,font=\normalfont\ttfamily]
+\item[evaluateAll] \code{evaluate} every line; a Priority misfit asks \code{planBump}, and a plan counts as a fit.
+\item[placeHolds] Only while the window runs: Required, then affordable Optional lines; \code{applyBump} where planned, \code{hold}, \code{holdCredits}.
+\item[routeApprovals] \code{ApprovalDriven.select} for named Persons at submission and for the Manager's picks.
+\item[allocate] Always in this order. (a) Re-run \code{evaluateAll} under the locks; an Approved Candidate who is no longer eligible makes the line \code{UNSATISFIABLE(NOT\_A\_CANDIDATE)}, and the system refuses that approval. If a Required line fails, \code{toWaiting} runs instead, before any commit, and a replacement is asked. If the Balance no longer covers the Required Charges, \code{toWaiting} runs instead with reason \code{INSUFFICIENT\_BALANCE}. (b) Drop unfit, refused, or unaffordable Optional lines with the reason. (c) Apply Bump plans, then \code{Allocator.commit} each Exclusive and Metered line (HELD to ALLOCATED). (d) \code{LedgerService.commitCharges}. (e) \code{MatchedAllocator.commit} each Matched line, forming the Loans. (f) \code{postEarning} per Loan from \code{loansFor(line)}. (g) Set the Request Allocated, \code{record}, and notify the Manager and each Person through \code{Notifier}.
+\item[toWaiting] \code{cancel} and \code{releaseCredits} for Held lines; \code{join} for unsatisfied Required lines; approvals stay; \code{onCapacityFreed}.
+\item[onCapacityFreed] For each line from \code{waitingFor(type, window)}, in order: allocate its Request if every Required line fits at once and is approved; if only approvals are missing and the window runs, back to Pending with \code{placeHolds}; else next.
+\item[record] Insert a \code{request\_event}; a null actor is the system (jobs).
+\end{description}
+
+\textbf{Window, escalation, Release.} \code{window\_ends\_at} is set when the Request first enters Pending, to that instant plus \code{objectionWindowWorkingDays} Monday-to-Friday days, and is never reset; \code{placeHolds} does nothing after it. \code{escalate} sets \code{escalated} on every Outstanding approval and hands it to every Capacity Planner, who decides from \code{escalations()}; from then on only a moment when every Required line fits at once allocates the Request.
+
+\field{Required interfaces}
+\module{Allocation}: all of its interfaces. \module{Ledger}: \code{Pricing}; \code{LedgerService} except \code{postGrant}, \code{rollover}, \code{statement}. \module{Inventory}: \code{InventoryQueries.type}. \module{Members}: \code{summary}. \module{Settings}: \code{current}. \module{Notifications}: \code{Notifier.notify}.
+
+\field{Data owned}
+\code{request}, \code{request\_line}, \code{suggestion}, \code{request\_event}.
+
+\field{Invariants}
+\begin{itemize}
+\item A Request is in exactly one state; every Request or line state change writes a \code{request\_event} in the same transaction.
+\item \code{locked\_quote} and \code{submitted\_at} are set at submission and cleared only by \code{reopenForEdit}; \code{window\_ends\_at} never changes once set, and Held lines exist only in a Pending Request before it.
+\item Lapse is judged by the injected \code{Clock}, not by the job: \code{decideApproval} compares \code{window\_ends\_at} with now, so an approval arriving after the window ended is treated as lapsed (\code{WINDOW\_LAPSED} for the lending Manager, no Hold kept) even before \code{onWindowLapse} has run.
+\item An Allocated Request had every Required line Allocated or Loaned when it entered the state. Only Optional lines are Dropped; only Required lines wait.
+\end{itemize}
+
+\field{Failure behavior}
+{\sloppy Any exception rolls back the whole transition, notifications included. A \code{RuleViolation} becomes \code{problem+json} with its \code{code} (409 state conflict, 422 invalid input), one of \code{WRONG\_STATE}, \code{WINDOW\_NOT\_FUTURE}, \code{WINDOW\_INVALID}, \code{TYPE\_RETIRED}, \code{OWN\_TEAM}, \code{PRIORITY\_NOT\_OFFERED}, \code{LINE\_NOT\_ATOMIC}, \code{SUGGESTION\_CLOSED}, \code{TYPE\_MISMATCH}, \code{EMPTY\_REQUEST}, \code{INSUFFICIENT\_BALANCE}, \code{NOT\_ALLOCATED}, \code{LOAN\_END\_INVALID}, or a code of \module{Allocation}; a deadlock or lock timeout, after one retry, \code{ConcurrencyRetryException} (503).\par}
+

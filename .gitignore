@@ -1,0 +1,20 @@
+# Nix / direnv
+.direnv/
+result
+result-*
+
+# Build output
+target/
+node_modules/
+
+# Local working notes (issue tracker, briefs, handoffs); see docs/agents/issue-tracker.md
+.scratch/
+
+# Editors and local tool settings
+.idea/
+*.iml
+.vscode/
+.claude/settings.local.json
+
+# macOS
+.DS_Store

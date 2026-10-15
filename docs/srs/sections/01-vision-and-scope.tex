@@ -1,0 +1,94 @@
+\section{Vision and Scope}\label{sec:vision}
+
+\subsection{Background, Business Opportunity, and Customer Needs}
+
+A company holds scarce internal capacity of several kinds: people's time, rooms and lab instruments, GPU hours and license seats. Much of it sits idle because nobody can see it: Managers keep engineers between projects, rooms are block-booked and unused, and shared GPU pools fill with queues in which the loudest Team wins. Existing tools each cover one slice: calendars allocate by hand, talent marketplaces match only people, cluster schedulers meter only compute. Nobody can ask for ``two engineers with PyTorch experience for six weeks, four GPUs for two of those weeks, and a lab room on Thursdays'' in one place and get one answer. The project proposal cites internal talent marketplaces at Unilever (over 8{,}000 employees and 300{,}000 hours redeployed) and Schneider Electric (roughly 127{,}000 hours of unused capacity surfaced within weeks) as evidence that visibility alone recovers substantial capacity.
+
+\subsection{Business Objectives and Success Criteria}
+
+\bo{utilization}{Raise the use of shared Exclusive and Metered Resources by making free capacity visible and requestable in one place.}
+\bo{lending}{Make lending a person rewarding rather than costly, so Managers release people between projects instead of holding them.}
+\bo{process}{Replace ad-hoc negotiation for capacity with one bounded, auditable process whose outcome every party can see.}
+
+\scc{demo}{In the final demonstration one Request spanning all three Allocation Classes reaches Allocated end to end, with the Charges and Earnings visible in both Teams' Statements.}
+\scc{dashboard}{From the first Period of use the dashboard shows utilization and idle capacity per Resource Type and credits earned and spent per Team.}
+\scc{bounded}{No Request waits on a silent Manager longer than the Objection Window; every Request ends in Allocated, Waiting, Refused, or Withdrawn with a complete state history.}
+\scc{usability}{An untrained Manager drafts and submits a three-line Request in under five minutes, verified with at least three people from outside the team.}
+
+\subsection{Vision Statement}
+
+For Managers who need people, rooms, or compute that other Teams control, \SRSproduct{} is an internal marketplace that takes one Request spanning all three kinds of capacity and allocates each part under the policy that fits it: skill matching with the lending Manager's approval for people, conflict detection with a waitlist and priority bumping for rooms and instruments, and capacity and quota checks for metered pools. Unlike a booking calendar, a talent marketplace, or a cluster scheduler, it covers all three in one Request and ties them together with a Ledger of credits in which lending a person earns what a room or a GPU costs. No money moves: credits are showback, not billing.
+
+\Needspace*{9\baselineskip}
+\subsection{Major Features}
+
+Each feature is specified in the matching subsection of Section~\ref{sec:features}.
+
+\begin{multicols}{2}
+\fe{inventory}{Inventory and Resource Types as data}
+\fe{profiles}{Member profiles: skills and availability}
+\fe{suggestions}{Suggestions from Members to their Manager}
+\fe{draft}{Draft and submit a Request with a locked Quote}
+\fe{matched}{Matched allocation: Shortlist and one approval}
+\fe{exclusive}{Exclusive allocation: conflicts, waitlist, Bump}
+\fe{metered}{Metered allocation: Pool Capacity and Quota}
+\fe{lifecycle}{Request lifecycle with bounded Holds}
+\fe{release}{Release with a partial Refund}
+\fe{ledger}{Ledger and pricing: Grants, Charges, Earnings, Price Bands}
+\fe{dashboard}{Showback dashboard and Statement}
+\fe{admin}{Administration and Capacity Planner settings}
+\end{multicols}
+
+\subsection{Scope of Initial and Subsequent Releases}
+
+Release~1 is committed for the semester. Stretch items are written as Low-priority requirements in Section~\ref{sec:features} and built only if time allows. Future items are named so the design leaves room for them; they have no requirements here.
+
+{\footnotesize
+\begin{tabularx}{\textwidth}{@{}L{1.8cm}YYY@{}}
+\toprule
+\textbf{Area} & \textbf{Release 1} & \textbf{Stretch} & \textbf{Future} \\
+\midrule
+Request & One Request spanning all three classes; Required and Optional lines; Suggestions; dashboard and Statement & --- & Unmet-demand analytics over declined Suggestions \\
+Matched & Skill filter, availability, Shortlist, one approval by the lending Manager & --- & Person consent; skill-based Day Rates \\
+Exclusive & Conflict detection, waitlist, Priority lines that Bump & --- & Priority by a Team rank set by the Capacity Planner \\
+Metered & Pool Capacity check, per-Team Quota & Service tiers and preemption (Priority lines generalized to Metered) & --- \\
+Ledger and pricing & Grant, Charge, Earning, Refund; granted credits expire, earned carry over; Refund Schedule; Unit Price, Price Bands, priority premium; Quote locked at submission & Actual usage recorded; requested vs.\ used; demand surcharge & Inter-Team transfers; forecast-accuracy bonuses; usage feeds; auctions \\
+Platform & Username and password; in-app notifications; browser only; no integrations & Email notifications & SSO; calendar, HR, and cluster-scheduler integrations \\
+\bottomrule
+\end{tabularx}
+}
+
+\subsection{Limitations and Exclusions}
+
+\li{company}{One company, one time zone, one deployment; browser only, no mobile layout; no high availability.}
+\li{money}{No real money moves. Credits are showback; there are no invoices and no finance system.}
+\li{integrations}{No external integrations in Release~1: no calendar, HR, identity, or cluster scheduler.}
+\li{consent}{A Person is notified of a Loan but cannot decline it in Release~1.}
+
+\Needspace*{8\baselineskip}
+\subsection{Stakeholder Profiles}
+
+{\footnotesize
+\begin{tabularx}{\textwidth}{@{}L{2.6cm}YY@{}}
+\toprule
+\textbf{Stakeholder} & \textbf{Major value} & \textbf{Attitudes, interests, constraints} \\
+\midrule
+Corporate management & Recovered idle capacity; less hoarding; visibility of who uses what & Wants showback numbers, not a billing bureaucracy; will not fund real chargeback \\
+Managers & One place to ask for people, rooms, and compute; a bounded answer & Fear losing people; want Priority kept for real emergencies; little time to learn a tool \\
+Members (as Persons) & See their own skills and Loans; can suggest needs & Want to be asked, not moved; cannot decline a Loan in Release~1 \\
+Resource Owners & Accurate Inventory; no approval chores & Want capacity changes respected by allocations; maintain their own Resources only \\
+Capacity Planner & Levers that shape demand: Grants, prices, schedules & Wants escalations rare and settleable with a Grant; sets policy, administers no users \\
+Administrator & Resource Types without code; simple role management & Wants no policy decisions; configures, sets no prices \\
+\bottomrule
+\end{tabularx}
+}
+
+\subsection{Business Risks}
+
+Probability and impact are rated low, medium, or high.
+
+\ri{nolending}{Managers do not lend, so the marketplace is empty (medium, high). Mitigation: Matched lines cost nothing, every Loan earns the Day Rate, earned credits never expire.}
+\ri{holds}{Holds block rooms that end up released (medium, medium). Mitigation: no Hold outlives the Objection Window; the waitlist fills the slot.}
+\ri{prices}{Badly set Grants or prices cause hoarding or idle capacity (medium, medium). Mitigation: Price Bands, mid-Period Grant adjustments, the idle-capacity view.}
+\ri{gaming}{Managers over-reserve and Release late (medium, medium). Mitigation: the Refund Schedule never reaches 100\% and drops sharply inside seven days.}
+\ri{scope}{Four people, one semester (high, high). Mitigation: Release~1 is fixed; Stretch and Future items are policy plug-ins behind the same allocator interface.}

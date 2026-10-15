@@ -1,0 +1,22 @@
+\subsection{Release and Refund}\label{feat:release}
+
+\subsubsection{Description and Priority}
+A Manager who no longer needs an allocated Exclusive or Metered line, or part of it, gives it back with a Release. Credits are refunded according to the Resource Type's Refund Schedule: a step function of how far ahead of the window start the Release happens, capped below 100\% so that reserving is never free. A partial refund taxes the over-reservation itself while still rewarding early Release over a silent no-show, and is the first concrete mechanism behind the proposal's claim that the system accounts for the failure modes of a simple market. Ending a Loan early prorates the lending Team's Earning; no Refund Schedule applies because nothing was charged. This feature realizes \FE{release} and is exercised by \UC{release}. \priority{High.}
+
+\subsubsection{Stimulus/Response Sequences}
+\begin{itemize}
+  \item \textbf{Stimulus:} The Manager Releases an allocated line in whole or in part. \textbf{Response:} The system posts the Refund due under the Refund Schedule, frees the capacity, and offers it to the waitlist.
+  \item \textbf{Stimulus:} The borrowing Manager ends a Loan early. \textbf{Response:} The system shortens the Loan and posts an Earning correction to the lending Team for the days not lent.
+\end{itemize}
+
+\subsubsection{Functional Requirements}
+\fr{Release.Line}{The system shall let the Manager of the owning Team Release an allocated Exclusive or Metered line in whole or in part before it is consumed. A partial Release shortens the window, removes occurrences, or reduces units; the remaining part keeps its allocation, its instance, and its locked unit prices.}
+\fr{Release.Refund}{On Release the system shall post one Refund equal to the Charge attributable to the released part multiplied by the fraction from the Resource Type's Refund Schedule for the lead time between the Release and the start of the released part (\BR{refund-schedule}).}
+\fr{Release.Schedule.Form}{A Refund Schedule shall be a list of steps, each a minimum lead time and a fraction; the fraction for a Release is that of the largest step whose minimum lead time is not exceeded by the actual lead time. Example default: 75\% at seven or more days ahead, 25\% at less than seven days but before the window starts, 0\% once the window has started.}
+\fr{Release.Schedule.Cap}{The system shall refuse a Refund Schedule containing a fraction of 100\% or more (\BR{refund-schedule}).}
+\fr{Release.Bucket}{A Refund shall return credits to the same part of the Account, granted or earned, from which the Charge was drawn, in the same proportions (\BR{spend-order}).}
+\fr{Release.Waitlist}{Capacity freed by a Release shall immediately be offered to the waitlist under \FR{Exclusive.Waitlist.Fill}.}
+\fr{Release.Loan.End}{The system shall let the borrowing Manager end a Loan early from a chosen date. The lending Manager shall be notified.}
+\fr{Release.Loan.Prorate}{When a Loan ends early, the system shall post to the lending Team an Earning correction equal to minus the Day Rate times the person-days no longer lent, so that the Team's Earning for the Loan equals the Day Rate times the days actually lent. No Refund Schedule applies (\BR{day-rate}). This correction is the only Transaction that may take a Balance below zero; while the Balance is below zero the Team can submit no Request with a Required Exclusive or Metered line (\BR{no-negative}).}
+\fr{Release.Idle}{Capacity that is allocated but neither used nor Released shall appear on the dashboard as idle (\FR{Dashboard.Idle}); the system shall not release it automatically.}
+\fr{Release.Audit}{Every Release shall be recorded with the line, the released part, the lead time, the fraction applied, the Refund, the actor, and the timestamp.}

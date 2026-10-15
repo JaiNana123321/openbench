@@ -1,0 +1,32 @@
+% Short-edition Section 5. Lead-in paragraphs added by the team on 2026-09-21.
+\section{External Interface Requirements}\label{sec:interfaces}
+
+\subsection{User Interfaces}
+
+The system is a browser application. Each Member sees a menu tailored to their roles: Requests, Suggestions, Approvals, Inventory, Dashboard, Statement, Settings, and Administration. The signed-in Member and Team are always visible, along with a list of notifications and help available for each field (\udref{help}).
+
+\ui{draft}{The Draft Request screen shall show the lines as a table (Resource Type, class, quantity, window, Required or Optional, Priority mark where offered, Quote), the Required and Optional totals, the Available Balance and any shortfall, a panel of Open Suggestions, and the actions Save, Split line, Submit, Withdraw. The Request detail screen shall show the state, each line's state and locked Quote, and the state history.}
+
+\ui{shortlist}{The Shortlist screen shall list Candidates in Shortlist order with name, Team, skills, and person-days lent in the current Period; the Approvals screen shall list approval requests with requesting Team, Person, window, Earning, and time left, with Approve and Refuse.}
+
+\ui{inventory}{The Inventory screens shall list Resource Types and Resources with filters and a timeline of Holds and allocations per Resource; the Dashboard and Statement screens shall show the figures of Section~\ref{feat:dashboard} with a Period selector; the Settings screen (Capacity Planner) shall show every setting of \FR{Planner.Settings} and the escalated Requests; the Administration screens shall manage Members, Teams, roles, skills, and Resource Types.}
+
+\subsection{Hardware Interfaces}
+
+None. The system manages records; it doesn't control doors, instruments, or compute nodes. Teams and people are responsible for acting on an allocation record.
+
+\subsection{Software Interfaces}
+
+All data is stored in PostgreSQL~16, a standard SQL database. Communication between the web interface and the back end goes only through a REST/JSON API over HTTPS. Every action described in the use cases can be done through this API with the same role controls. The back end is built in Java~17 with Spring Boot and runs in one Docker image. Release~1 doesn't connect to calendar, HR, identity, or cluster-scheduling systems (\liref{integrations}).
+
+\si{db}{All persistent data shall be stored in PostgreSQL~16 through JDBC with the schema migrated by the application at start-up; tests shall run against PostgreSQL~16 in a container started by the test suite (Testcontainers) with the same migrations.}
+
+\si{api}{The front end shall talk to the back end only through a REST/JSON API over HTTPS, and every use case in Appendix~\ref{app:usecases} shall be achievable through that API with the same role enforcement; the back end runs on Java~17 with Spring Boot in one Docker image; Release~1 has no interface to any calendar, HR, identity, or cluster-scheduling system (\liref{integrations}).}
+
+\subsection{Communications Interfaces}
+
+All network traffic between browser and server uses HTTPS. HTTP requests are redirected to HTTPS. In Release~1, all notifications are delivered inside the application. A stretch goal would be to send emails through an SMTP server that the Administrator sets up.
+
+\ci{https}{All traffic between browser and server shall use HTTPS; plain HTTP shall only redirect to HTTPS.}
+
+\ci{inapp}{All notifications in Release~1 shall be delivered inside the application. \stretchtag{} Email delivery through an Administrator-configured SMTP server.}

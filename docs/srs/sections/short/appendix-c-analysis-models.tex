@@ -1,0 +1,10 @@
+% Short-edition Appendix C: the Request state diagram. The use case diagram is in Appendix D with the use case table.
+\section{Analysis Models}\label{app:models}
+
+\figref{fig:states} shows the states of a Request and every transition; Section~\ref{feat:lifecycle} gives the guards. Three properties carry the design: a Hold exists only while the Request is Pending, so none outlives the Objection Window; Charges and Earnings post only on entry to Allocated; and Waiting is the one state from which a Request recovers after a refusal, a lapse, or a Bump. A typical three-class Request runs Draft, Submitted, Pending (room and GPUs on Hold, people awaiting approval), Allocated.
+
+\begin{center}
+  \includegraphics[width=\textwidth,height=0.43\textheight,keepaspectratio]{request-states.pdf}
+  \captionof{figure}{Request state-transition diagram. Submitted is a transient evaluation state. Withdraw is drawn once, from Draft; a Manager may also withdraw from Pending and Waiting. Allocated, Withdrawn, and Refused are final, except that Allocated returns to Waiting when a Required line is Bumped.}
+  \label{fig:states}
+\end{center}

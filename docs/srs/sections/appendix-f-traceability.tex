@@ -1,0 +1,50 @@
+\section{Traceability}\label{app:trace}
+
+\subsection{Features to Requirements, Use Cases, and Business Rules}
+
+Each major feature of Section~\ref{sec:vision} maps to one feature section, whose functional requirements share an identifier prefix, to the use cases that exercise it, and to the business rules it depends on. A requirement outside this table is a defect to record in Appendix~\ref{app:inspection}.
+
+{\small
+\begin{longtable}{@{}L{1.1cm}L{3.0cm}L{2.2cm}L{2.7cm}L{5.7cm}@{}}
+\toprule
+\textbf{Feature} & \textbf{Section} & \textbf{Requirement prefix} & \textbf{Use cases} & \textbf{Business rules} \\
+\midrule
+\endfirsthead
+\multicolumn{5}{@{}l}{\itshape Traceability (continued)}\\ \toprule
+\textbf{Feature} & \textbf{Section} & \textbf{Requirement prefix} & \textbf{Use cases} & \textbf{Business rules} \\
+\midrule
+\endhead
+\bottomrule
+\endlastfoot
+\FE{inventory} & \ref{feat:inventory} Inventory and Resource Types & Inventory.* & \UC{define-type}, \UC{inventory} & \BR{resource-type}, \BR{pool-capacity}, \BR{roles} \\
+\FE{profiles} & \ref{feat:profiles} Member Profiles & Profile.* & \UC{shortlist} & \BR{shortlist} \\
+\FE{suggestions} & \ref{feat:suggestions} Suggestions & Suggest.* & \UC{suggest}, \UC{draft} & \BR{managers-submit} \\
+\FE{draft} & \ref{feat:draft} Draft and Submit a Request & Draft.* & \UC{draft}, \UC{bump} & \BR{managers-submit}, \BR{required-optional}, \BR{line-atomic}, \BR{named-person}, \BR{price-formula}, \BR{quote-locked}, \BR{affordability} \\
+\FE{matched} & \ref{feat:matched} Matched Allocation & Matched.* & \UC{shortlist}, \UC{approve}, \UC{escalate} & \BR{named-person}, \BR{objection-window}, \BR{matched-free}, \BR{day-rate}, \BR{own-team}, \BR{shortlist}, \BR{person-notified} \\
+\FE{exclusive} & \ref{feat:exclusive} Exclusive Allocation & Exclusive.* & \UC{draft}, \UC{bump}, \UC{waitlist} & \BR{line-atomic}, \BR{priority-premium}, \BR{bump-cutoff}, \BR{bumped-line}, \BR{waitlist-order}, \BR{priority-exclusive-only} \\
+\FE{metered} & \ref{feat:metered} Metered Allocation & Metered.* & \UC{draft}, \UC{waitlist} & \BR{line-atomic}, \BR{pool-capacity}, \BR{quota}, \BR{priority-exclusive-only} \\
+\FE{lifecycle} & \ref{feat:lifecycle} Request Lifecycle and Holds & Lifecycle.* & \UC{draft}, \UC{approve}, \UC{escalate}, \UC{waitlist} & \BR{required-optional}, \BR{hold-bounded}, \BR{commit-atomic}, \BR{objection-window}, \BR{audit}, \BR{bumped-line} \\
+\FE{release} & \ref{feat:release} Release and Refund & Release.* & \UC{release}, \UC{waitlist} & \BR{refund-schedule}, \BR{spend-order}, \BR{day-rate}, \BR{no-negative} \\
+\FE{ledger} & \ref{feat:ledger} Ledger and Pricing & Ledger.* & \UC{period}, \UC{dashboard}, \UC{approve} & \BR{matched-free}, \BR{day-rate}, \BR{price-formula}, \BR{price-bands}, \BR{quote-locked}, \BR{spend-order}, \BR{grant-expiry}, \BR{affordability}, \BR{no-negative}, \BR{transactions}, \BR{period} \\
+\FE{dashboard} & \ref{feat:dashboard} Showback Dashboard & Dashboard.* & \UC{dashboard} & \BR{transactions}, \BR{roles} \\
+\FE{admin} & \ref{feat:admin} Administration & Admin.*, Planner.* & \UC{define-type}, \UC{period}, \UC{escalate} & \BR{roles}, \BR{period}, \BR{price-bands}, \BR{refund-schedule}, \BR{objection-window} \\
+\end{longtable}
+}
+
+\subsection{Business Objectives to Features}
+
+{\small
+\begin{tabularx}{\textwidth}{@{}L{1.6cm}YL{4.6cm}@{}}
+\toprule
+\textbf{Objective} & \textbf{Achieved through} & \textbf{Success criteria} \\
+\midrule
+\boref{utilization} & \FE{inventory}, \FE{exclusive}, \FE{metered}, \FE{release}, \FE{ledger} (Price Bands), \FE{dashboard} & \sccref{dashboard} \\
+\boref{lending} & \FE{profiles}, \FE{matched}, \FE{ledger} (Day Rate, earned credits carry over) & \sccref{demo} \\
+\boref{process} & \FE{suggestions}, \FE{draft}, \FE{lifecycle}, \FE{admin} (Objection Window, escalations) & \sccref{bounded}, \sccref{usability} \\
+\bottomrule
+\end{tabularx}
+}
+
+\subsection{Decisions Behind the Requirements}
+
+The following design decisions are recorded as architecture decision records in the project repository under \texttt{docs/adr/} and are the rationale for the rules named: Holds bounded by the Objection Window (\BR{hold-bounded}, \BR{objection-window}); the two-part Account with expiring Grants and carried Earnings (\BR{grant-expiry}, \BR{spend-order}); priority bought with a premium rather than granted by rank (\BR{priority-premium}); and Matched lines costing nothing (\BR{matched-free}, \BR{day-rate}).

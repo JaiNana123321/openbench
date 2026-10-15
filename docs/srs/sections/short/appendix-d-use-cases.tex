@@ -1,0 +1,32 @@
+% Short-edition Appendix D: the use case diagram and the summary table. The full edition writes every use case out in the fields of the template.
+\section{Use Cases}\label{app:usecases}
+
+\figref{fig:usecases} shows the twelve use cases and the actors that start them; the Clock stands for the scheduled jobs that fire when an Objection Window lapses or a Hold expires. Table~\ref{tab:usecases} gives each one's primary actor, trigger, and outcome. The full specification writes each use case out in the fields of the template: description, preconditions, postconditions, normal, alternative, and exception flows, priority, and frequency.
+
+\begin{center}
+  \includegraphics[width=\textwidth,height=0.4\textheight,keepaspectratio]{use-cases.pdf}
+  \captionof{figure}{Use case diagram. All human actors are Members; the roles are additive.}
+  \label{fig:usecases}
+\end{center}
+
+\noindent{\footnotesize
+\captionof{table}{The twelve use cases.}\label{tab:usecases}
+\begin{tabularx}{\textwidth}{@{}L{0.9cm}L{3.9cm}L{2.5cm}Y@{}}
+\toprule
+\textbf{ID} & \textbf{Name} & \textbf{Primary actor} & \textbf{Trigger and outcome} \\
+\midrule
+\ucrow{define-type}{Define a Resource Type}{Administrator}{A new kind of Resource is offered; the type exists as data and lines can name it.}
+\ucrow{inventory}{Maintain Inventory}{Resource Owner}{A Resource enters or leaves service or changes units, never below what is allocated or held.}
+\ucrow{suggest}{Make a Suggestion}{Member}{A Member proposes one line; the Manager accepts it into a Draft or declines it.}
+\ucrow{draft}{Draft and submit a Request}{Manager}{The Request becomes Pending with Holds, Allocated, or Waiting, every Quote locked.}
+\ucrow{shortlist}{Select Candidates from a Shortlist}{Manager (requesting)}{A skill-based line enters Pending; approval requests go to the chosen Candidates' Managers.}
+\ucrow{approve}{Approve or refuse a Loan}{Manager (lending)}{Approved (possibly allocating the Request) or refused (Holds release, replacement asked).}
+\ucrow{escalate}{Resolve an escalated Request}{Capacity Planner}{The Objection Window lapses; Holds release and the Capacity Planner decides the approvals.}
+\ucrow{bump}{Bump a standard line with a Priority line}{Manager}{A Priority line finds no free instance; outside the cutoff the blocking line is refunded and moved to the head of the waitlist.}
+\ucrow{release}{Release an allocated line}{Manager}{Capacity is freed, a partial Refund posts, and the waitlist is offered the slot.}
+\ucrow{waitlist}{Fill a freed slot from the Waitlist}{Clock, system events}{Freed capacity satisfies the first fitting waiting line, allocating or holding its Request.}
+\ucrow{period}{Set Grants and prices for a Period}{Capacity Planner}{Settings are saved; at the boundary granted credits expire and new Grants post.}
+\ucrow{dashboard}{View the dashboard and Statement}{Manager, Capacity Planner, Resource Owner}{Utilization, idle capacity, credits, and the Statement are shown for the viewer's scope.}
+\bottomrule
+\end{tabularx}
+}

@@ -1,0 +1,64 @@
+\section{Overall Description}\label{sec:overall}
+
+\subsection{Product Perspective}
+
+\SRSproduct{} is a new, self-contained web application. It replaces the mix of booking calendars, spreadsheets, chat messages, and hallway negotiation by which Teams currently obtain people, rooms, and compute from one another. It has no external system interfaces in Release~1 (\liref{integrations}); every flow in \figref{fig:context} is between the system and one of its five actors. The system consists of a single server process that serves a browser front end and a REST API, backed by one relational database that holds the Inventory, the Requests, and the Ledger.
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=0.95\textwidth]{context.pdf}
+  \caption{Context diagram. The five actors are roles held by Members; one Member may hold several.}
+  \label{fig:context}
+\end{figure}
+
+\subsection{User Classes and Characteristics}
+
+Every user is a \term{Member}. Four further roles are additive and are granted by the Administrator. One Member may hold several roles, for example a Manager who is also the Capacity Planner. Roles are enforced on the server for every action (\seref{roles}).
+
+{\small
+\begin{tabularx}{\textwidth}{@{}L{2.6cm}YL{2.2cm}@{}}
+\toprule
+\textbf{User class} & \textbf{Characteristics and what they do in the system} & \textbf{Importance} \\
+\midrule
+Member & About 500 people, any level of technical skill, using the system a few times a month. Maintains their own skills and availability, makes Suggestions to their own Manager, sees their Loans. Lendable as a Person. & Favored (as Person) \\
+Manager & About 50 people, one per Team. The only actor who drafts and submits Requests, selects Candidates, approves or refuses Loans of their own Team's Members, Releases lines, and reads the Team's Statement. Uses the system weekly. & Most important \\
+Resource Owner & A few dozen people responsible for the Inventory records of specific Exclusive and Metered Resources, including Pool Capacity. Never approves an allocation. & Important \\
+Capacity Planner & One or two people. Sets each Team's Grant per Period, Unit Prices, Price Bands, the Day Rate, Refund Schedules, Quotas, the priority premium, the bump cutoff, the Objection Window, and the Period. Receives escalations and settles them, often with a mid-Period Grant adjustment. Sees every Team's dashboard and Statement. & Most important \\
+Administrator & One or two IT staff. Creates Members and Teams, grants roles, maintains the skill list, and defines Resource Types as data. Configures the system and sets no policy. & Important \\
+\bottomrule
+\end{tabularx}
+}
+
+\subsection{Operating Environment}
+
+\begin{itemize}
+  \item \textbf{Server:} one on-premises server running one Java~17 process (Spring Boot) that serves both the REST API and the built front end as static files; delivered as a Docker image. An nginx reverse proxy is used only when TLS termination is wanted in front of the process.
+  \item \textbf{Database:} PostgreSQL~16; automated tests run against PostgreSQL~16 in a container started by the test suite (Testcontainers), with the same schema migrations as production.
+  \item \textbf{Clients:} current versions of Chrome, Firefox, Safari, and Edge on desktop; no mobile layout.
+  \item \textbf{Organization:} one company, one time zone; all windows, Price Bands, and Periods are expressed in that time zone.
+\end{itemize}
+
+\subsection{Design and Implementation Constraints}
+
+\co{stack}{The back end shall be written in Java~17 with Spring Boot and built with Maven; the front end shall be written in TypeScript with React and Vite and built into the Spring Boot artifact by the same Maven build.}
+\co{db}{Persistent data shall be stored in PostgreSQL~16; automated tests shall run against PostgreSQL~16 in a container started by the test suite (Testcontainers) with the same schema migrations as production.}
+\co{api}{The front end shall talk to the back end only through the REST/JSON API, and every action available in the user interface shall be available through the API with the same role checks.}
+\co{tx}{Commitment of Holds and posting of the corresponding Charges and Earnings shall be executed inside one database transaction (\BR{commit-atomic}).}
+\co{jobs}{Time-driven behavior (Objection Window lapse, Hold and waitlist expiry, Period rollover) shall be implemented as scheduled jobs inside the server process, not as external cron jobs.}
+\co{auth}{Authentication shall be by username and password with passwords stored hashed; roles shall be enforced with Spring Security on the server.}
+\co{plugin}{Each Allocation Class shall be implemented as one allocator behind a common interface, so that a new class is added by implementing that interface without modifying the existing allocators (\qaref{extensible}).}
+
+\subsection{User Documentation}
+
+\ud{guide}{A short user guide, one page per role, delivered as pages inside the application: how to draft a Request, how to read a Quote and the Available Balance, how to approve a Loan, how to Release a line, how to read a Statement.}
+\ud{admin}{An installation and configuration guide covering the Docker image, database setup, the first Administrator account, and the Capacity Planner settings with their example defaults.}
+\ud{help}{Field-level help text for every setting of the Capacity Planner and every column of the Draft Request screen.}
+
+\subsection{Assumptions and Dependencies}
+
+\asm{planner}{A Capacity Planner exists and sets a Grant for every Team before the first Period starts; without Grants no Exclusive or Metered line is affordable.}
+\asm{inventory}{Resource Owners keep the Inventory current, in particular Pool Capacity; the system detects conflicts against its own records only.}
+\asm{honest}{Managers record Loans truthfully; the system has no way to verify that a lent Person actually worked for the borrowing Team.}
+\asm{calendar}{Availability is what a Member records in their profile; no calendar is consulted.}
+\dep{platform}{The system depends on Java~17, Spring Boot, PostgreSQL, and current desktop browsers being available on the company's infrastructure.}
+\dep{tooling}{The project's build and documentation toolchain is pinned in the repository's Nix flake; teammates need Nix to reproduce the build.}

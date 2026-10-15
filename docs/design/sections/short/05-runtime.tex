@@ -1,0 +1,118 @@
+% 05-runtime.tex (short edition): OpenBench Software Design Document, Section 5 (Runtime View).
+% Condensed from sections/05-runtime.tex on 2026-10-05; identifiers, operation names, and figure captions are the same in both editions.
+% The group below only sets \emergencystretch so that long \code{} identifiers do not overrun the margin.
+\begingroup\setlength{\emergencystretch}{2em}
+\section{Runtime View}\label{sec:runtime}
+
+This section shows the modules at run time: the locking discipline that keeps allocation correct under concurrent use, the state machines, and seven scenarios traced through the provided interfaces of Section~\ref{sec:modules}.
+
+% ======================================================================== 5.1
+\subsection{Transactions, locks, and the correctness guarantee}
+
+Every user or job action is one call to one \code{@Transactional} application-service method, which is one database transaction; modules call each other's services inside it, so a submission that places Holds, sets credits aside, writes history, and notifies lending Managers happens completely or not at all (\req{QA-atomic}, \req{CO-tx}). No method sets an isolation level, so all run at PostgreSQL's default, READ COMMITTED, and \code{spring.jpa.open-in-view} is off. The correctness guarantee (\req{QA-correct}, \adr{0006}) is one sentence:
+
+\begin{quote}\itshape
+Every allocation decision runs in one PostgreSQL READ COMMITTED transaction that first locks the row of each Resource Type it touches, in ascending id order, so checks and writes for the same type never interleave; an exclusion constraint additionally makes it impossible for two Held or Allocated occurrences on the same Exclusive instance to overlap.
+\end{quote}
+
+\paragraph{Lock order.} An allocating method locks before it reads any capacity, always in this order: (1) through \code{AllocationLock.lockTypes}, the \code{resource\_type} row of every type its Request's lines name, Person included for Matched lines, one \code{SELECT ... FOR UPDATE} per id in ascending order; (2) in \code{LedgerService.holdCredits} or \code{commitCharges}, the Team's \code{account} row, where the Available Balance is checked; (3) then it writes. A type-level lock makes choosing the least-used free instance (\req{Exclusive.Conflict}) and inserting it one step; the Person type serializes every Matched decision, so the one-Loan check of \rc{1} cannot race; and two actions on one Request, such as a last approval and a window lapse, run one after the other.
+
+\paragraph{Why READ COMMITTED is required.} The lock serializes the Metered check only if the hourly sum is read by a statement that starts after the lock is granted. The local check behind this design ran two sessions on PostgreSQL~16, each adding 5 units to a pool of 8: at READ COMMITTED the second session saw the first and refused; at REPEATABLE READ with the same lock both sessions committed, 10 of 8 units. The isolation level is therefore never raised on an allocation path, and the ArchUnit test class rejects an \code{isolation} attribute on \code{@Transactional} in \module{Allocation} and \module{Requests} (Section~\ref{sec:cross}).
+
+\paragraph{The one retry.} Three rare cases remain: a waitlist fill that locks a waiting Request's other types after holding the freed type; a second Team's \code{account} row (an Earning, or a Refund to a Bumped Team) written in the opposite order by another transaction; and a wait longer than \code{lock\_timeout} (5~s on the application's connections). Spring reports these (40P01, 55P03) as \code{PessimisticLockingFailureException}, after the transaction has rolled back, so the retry wraps the transactional proxy: controllers and jobs call allocating services through a helper in \code{common} that calls the method once more in a new transaction. A second failure becomes \code{ConcurrencyRetryException}, HTTP 503 with a stable \code{code}; nothing has changed.
+
+% ======================================================================== 5.2
+\subsection{State machines}
+
+\paragraph{Request.} \code{request.state} holds one of the seven states of \figref{fig:state-request}, unchanged from the SRS; only \code{RequestService} and \code{RequestLifecycleService} change it, each change with a \code{request\_event} row (\req{Lifecycle.States}, \req{QA-audit}). Submitted is entered and left inside \code{submit}'s transaction, so no other transaction ever reads it; it exists so that the history records the submission apart from its outcome. Withdrawn and Refused are final, and an Allocated Request stays Allocated after its windows pass.
+
+\begin{figure}[htbp]\centering
+\includegraphics[width=0.62\textwidth,keepaspectratio]{state-request.pdf}
+\caption[Request state machine (UML state machine diagram)]{Request state machine, unchanged from the SRS. Withdraw is drawn once, from Draft; it is also allowed from Pending and Waiting.}\label{fig:state-request}
+\end{figure}
+
+\paragraph{Request Line.} Each line has its own state. An Exclusive or Metered line becomes Held, Allocated, or Waiting; a Held line becomes Allocated when the Request allocates or Waiting when its Hold is released, and a Waiting line becomes Held or Allocated when capacity frees. A Matched line is AwaitingApproval, then Approved, then Loaned when the Request allocates; a Refused line returns to AwaitingApproval when a replacement is selected. Allocation rows have a smaller state: HELD, ALLOCATED, RELEASED, BUMPED, or EXPIRED, and only HELD and ALLOCATED rows count against capacity.
+
+\paragraph{Approval.} An \code{approval} is Outstanding from \code{ApprovalDriven.select} until the Candidate's Manager decides it, Approved or Refused, with actor, time, and reason. When the Objection Window lapses, \code{escalate} sets \code{escalated} on every Outstanding approval; the flag is not a state and stays set after the decision. Only a Capacity Planner may then decide such an approval, and later approvals on that Request are created with \code{escalated} set (\req{Matched.Escalate}).
+
+% ======================================================================== 5.3
+\subsection{Scenarios}
+
+Scenarios S1, S2, and S6 each have one sequence diagram (Figures~\ref{fig:seq-s1-submit}, \ref{fig:seq-s2-allocate}, and \ref{fig:seq-s6-release}) with numbered messages named after the operations of Section~\ref{sec:modules} and \code{alt} boxes for the branches; S3, S4, S5, and S7 are given as one paragraph each.
+
+% ------------------------------------------------------------------------ S1
+\subsubsection{S1 Submit a Request (UC-4)}
+
+\begin{figure}[htbp]\centering
+\includegraphics[width=\textwidth,height=0.5\textheight,keepaspectratio]{seq-s1-submit.pdf}
+\caption[S1, submit a Request (UC-4), sequence diagram]{S1, submit a Request (UC-4). The \code{alt} box shows the three outcomes of evaluation (allocated at once, Pending with Holds and approvals, Waiting); the refusal for an insufficient Available Balance comes before any lock.}\label{fig:seq-s1-submit}
+\end{figure}
+
+\begin{enumerate}
+\item The web client posts \code{/api/\allowbreak requests/\allowbreak \{id\}/\allowbreak submit}; the controller calls \code{RequestLifecycleService.\allowbreak submit}.
+\item \code{submit} calls \code{LedgerService.requireAffordable}, an early check that takes no lock, with the Required lines' Quotes, locks every Quote, records \code{submitted\_at}, and moves the Request to Submitted.
+\item \code{AllocationLock.lockTypes} locks the lines' types; \code{evaluateAll} calls \code{Allocator.evaluate} on each line's allocator (\code{AllocatorRegistry.forClass}), which answers SATISFIABLE, NEEDS\_APPROVAL, or UNSATISFIABLE.
+\item If no line needs approval and every Required line is satisfiable, \code{allocate} Drops unfit Optional lines, writes the rows as ALLOCATED at once, and calls \code{commitCharges}; the Request is Allocated.
+\item If a line needs approval, \code{placeHolds} calls \code{Allocator.hold} and \code{LedgerService.holdCredits} for each satisfiable Exclusive and Metered line; \code{buildShortlist} computes each skill-based Shortlist on read; \code{routeApprovals} creates named-Person approvals now and skill-based ones when the Manager picks Candidates (\code{selectCandidates}, \code{ApprovalDriven.select}), each notifying the Candidate's Manager; the Objection Window starts and the Request is Pending.
+\item Otherwise \code{toWaiting} puts the unfit Required lines on the Waitlist and the Request is Waiting. \code{record} logs every change and the transaction commits.
+\end{enumerate}
+\par\textbf{Failure branches.}
+\begin{itemize}
+\item The Required sum exceeds the Available Balance: \code{RuleViolation(\allowbreak"INSUFFICIENT\_BALANCE")}; nothing is locked or written and the Request stays Draft. The same code comes from \code{holdCredits} or \code{commitCharges} if a concurrent action of the Team spent the credits first.
+\item A Required Exclusive or Metered line is unsatisfiable: it joins the Waitlist, and the Request is Waiting, or Pending if another line needs approval. An unsatisfiable Optional line is never waitlisted and is Dropped at allocation.
+\end{itemize}
+
+% ------------------------------------------------------------------------ S2
+\subsubsection{S2 Last approval allocates (UC-6)}
+
+\begin{figure}[htbp]\centering
+\includegraphics[width=\textwidth,height=0.5\textheight,keepaspectratio]{seq-s2-allocate.pdf}
+\caption[S2, the last Required approval allocates the Request (UC-6), sequence diagram]{S2, the last Required approval allocates the Request (UC-6). Holds commit and Charges, Loans, and Earnings post in one transaction; the \code{alt} box shows a Candidate who is no longer eligible.}\label{fig:seq-s2-allocate}
+\end{figure}
+
+\begin{enumerate}
+\item The lending Manager approves; \code{decideApproval} with \code{APPROVE} locks the Request's types.
+\item \code{ApprovalDriven.decide} checks the actor (the Candidate's Manager, or after escalation a Capacity Planner), re-checks the Candidate's eligibility, and records Approved.
+\item If a Required line is still unsatisfied, the Request stays Pending. Otherwise \code{allocate} re-runs \code{evaluateAll} under the locks; an approved Candidate who is no longer eligible (unavailable on a day, or in an overlapping Loan) makes the line UNSATISFIABLE(NOT\_A\_CANDIDATE).
+\item Unfit, refused, or unaffordable Optional lines are Dropped with a reason; \code{Allocator.commit} turns HELD rows into ALLOCATED; \code{LedgerService.commitCharges} turns held credits into Charges equal to the locked Quotes, granted credits first.
+\item \code{MatchedAllocator.commit} forms the Loans, and \code{LedgerService.postEarning} credits each lending Team the Day Rate times the person-days, once per Loan from \code{AllocationQueries.loansFor(line)}; the Request is Allocated, \code{record} logs it, and \code{Notifier} tells the Manager, the Persons, and the lending Managers.
+\end{enumerate}
+\par\textbf{Failure branches.}
+\begin{itemize}
+\item The Candidate became ineligible before approval: \code{decide} refuses the approval with a \code{RuleViolation} whose code is \code{NOT\_A\_CANDIDATE}; the lending Manager can refuse instead (S3).
+\item The Balance no longer covers the Required Charges (after a rollover or an Earning correction while Pending): \code{toWaiting} runs instead with reason \code{INSUFFICIENT\_BALANCE}; the approval is kept.
+\end{itemize}
+
+% ------------------------------------------------------------------------ S3
+\paragraph{S3 Refusal and replacement (UC-6, UC-5).} The lending Manager refuses; \code{decideApproval} with \code{REFUSE} locks the types, and \code{ApprovalDriven.decide} records Refused. If the refused line is Required, it is no longer satisfied, so \code{toWaiting} calls \code{Allocator.cancel} on each held line and \code{LedgerService.releaseCredits}, puts the Required lines on the Waitlist, and offers the freed capacity (\code{onCapacityFreed}). A refused Optional line releases nothing. \code{Notifier} asks the requesting Manager for a replacement; the Request is Waiting, or still Pending with its Holds if the refused line is Optional. The Manager picks from the Shortlist; \code{selectCandidates} calls \code{ApprovalDriven.select}, which notifies that Candidate's Manager. The window still runs, so \code{placeHolds} holds every satisfiable line again and the Request is Pending; \code{window\_ends\_at} is unchanged.
+
+% ------------------------------------------------------------------------ S4
+\paragraph{S4 Objection Window lapses (UC-7).} Every 60~s \code{DueWorkJob.run} calls \code{lapsedWindows(now)}, which returns the Requests, Pending or Waiting, whose \code{window\_ends\_at} has passed with an approval still Outstanding and not yet escalated, and calls \code{onWindowLapse} for each, one transaction per Request. For a Pending Request, \code{toWaiting} releases every Hold (rows HELD to EXPIRED) and its held credits, waitlists the Required lines, and offers the capacity; the Request is Waiting. A Waiting Request holds nothing, so this step is skipped. \code{ApprovalDriven.escalate} sets \code{escalated} on every Outstanding approval, and \code{Notifier} tells the Manager and every Capacity Planner, found with \code{MemberService.\allowbreak withRole}. The Capacity Planner decides each from \code{escalations()} through \code{decideApproval} (S2 or S3). No Hold is placed again: the Request allocates only when every Required line fits at one moment (\req{Lifecycle.Waiting.Reevaluate}). The same run calls \code{expireWaitingLines(now)}, which takes lines whose window start has passed off the Waitlist.
+
+% ------------------------------------------------------------------------ S5
+\paragraph{S5 Priority line Bumps a standard line (UC-8).} During \code{submit} (S1), \code{ExclusiveAllocator.evaluate} answers UNSATISFIABLE for a Priority line. The lifecycle gets \code{Bumpable} from \code{AllocatorRegistry.capability} and calls \code{planBump}: the instance needing the fewest Bumps of standard lines, allocated or on Hold, preferring the latest-submitted, with none starting within the bump cutoff. \code{applyBump} marks those occurrences BUMPED, flushes, and inserts the Priority occurrences as HELD; the exclusion constraint checks the insert. For a Bumped line that was Allocated, \code{LedgerService.refund} posts the full Charge back to the Bumped Team; a line that was only on Hold had no Charge, so \code{LedgerService.releaseCredits} releases its held credits instead. \code{Waitlistable.join} puts each Bumped Required line at the head of its Waitlist (a Bumped Optional line is Dropped instead); its Request moves to Waiting (other lines keep their allocations; a Pending Request releases its other Holds). \code{Notifier} tells the Bumped Manager why; \code{record} logs the Bump on both lines; the submission continues as in S1. A blocking line starts inside the bump cutoff, or only Priority lines block: no plan; the Required Priority line joins the Waitlist ahead of all standard lines.
+
+% ------------------------------------------------------------------------ S6
+\subsubsection{S6 Release and waitlist fill (UC-9, UC-10)}
+
+\begin{figure}[htbp]\centering
+\includegraphics[width=\textwidth,height=0.5\textheight,keepaspectratio]{seq-s6-release.pdf}
+\caption[S6, Release and waitlist fill (UC-9, UC-10), sequence diagram]{S6, Release and waitlist fill (UC-9, UC-10). The Refund follows the Refund Schedule, and the freed capacity is offered to the Waitlist in the same transaction; the \code{alt} box places Holds for a waiting Request that still needs approvals.}\label{fig:seq-s6-release}
+\end{figure}
+
+\begin{enumerate}
+\item The Manager Releases a line or part of it; \code{releaseLine(l, part, ...)} locks its type, and \code{Allocator.release} frees that part while the rest keeps its instance and prices (\req{Release.Line}).
+\item \code{Pricing.refund} applies the Refund Schedule step for the lead time to the part's start; \code{LedgerService.\allowbreak refund} posts it to the granted and earned parts in the Charge's proportions (\req{Release.Refund}).
+\item \code{onCapacityFreed} asks \code{Waitlistable.waitingFor} for the waiting lines in order: Bumped, then Priority, then by submission time.
+\item For each waiting Request in turn, the lifecycle locks its other types and checks every Required line. The first that fits is allocated (\code{allocate}), or, if it still needs approvals and its window runs, held (\code{placeHolds}) and Pending.
+\item \code{Notifier} tells both Managers; \code{record} logs both histories.
+\end{enumerate}
+\par\textbf{Failure branches.}
+\begin{itemize}
+\item The part was already consumed: \code{RuleViolation}; nothing changes.
+\item No waiting Request fits, or one cannot afford its locked Quote, or its window lapsed while it still needs approvals: it keeps its place and the next is tried; capacity left over shows as idle.
+\end{itemize}
+
+% ------------------------------------------------------------------------ S7
+\paragraph{S7 Period rollover (UC-11).} \code{PeriodRolloverJob.run} fires daily at 00:05 and acts only when a Period boundary has passed; \code{catchUp} runs the same check at start-up. It calls \code{LedgerService.rollover} with the ending and starting Periods (from \code{SettingsService.\allowbreak current()}); \code{rollover} locks every \code{account} row in ascending Team id. For each Team the remaining granted credits are the expired amount; \code{granted} is set to zero, and earned and held credits are untouched (\req{Ledger.Grant.Period}). It posts the starting Period's planned Grant from \code{grant\_plan} (\code{postGrant}, when the planned amount is positive) and \code{Notifier} tells each Manager. No fifth Transaction kind records the expiry: \code{rollover} writes one \code{period\_close} row per Team with the expired amount and closing balances; its key makes a second run a no-op.
+\endgroup

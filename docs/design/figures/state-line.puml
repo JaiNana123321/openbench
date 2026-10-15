@@ -1,0 +1,73 @@
+@startuml state-line
+' F10 Request Line states, grouped by Allocation Class. Exclusive and Metered lines share one
+' machine (Bumped applies to standard Exclusive lines only); Matched lines follow approvals.
+' From any state: withdraw -> Canceled. An Optional line that cannot be satisfied or afforded
+' when its Request allocates -> Dropped. Released, Loaned, Dropped, Canceled are final.
+skinparam shadowing false
+skinparam defaultFontName Helvetica
+skinparam defaultFontSize 12
+skinparam ArrowFontSize 10
+skinparam ArrowColor #223
+skinparam nodesep 14
+skinparam ranksep 22
+skinparam state {
+  BackgroundColor #F4F6FA
+  BorderColor #223
+  FontStyle bold
+}
+skinparam note {
+  BackgroundColor White
+  BorderColor #223
+}
+hide empty description
+
+[*] --> Draft : addLine
+Draft --> Evaluated : submit\n(evaluate)
+
+state "Exclusive and Metered lines" as EM {
+  state Held
+  state "Allocated" as EAllocated
+  state "Waiting" as EWaiting
+  state Released
+  state PartlyReleased
+  state Bumped
+  Held -down-> EAllocated : Request allocates\n(commit, Charge)
+  Held -down-> EWaiting : refusal or\nWindow lapse\n(Hold released)
+  EWaiting -up-> Held : replacement\npicked, Window\nrunning
+  EWaiting -left-> EAllocated : fits at once\n(onCapacityFreed)
+  EAllocated -down-> PartlyReleased : release\npart (Refund)
+  EAllocated -down-> Released : release whole\n(Refund)
+  PartlyReleased -left-> Released : release rest
+  EAllocated -down-> Bumped : Priority line\nBumps it
+  Held -down-> Bumped : Priority line Bumps it\n(held credits released)
+  Bumped -up-> EWaiting : head of Waitlist,\nfull Refund
+}
+
+state "Matched lines" as M {
+  state AwaitingApproval
+  state Approved
+  state Loaned
+  state "Refused" as MRefused
+  AwaitingApproval --> Approved : lending Manager\n(or Planner) approves
+  AwaitingApproval --> MRefused : refused
+  MRefused --> AwaitingApproval : replacement\nselected
+  Approved --> Loaned : Request allocates\n(Loan formed, Earning)
+  Approved --> MRefused : re-check fails\n(system)
+  Loaned --> Loaned : end early\n(Earning corrected)
+}
+
+Evaluated --> Held : SATISFIABLE,\napprovals pending\n(placeHolds)
+Evaluated --> EAllocated : SATISFIABLE, no\napproval needed
+Evaluated --> EWaiting : UNSATISFIABLE\n(Required line)
+Evaluated --> AwaitingApproval : NEEDS_APPROVAL\n(Candidates selected)
+
+state Dropped
+state Canceled
+EM --> Dropped : Optional line\nnot satisfiable
+M --> Dropped : Optional line,\nno Candidate
+EM --> Canceled : withdraw
+M --> Canceled : withdraw
+Loaned -[hidden]down-> Dropped
+Released -[hidden]down-> Canceled
+note bottom of Canceled : withdraw from Draft\nor Evaluated also\nleads here
+@enduml

@@ -1,0 +1,78 @@
+% 03-decomposition.tex — OpenBench Software Design Document, short edition (condensed from sections/03-decomposition.tex on 2026-10-05).
+\section{Problem Decomposition}\label{sec:decomp}
+
+The problem was broken down in two passes: the first turned the twelve features of the SRS, plus the concerns that cut across them, into responsibilities small enough for one module to own; the second took the four parts that resist a clean split (three allocation policies, a Request whose parts resolve at different speeds, credits, and timed work) and decided how each is divided.
+
+\subsection{Responsibilities}\label{sec:decomp-resp}
+
+Every responsibility has exactly one owning module, the one that holds its data and enforces its rules; where two modules share a responsibility, the first named owns the decision and the second carries it out, and the collaborators a module calls are the required interfaces of Section~\ref{sec:modules}. Every one of the 41 Release~1 functional requirements appears in at least one row, and Appendix~\ref{app:trace} gives the reverse mapping.
+
+{\footnotesize\renewcommand{\arraystretch}{1.0}\setlength{\tabcolsep}{3pt}
+\begin{longtable}{@{}L{0.7cm}L{0.53\textwidth}L{0.31\textwidth}L{\dimexpr0.16\textwidth-0.7cm-6\tabcolsep\relax}@{}}
+\toprule
+\textbf{Id} & \textbf{Responsibility} & \textbf{SRS identifiers} & \textbf{Owner} \\
+\midrule
+\endfirsthead
+\multicolumn{4}{@{}l}{\small\itshape Responsibilities (continued)}\\ \toprule
+\textbf{Id} & \textbf{Responsibility} & \textbf{SRS identifiers} & \textbf{Owner} \\
+\midrule
+\endhead
+\midrule \multicolumn{4}{@{}r}{\small\itshape continues on next page}\\
+\endfoot
+\bottomrule
+\endlastfoot
+\multicolumn{4}{@{}l}{\itshape Inventory and profiles}\\
+\rid{1} & Define, change, and retire Resource Types as data, with one Allocation Class and typed attributes; protect the built-in type Person & \req{Inventory.Type.Define}, \req{QA-extensible} & \module{Inventory} \\
+\rid{2} & Keep Resources, their units, and Pool Capacity; refuse a retirement or reduction below future usage, naming the earliest hour & \req{Inventory.Resource.Add} & \module{Inventory} \\
+\rid{3} & Show who holds a Resource in each part of a window; filter Resources by type, attribute, and free for a window & \req{Inventory.View.Holder}, \req{UI-inventory} & \module{Allocation} \\
+\rid{4} & Keep Members, Teams with exactly one Manager, roles, the skill list, each Member's skills and availability; answer who is available with which skills & \req{Admin.Member.Create}, \req{Profile.Skills}, \req{Profile.Availability}, \req{SE-data} & \module{Members} \\
+\addlinespace
+\multicolumn{4}{@{}l}{\itshape Suggestions, drafting, and submission}\\
+\rid{5} & Create Suggestions; accept one into a new or existing line, or decline it with a reason & \req{Suggest.Create}, \req{Suggest.Accept.Existing} & \module{Requests} \\
+\rid{6} & Edit Drafts: add, edit, split, and remove lines; mark Required or Optional and Priority; refuse past windows and retired types & \req{Draft.Create}, \req{Draft.Line.Add}, \req{Draft.Line.Required}, \req{UI-draft} & \module{Requests} \\
+\rid{7} & Price a line (Quote) and a Release (Refund fraction) with the pure class \code{Pricing}, from the line, the settings, and the lead time & \req{Ledger.Price.Formula}, \req{Draft.Quote.Line}, \req{Metered.Line.Form}, \req{Release.Refund} & \module{Ledger} \\
+\rid{8} & Check affordability and submit: refuse a shortfall in Required lines, or any priced Required line while the Balance is negative; lock every Quote; record the submission time & \req{Draft.Quote.Line}, \req{Draft.Submit.Lock}, \req{Release.Loan.Prorate} & \module{Requests} \\
+\addlinespace
+\multicolumn{4}{@{}l}{\itshape Allocation per class}\\
+\rid{9} & Decide Matched eligibility (skills, availability, other Team, active, no overlapping Loan) and build the Shortlist least-lent first; form Loans, one per Person at a time & \req{Matched.Shortlist.Build}, \req{Profile.Availability}, \req{Matched.Loan.Form}, \req{PE-shortlist}, \req{UI-shortlist} & \module{Allocation} \\
+\rid{10} & Route one approval per selected Candidate to the lending Manager; record each decision; on refusal release Holds and ask for a replacement, or refuse or drop the line & \req{Matched.Approve.Route}, \req{Matched.Refuse.Replace}, \req{UI-shortlist} & \module{Allocation}, \module{Requests} \\
+\rid{11} & Detect Exclusive conflicts against Held and Allocated occurrences and pick a free instance; never double-allocate & \req{Exclusive.Conflict}, \req{QA-correct} & \module{Allocation} \\
+\rid{12} & Check a Metered line hour by hour against Pool Capacity and the Team's Quota; never oversell & \req{Metered.Line.Form}, \req{Metered.Pool.Check}, \req{QA-correct} & \module{Allocation} \\
+\rid{13} & Keep the Waitlist: join, order (Priority, then submission time, Bumped at the head), positions, and expiry at window start & \req{Exclusive.Waitlist.Join}, \req{Metered.Pool.Check} & \module{Allocation} \\
+\rid{14} & Plan and apply Bumps for Priority lines outside the bump cutoff; refund the Bumped line in full and put it at the head of the Waitlist & \req{Exclusive.Priority.Bump}, \req{Exclusive.Bump.Effect} & \module{Allocation}, \module{Requests} \\
+\addlinespace
+\multicolumn{4}{@{}l}{\itshape Request lifecycle}\\
+\rid{15} & Run the Request state machine; evaluate every line on submission and choose Allocated, Pending, or Waiting & \req{Lifecycle.States}, \req{Lifecycle.Evaluate} & \module{Requests} \\
+\rid{16} & Place Holds with held credits when a Request enters Pending; release them when it leaves Pending; place none after the window lapses & \req{Lifecycle.Hold.Place} & \module{Requests} \\
+\rid{17} & Allocate a Request in one transaction: commit Holds, post Charges and Earnings, form Loans, drop Optional lines with a reason & \req{Lifecycle.Allocate}, \req{Matched.Loan.Form}, \req{QA-atomic}, \req{CO-tx} & \module{Requests} \\
+\rid{18} & Start the Objection Window on first entry to Pending; on lapse release Holds, move to Waiting, and escalate to the Capacity Planner & \req{Lifecycle.Window.Start}, \req{Matched.Escalate}, \req{Planner.Settings} & \module{Requests} \\
+\rid{19} & Re-evaluate Waiting Requests when capacity frees or an approval arrives; allocate one only when every Required line fits at once & \req{Lifecycle.Waiting.Reevaluate}, \req{Exclusive.Waitlist.Join} & \module{Requests} \\
+\addlinespace
+\multicolumn{4}{@{}l}{\itshape Release and Ledger}\\
+\rid{20} & Release a line in whole or in part and end a Loan early; post the Refund or the Earning correction; offer the freed capacity & \req{Release.Line}, \req{Release.Refund}, \req{Release.Loan.Prorate} & \module{Requests} \\
+\rid{21} & Keep Accounts (granted, earned, held) and append-only Transactions with the spend-order split; post Earnings; produce Statements & \req{Ledger.Account}, \req{Ledger.Transaction.Kinds}, \req{Ledger.Earning.Post}, \req{QA-audit} & \module{Ledger} \\
+\rid{22} & Post planned and mid-Period Grants; roll the Period over, expiring granted credits and keeping earned ones & \req{Ledger.Grant.Period}, \req{PE-jobs} & \module{Ledger} \\
+\addlinespace
+\multicolumn{4}{@{}l}{\itshape Reporting and settings}\\
+\rid{23} & Show utilization, idle capacity, waiting lines, credits, and person-days, scoped to the viewer's roles & \req{Dashboard.Utilization}, \req{Dashboard.Credits}, \req{UI-inventory} & \module{Dashboard} \\
+\rid{24} & Keep every Capacity Planner setting as data, applied to future Quotes and events, with a change log & \req{Planner.Settings}, \req{Admin.Member.Create} & \module{Settings} \\
+\addlinespace
+\multicolumn{4}{@{}l}{\itshape Crosscutting}\\
+\rid{25} & Authenticate Members by username and password; enforce roles on every action, from the client or the API alike & \req{Admin.Member.Create}, \req{SE-roles}, \req{SE-password}, \req{CO-auth}, \req{CO-api} & \code{security}, \module{Members} \\
+\rid{26} & Scope every read to the caller's own record, Team, owned Resources, or role & \req{SE-visibility}, \req{Profile.Availability}, \req{Ledger.Account}, \req{Dashboard.Credits} & every module \\
+\rid{27} & Record actor, change, and time for every Request and line state change and every setting change & \req{Lifecycle.States}, \req{Exclusive.Bump.Effect}, \req{QA-audit}, \req{QA-retention} & \module{Requests}, \module{Settings} \\
+\rid{28} & Run timed work: lapse Objection Windows, expire waiting lines, roll Periods over, from one injected \code{Clock} & \req{Lifecycle.Window.Start}, \req{Ledger.Grant.Period}, \req{PE-jobs}, \req{CO-jobs} & \module{Jobs} \\
+\rid{29} & Notify Members in-app of approval requests, outcomes, Bumps, Loans, escalations, and declined Suggestions & \req{CI-inapp}, \req{Lifecycle.Allocate}, \req{Matched.Loan.Form}, \req{Suggest.Accept.Existing} & \module{Notifications} \\
+\rid{30} & Present the role-based screens over the REST API, with Quotes fetched from the server & \req{UI-draft}, \req{UI-shortlist}, \req{UI-inventory}, \req{QA-usable}, \req{QA-available} & Web client \\
+\addlinespace
+\multicolumn{4}{@{}l}{\itshape Stretch, designed as extension points (Section~\ref{sec:evo})}\\
+\rid{31} & Service tiers with a premium on Metered lines, and Bumps of lower-tier units by \code{Bumpable} on \code{MeteredAllocator} & \req{Metered.Tier.Define}, \req{Metered.Tier.Bump} & \module{Allocation} \\
+\rid{32} & Record units actually used per Metered allocation and compare requested with used & \req{Metered.Usage.Record}, \req{Metered.Usage.Compare}, \req{Dashboard.Usage} & \module{Allocation}, \module{Dashboard} \\
+\rid{33} & Add a demand surcharge multiplier inside \code{Pricing.quote} that rises as the requested window fills & \req{Ledger.Surcharge} & \module{Ledger} \\
+\rid{34} & Deliver notifications by email as well as in-app, through a second \code{Delivery}, \code{EmailDelivery} & \req{CI-inapp} (Stretch part) & \module{Notifications} \\
+\end{longtable}
+}
+
+\subsection{Subproblems and How Each Was Broken Down}
+
+\textbf{Three allocation policies behind one interface.} Every class must evaluate a line, hold it, commit it, release it, and cancel it, so those five operations form \code{Allocator}. The rest became three optional capabilities (\code{Waitlistable}, \code{Bumpable}, \code{ApprovalDriven}) that \module{Requests} asks the \code{AllocatorRegistry} for and skips when a class lacks them (\adr{0007}). \emph{Rejected:} three unrelated services that \module{Requests} picks by class, which would make every new class edit the orchestrator, against \req{CO-plugin} and \req{QA-extensible}. \textbf{A Request whose parts resolve at different speeds.} One orchestrator, \code{RequestLifecycleService} in \module{Requests}, owns the state machine and is the only code that moves a Request between states; Holds bridge the gap (\adr{0001}), blocking capacity without a Charge and bounded by the Objection Window; and submission, an approval decision, a lapse, and a Release are each one \code{@Transactional} method that calls the allocators and \module{Ledger} directly, so a Request is never seen half allocated. \emph{Rejected:} a saga of modules reacting to each other's events, with a compensating step for each failure, which exposes half-allocated Requests. \textbf{Credits as pure pricing plus append-only posting.} \code{Pricing} is a pure class in \module{Ledger} that reads no database and is used both while drafting and at submission, and the Quote it returns is locked on the Request Line, so the Charge always equals the Quote shown; \code{LedgerService} updates the Team's \code{account} row under its lock and appends a Transaction row for every Grant, Charge, Earning, or Refund (\adr{0002}). \emph{Rejected:} computing the Charge at commit time from the settings then in force, which lets a Charge differ from the Quote the Manager accepted. \textbf{Timed work as polling in one process.} Each timed event was reduced to a row whose time has come; \code{DueWorkJob} polls every 60~seconds and \code{PeriodRolloverJob} runs at 00:05 on the boundary day and again at start-up, and each due item is handled in its own transaction by an application-service method of the owning module. \emph{Rejected:} scheduling one timer per due item, which loses timers on restart unless a job store such as Quartz is added.

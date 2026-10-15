@@ -1,0 +1,108 @@
+% 01-introduction.tex — OpenBench Software Design Document. Written from .scratch/design-doc/brief.md on 2026-10-05.
+\section{Introduction}\label{sec:intro}
+
+\subsection{Purpose and Scope}
+
+This document specifies the design of Release~1 of \SRSproduct{}, the internal marketplace in which a Manager posts one Request for people, Exclusive resources, and Metered capacity, and the system allocates each Request Line under the policy of its Allocation Class and settles it in credits. It is the bridge from the requirements to the code: the team implements from it, the tests are derived from its interfaces and scenarios, and reviewers check it against the SRS.
+
+The design covers every Release~1 requirement of the SRS: the 41 functional requirements, the design and implementation constraints, the interface requirements, and the performance, security, and quality requirements. It divides the system into nine back-end modules and a web client (Section~\ref{sec:arch}), gives every responsibility to exactly one owning module (Section~\ref{sec:decomp}), and specifies each module down to Java signatures, owned tables, invariants, and failure behavior (Section~\ref{sec:modules}). The six Stretch requirements are designed only as extension points, and the Future items are named only so that the design leaves room for them (Section~\ref{sec:evo}). The code itself, a separate test plan, and the project schedule are outside this document.
+
+\subsection{Requirements Baseline and Changes}
+
+The baseline is the \SRSproduct{} Software Requirements Specification, version~\SRSversion{} of 2026-10-05. Identifiers are those of its short edition: 41 Release~1 and 6 Stretch functional requirements in dot notation (for example \req{Lifecycle.Hold.Place}), twelve use cases UC-1 to UC-12, and the CO, UI, SI, CI, PE, SE, QA, UD, AS, and DE identifiers. The full edition uses the same functional identifiers. Version~\SRSversion{} differs from version~0.2, the edition that was graded, by the three requirements changes below. Each is recorded in the revision history of the SRS.
+
+{\small\renewcommand{\arraystretch}{1.1}
+\begin{tabularx}{\textwidth}{@{}L{2.3cm}YYL{3.4cm}@{}}
+\toprule
+\textbf{Change} & \textbf{What changed} & \textbf{Why} & \textbf{Where it lands} \\
+\midrule
+\rc{1} One Loan at a time &
+A Member with a Loan overlapping any day of a Matched line's window is not a Candidate for that line. The Shortlist is ordered by fewest person-days lent in the current Period, ties by name. A Loan that ends early frees the Person from the day after its new last day (\req{Profile.Availability}, \req{Matched.Shortlist.Build}). &
+Grader feedback. Version~0.2 kept such Members on the Shortlist and only ranked them by overlapping Loans, which left open whether a Person could be lent twice at once. A Person is lent whole, so an overlap now removes eligibility. Because no Candidate then has an overlapping Loan, the order uses person-days lent instead, which still spreads Loans across Members. &
+Shortlist eligibility in \code{MatchedAllocator} (Section~\ref{mod:allocation}), re-checked at approval and at Loan formation; exclusion constraint on \code{loan} (Section~\ref{sec:data}). \\
+\addlinespace
+\rc{2} Inspection participation &
+The inspection record of the SRS states that all four team members read and inspected it. &
+Grader feedback asked that the whole-team inspection be explicit. &
+No design effect. This document's inspection record (Appendix~\ref{app:inspection}) follows the same rule. \\
+\addlinespace
+\rc{3} Test database &
+Automated tests run on PostgreSQL~16 in a container started by the test suite (Testcontainers), with the same migrations as production. The in-memory H2 database is dropped (\req{CO-db}, \req{SI-db}). &
+Design decision. The design enforces correctness with PostgreSQL features that H2 does not have: a partial exclusion constraint over time ranges, row locks with PostgreSQL's READ COMMITTED behavior, and a native hourly-sum query. Tests on H2 would test a different system. &
+\adr{0006}; schema and migrations (Section~\ref{sec:data}); testing strategy (Section~\ref{sec:cross}). \\
+\bottomrule
+\end{tabularx}
+}
+
+
+\subsection{Readers and Roadmap}
+
+Three kinds of reader use this document. An \emph{implementer} builds one module and needs its interface, its data, and the rules it must not break. A \emph{tester} writes the automated tests that \req{QA-retention} requires and needs the invariants, the failure behavior, and the scenarios. A \emph{reviewer} (a teammate at inspection, or the grader) checks the design against the SRS and needs the rationale and the traceability. In the table, $\bullet$ marks a section that reader reads closely and $\circ$ one they consult when needed.
+
+{\small\renewcommand{\arraystretch}{1.08}
+\begin{tabularx}{\textwidth}{@{}L{4.2cm}Yccc@{}}
+\toprule
+\textbf{Section} & \textbf{What it answers} & \textbf{Impl.} & \textbf{Test} & \textbf{Review} \\
+\midrule
+\ref{sec:intro} Introduction & What is designed, against which requirements, and how to read the figures & $\circ$ & $\circ$ & $\bullet$ \\
+\ref{sec:arch} Architecture & What the parts are, how they may depend on each other, where they run, how each quality attribute is met, and why & $\bullet$ & $\circ$ & $\bullet$ \\
+\ref{sec:decomp} Problem Decomposition & Which module owns each responsibility and requirement, and how the hard parts were broken down & $\bullet$ & $\bullet$ & $\bullet$ \\
+\ref{sec:modules} Module Specifications & What each module provides, requires, owns, guarantees, and hides & $\bullet$ & $\bullet$ & $\circ$ \\
+\ref{sec:runtime} Runtime behavior & What one transaction locks, which states a Request and a line pass through, and how the seven scenarios run & $\bullet$ & $\bullet$ & $\circ$ \\
+\ref{sec:data} Data & Which tables exist, which module writes each, and which constraints carry rules & $\bullet$ & $\bullet$ & $\circ$ \\
+\ref{sec:api} API & Which endpoints exist, who may call them, and which errors they return & $\bullet$ & $\bullet$ & $\circ$ \\
+\ref{sec:cross} Crosscutting concerns & How authorization, audit, notifications, errors, time, testing, and logging work everywhere & $\bullet$ & $\bullet$ & $\circ$ \\
+\ref{sec:evo} Maintenance and evolution & Where Stretch and Future items land, which assumptions would break the design, which risks remain & $\circ$ & $\circ$ & $\bullet$ \\
+Appendix~\ref{app:trace} Traceability & Where each SRS identifier is satisfied & $\circ$ & $\bullet$ & $\bullet$ \\
+Appendix~\ref{app:glossary} Glossary & What each domain and design term means & $\circ$ & $\circ$ & $\circ$ \\
+Appendix~\ref{app:inspection} Inspection & How the team reviewed this document & & & $\bullet$ \\
+\bottomrule
+\end{tabularx}
+}
+
+\subsection{Design Principles}
+
+\begin{itemize}
+  \item \textbf{Simplicity first.} The team's standing rule is the simplest architecture and program that meets the SRS: one process, one database, direct method calls, no message broker, no event sourcing, no microservices. This document adds a mechanism only where a requirement needs it, and Section~\ref{sec:arch} names the requirement each time (the one port, the one read-only module, the two scheduled jobs).
+  \item \textbf{Modularity and information hiding.} Each of the nine modules hides its entities and tables behind its application services; every module specification ends with an \emph{Information hiding} field that states what the other modules must not know.
+  \item \textbf{Low coupling and high cohesion.} Dependencies point down a fixed layer order with no cycles, and each module owns one cluster of the vocabulary: \module{Allocation} decides all capacity and \module{Ledger} all credit arithmetic, and neither calls the other.
+  \item \textbf{Separation of concerns.} What state a Request is in (\module{Requests}), whether capacity exists (\module{Allocation}), and what it costs (\module{Ledger}) are answered by different modules; inside each module HTTP, rules, and persistence sit in separate layers, and pricing is a pure function.
+  \item \textbf{Correctness enforced in the database.} Invariants that must survive concurrent users (no double-allocated instance, no oversold hour, no overlapping Loan, an append-only Ledger) are database constraints, row locks, or grants, not only application checks (\adr{0006}).
+  \item \textbf{Uniformity of patterns.} Every module has the same four inner layers, every user or job action is one transactional service method, every module is specified with the same template, every error is a problem response with a stable code, and every timed action goes through the owning module's application service, like a user action, with the system recorded as the actor.
+\end{itemize}
+
+\subsection{Notation}
+
+The figures are UML~2 diagrams drawn with PlantUML from sources kept with this document: a context diagram (Section~\ref{sec:arch}), a component diagram and a package diagram of the modules, a deployment diagram, class diagrams per module (Section~\ref{sec:modules}), state machine diagrams and one sequence diagram per scenario (Section~\ref{sec:runtime}), and an entity-relationship diagram of the schema (Section~\ref{sec:data}). Color carries no meaning, so every figure reads in grayscale. Four elements go beyond plain boxes and arrows:
+
+\begin{itemize}
+  \item \textbf{Interface lollipop and socket.} In the component diagram the port \code{ReductionGuard} is drawn as a provided interface (a ball, or lollipop) on \module{Allocation} and a required interface (a socket) on \module{Inventory}. Inventory declares the interface in its own package and calls it; Allocation implements it. The call at run time goes from Inventory to Allocation, but the compile-time dependency goes from Allocation to Inventory, so the layer order holds.
+  \item \textbf{Dashed arrows labeled read-only.} A solid arrow is a call to another module's application service. The dashed arrows labeled \emph{read-only} from \module{Dashboard} stand for SQL reads through views over other modules' tables, the one documented exception to the rule that a module reaches another module's data only through its services.
+  \item \textbf{\code{alt} and \code{opt} frames.} In sequence diagrams an \code{alt} frame holds alternative branches, each with its guard in brackets; failure branches are always drawn as an \code{alt} branch, never left out. An \code{opt} frame holds a step that runs only when its guard holds.
+  \item \textbf{Numbered messages.} Every message in a sequence diagram is numbered in order, so the text can cite ``message~7''. Message names are the operation names of Section~\ref{sec:modules} exactly, and dashed arrows are returns.
+\end{itemize}
+
+\subsection{Conventions}
+
+\begin{itemize}
+  \item \textbf{Vocabulary.} Capitalized words such as Request, Hold, Loan, Shortlist, Waitlist, and Refund have the meaning given in the glossary (Appendix~\ref{app:glossary}), taken from the project vocabulary file. Credits are for showback only, so no money words are used.
+  \item \textbf{Requirement identifiers} are set in bold. Functional requirements keep their dot notation, for example \req{Matched.Shortlist.Build}. Other identifiers print with the numbers the SRS gives them, for example \req{QA-correct}; the table below gives the key each number stands for in the sources (\req{QA-correct} is \code{QA-correct}).
+  \item \textbf{Design identifiers.} Responsibilities are \rid{1} to \rid{34} (Section~\ref{sec:decomp}), requirements changes \rc{1} to \rc{3} (above), architecture decisions D-A to D-L and their records \adr{0001} to \adr{0007} (Section~\ref{sec:arch}).
+  \item \textbf{Code.} Identifiers are set in \code{monospace}, module names in \module{bold sans-serif}. Each module is one Java package \code{edu.cwru.openbench.<module>}; signatures are Java~17; every application-service method runs in one transaction unless marked \emph{(read-only)}. Tables and columns are \code{snake\_case}.
+  \item \textbf{Time.} Instants are \code{timestamptz}; windows are half-open, $[\mathit{start}, \mathit{end})$; Loan days and availability ranges are inclusive dates. All windows, Price Bands, and Periods are in the company's one time zone.
+\end{itemize}
+
+{\small\renewcommand{\arraystretch}{1.05}
+\begin{tabularx}{\textwidth}{@{}L{1cm}Y@{}}
+\toprule
+\textbf{Class} & \textbf{Keys with the number the SRS prints} \\
+\midrule
+CO & stack 1, db 2, api 3, tx 4, jobs 5, auth 6, plugin 7 \\
+UI, SI, CI & UI: draft 1, shortlist 2, inventory 3; SI: db 1, api 2; CI: https 1, inapp 2 \\
+PE, SE & PE: scale 1, page 2, shortlist 3, jobs 4; SE: roles 1, password 2, data 3, visibility 4 \\
+QA & correct 1, atomic 2, audit 3, available 4, usable 5, extensible 6, retention 7 \\
+UD, AS, DE & UD: guide 1, admin 2, help 3; AS: planner 1, inventory 2, honest 3, calendar 4; DE: platform 1, tooling 2 \\
+LI & company 1, money 2, integrations 3, consent 4 \\
+\bottomrule
+\end{tabularx}
+}

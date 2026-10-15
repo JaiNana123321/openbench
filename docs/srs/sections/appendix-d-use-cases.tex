@@ -1,0 +1,408 @@
+\section{Use Cases}\label{app:usecases}
+
+Each use case records its actors, trigger, preconditions, postconditions, flows, priority, frequency of use, business rules, and notes. Flow steps are numbered $n$.0 for the normal flow, $n$.$m$ for alternative flows, and $n$.$m$.E.$k$ for exceptions. All use cases were created by the team on \SRScreated{} for version 0.1.
+
+\begin{usecase}{define-type}{Define a Resource Type}
+\ucfield{Created By}{J.\ Nana, B.\ Lujan, F.\ Turopov, Y.\ Shnazbayev, \SRScreated}
+\ucfield{Actors}{Administrator (primary)}
+\ucfield{Description}{An Administrator defines a new kind of Resource as data: its name, its Allocation Class, and its attributes. From then on Resource Owners can add Resources of that type and Managers can name it on a Request Line. No code changes.}
+\ucfield{Trigger}{A new kind of room, instrument, or pool is to be offered through the system.}
+\ucfield{Preconditions}{\begin{enumerate}\item The Administrator is signed in.\item No Resource Type of the same name exists.\end{enumerate}}
+\ucfield{Postconditions}{\begin{enumerate}\item The Resource Type is stored with its Allocation Class and attributes.\item It appears in the Resource Type choice of the Inventory and Draft Request screens.\item The change is recorded with actor and timestamp.\end{enumerate}}
+\ucfield{Normal Flow}{\ucflow{1.0}{Define a type}
+\begin{enumerate}
+\item Administrator opens Administration, Resource Types, and chooses New.
+\item System asks for a name, an Allocation Class, and attributes.
+\item Administrator enters ``Wet lab bench'', chooses Exclusive, and adds attributes \emph{building} (text) and \emph{fume hood} (list: yes, no).
+\item Administrator saves.
+\item System checks the name is unique, stores the type, and confirms.
+\item System tells the Administrator that the Capacity Planner must set a Unit Price before lines of this type can be priced.
+\end{enumerate}}
+\ucfield{Alternative Flows}{\ucflow{1.1}{Retire a type}
+\begin{enumerate}
+\item Administrator opens an existing type and chooses Retire.
+\item System marks it retired; new lines cannot name it; existing allocations are unaffected.
+\end{enumerate}}
+\ucfield{Exceptions}{\ucflow{1.0.E.1}{Duplicate name}
+\begin{enumerate}\item System refuses to save and names the existing type.\end{enumerate}
+\ucflow{1.1.E.1}{Delete attempted}
+\begin{enumerate}\item The Administrator tries to delete a type referenced by a line; system refuses and offers Retire instead.\end{enumerate}}
+\ucfield{Includes}{None}
+\ucfield{Priority}{High}
+\ucfield{Frequency of Use}{A few times per Period.}
+\ucfield{Business Rules}{\BR{resource-type}, \BR{roles}}
+\ucfield{Special Requirements}{\FR{Inventory.Type.NoCode}: no deployment is needed.}
+\ucfield{Assumptions}{The Administrator knows which Allocation Class fits; the field help explains the three.}
+\ucfield{Notes and Issues}{The built-in type Person cannot be edited or retired.}
+\end{usecase}
+
+\begin{usecase}{inventory}{Maintain Inventory}
+\ucfield{Created By}{J.\ Nana, B.\ Lujan, F.\ Turopov, Y.\ Shnazbayev, \SRScreated}
+\ucfield{Actors}{Resource Owner (primary)}
+\ucfield{Description}{A Resource Owner adds an Exclusive or Metered Resource, records the units a Metered Resource supplies, and sees who holds each Resource. The Resource Owner never approves an allocation.}
+\ucfield{Trigger}{A Resource is put into service, changes size, or is taken out of service.}
+\ucfield{Preconditions}{\begin{enumerate}\item The Resource Owner is signed in.\item The Resource Type exists.\end{enumerate}}
+\ucfield{Postconditions}{\begin{enumerate}\item The Resource is in the Inventory and is free for any window without allocations or Holds.\item For a Metered Resource, the Pool Capacity of its type includes its units.\end{enumerate}}
+\ucfield{Normal Flow}{\ucflow{2.0}{Add a Resource}
+\begin{enumerate}
+\item Resource Owner opens Inventory and chooses Add Resource.
+\item System asks for a type, a name, and the type's attributes; for a Metered type it asks for units.
+\item Resource Owner enters ``GPU cluster B'', type ``GPU'', units 16.
+\item System stores the Resource with the Resource Owner as its owner and shows the type's new Pool Capacity.
+\end{enumerate}}
+\ucfield{Alternative Flows}{\ucflow{2.1}{Change units}
+\begin{enumerate}
+\item Resource Owner opens the Resource and changes units from 16 to 8.
+\item System checks every future hour; if the type's allocated plus held units never exceed the new Pool Capacity it saves the change.
+\end{enumerate}
+\ucflow{2.2}{View holders}
+\begin{enumerate}
+\item Resource Owner opens a Resource's timeline for a window.
+\item System shows free, Hold, and allocated periods with the holding Team and Request.
+\end{enumerate}}
+\ucfield{Exceptions}{\ucflow{2.1.E.1}{Reduction below use}
+\begin{enumerate}\item System refuses the change and reports the earliest hour in which allocated plus held units would exceed the new Pool Capacity, and by how much.\end{enumerate}
+\ucflow{2.0.E.1}{Retire with future use}
+\begin{enumerate}\item Resource Owner retires a Resource from a date with allocations or Holds after it; system refuses and names the blocking Request Lines.\end{enumerate}}
+\ucfield{Includes}{None}
+\ucfield{Priority}{High}
+\ucfield{Frequency of Use}{A few times per Period per Resource Owner.}
+\ucfield{Business Rules}{\BR{resource-type}, \BR{pool-capacity}, \BR{roles}}
+\ucfield{Special Requirements}{None}
+\ucfield{Assumptions}{Resource Owners keep the Inventory current (\asmref{inventory}).}
+\ucfield{Notes and Issues}{None}
+\end{usecase}
+
+\begin{usecase}{suggest}{Make a Suggestion}
+\ucfield{Created By}{J.\ Nana, B.\ Lujan, F.\ Turopov, Y.\ Shnazbayev, \SRScreated}
+\ucfield{Actors}{Member (primary); Manager (secondary)}
+\ucfield{Description}{A Member proposes a single Request Line to their own Manager. The Manager later accepts it into a Draft Request, possibly together with other Suggestions for the same thing, or declines it. Until accepted and submitted it has no effect on allocation.}
+\ucfield{Trigger}{A Member sees a need for people, a room, or compute.}
+\ucfield{Preconditions}{\begin{enumerate}\item The Member is signed in and belongs to a Team with a Manager.\end{enumerate}}
+\ucfield{Postconditions}{\begin{enumerate}\item The Suggestion is stored as Open and listed for the Manager.\item Nothing in the Inventory or Ledger has changed.\end{enumerate}}
+\ucfield{Normal Flow}{\ucflow{3.0}{Suggest a line}
+\begin{enumerate}
+\item Member opens Suggestions and chooses New.
+\item System asks for a Resource Type, quantity, window, and note; for the Person type it asks for skills or a named Person.
+\item Member enters ``GPU, 4 units, weeks 42--43, for the model sweep''.
+\item Member submits; system stores the Suggestion as Open and notifies the Manager.
+\end{enumerate}}
+\ucfield{Alternative Flows}{\ucflow{3.1}{Manager accepts}
+\begin{enumerate}
+\item Manager opens a Draft Request and the Open Suggestions panel.
+\item Manager accepts the Suggestion as a new line, or into an existing line of the same type.
+\item System marks it Accepted, links it to the line, keeps the original ask, and notifies the Member.
+\end{enumerate}
+\ucflow{3.2}{Manager declines}
+\begin{enumerate}
+\item Manager chooses Decline and optionally gives a reason.
+\item System marks it Declined and notifies the Member.
+\end{enumerate}}
+\ucfield{Exceptions}{\ucflow{3.0.E.1}{Invalid line}
+\begin{enumerate}\item The window is in the past or the quantity is zero; system refuses and explains.\end{enumerate}}
+\ucfield{Includes}{None}
+\ucfield{Priority}{Medium}
+\ucfield{Frequency of Use}{A few per Member per Period.}
+\ucfield{Business Rules}{\BR{managers-submit}}
+\ucfield{Special Requirements}{None}
+\ucfield{Assumptions}{None}
+\ucfield{Notes and Issues}{Declined and never-accepted Suggestions are the raw data for the Future unmet-demand analytics and are never deleted.}
+\end{usecase}
+
+\begin{usecase}{draft}{Draft and Submit a Request}
+\ucfield{Created By}{J.\ Nana, B.\ Lujan, F.\ Turopov, Y.\ Shnazbayev, \SRScreated}
+\ucfield{Actors}{Manager (primary)}
+\ucfield{Description}{A Manager assembles a Request of Required and Optional lines that may span all three Allocation Classes, sees a Quote per line against the Team's Available Balance, and submits. The system locks the Quotes, places Holds on the satisfiable Exclusive and Metered lines, and starts the approvals for the Matched lines.}
+\ucfield{Trigger}{The Manager needs capacity the Team does not hold.}
+\ucfield{Preconditions}{\begin{enumerate}\item The Manager is signed in as the Manager of a Team.\item The Capacity Planner has set Unit Prices for the Resource Types involved and the Team has an Account.\end{enumerate}}
+\ucfield{Postconditions}{\begin{enumerate}\item The Request is Pending, Allocated, or Waiting; every line's Quote is locked.\item If Pending, every satisfiable Exclusive and Metered line is on Hold, the held credits equal their Quotes, the Objection Window has started, and lending Managers or the requesting Manager have been asked to act.\item The submission is recorded with actor and timestamp.\end{enumerate}}
+\ucfield{Normal Flow}{\ucflow{4.0}{Three-line Request}
+\begin{enumerate}
+\item Manager opens Requests and chooses New; system creates a Draft.
+\item Manager adds a Matched line: skills PyTorch and Python, quantity 2, weeks 40--45.
+\item Manager adds a Metered line: GPU, 4 units, weeks 42--43; system shows its Quote.
+\item Manager adds an Exclusive line: Lab room, Thursdays 14:00--17:00, weeks 40--45; system shows its Quote.
+\item Manager marks the room Optional; the other lines stay Required.
+\item System shows the Required total, the Optional total, and the Available Balance; the Required total fits.
+\item Manager submits.
+\item System locks the Quotes, records the submission time, and evaluates every line.
+\item The GPU line and the room are satisfiable; system places Holds on both and adds their Quotes to held credits.
+\item The Matched line needs approval; system moves the Request to Pending, starts the Objection Window, and asks the Manager to select Candidates (\UC{shortlist}).
+\end{enumerate}}
+\ucfield{Alternative Flows}{\ucflow{4.1}{Accept Suggestions}
+\begin{enumerate}\item At step 2 the Manager accepts Open Suggestions into new or existing lines (\UC{suggest}).\end{enumerate}
+\ucflow{4.2}{Split a line}
+\begin{enumerate}\item The Manager splits ``GPU, 4 units'' into ``GPU, 2 units'' Required and ``GPU, 2 units'' Optional.\end{enumerate}
+\ucflow{4.3}{Priority line}
+\begin{enumerate}\item The Manager marks the room a Priority line; its Quote includes the premium (\UC{bump}).\end{enumerate}
+\ucflow{4.4}{No approval needed}
+\begin{enumerate}\item The Request has no Matched line and every Required line is satisfiable; system allocates it at once, posts the Charges, and shows it Allocated.\end{enumerate}
+\ucflow{4.5}{Required line unsatisfiable, no approval needed}
+\begin{enumerate}\item The Request has no Matched line and a Required room is taken; system waitlists the room, places no Holds, and shows the Request Waiting with the line's position.\end{enumerate}
+\ucflow{4.6}{Withdraw}
+\begin{enumerate}\item The Manager withdraws a Draft, Pending, or Waiting Request; system releases Holds and held credits and marks it Withdrawn.\end{enumerate}
+\ucflow{4.7}{Edit a Waiting Request}
+\begin{enumerate}\item The Manager edits a Waiting Request; system returns it to Draft, removes its lines from waitlists, and recomputes Quotes on resubmission.\end{enumerate}}
+\ucfield{Exceptions}{\ucflow{4.0.E.1}{Unaffordable}
+\begin{enumerate}\item The Required total exceeds the Available Balance; system refuses submission, shows the shortfall, and the Request stays in Draft.\end{enumerate}
+\ucflow{4.0.E.2}{Invalid line}
+\begin{enumerate}\item A line's window starts in the past or its recurrence has no occurrence; system refuses to save it and explains.\end{enumerate}}
+\ucfield{Includes}{\UC{shortlist}}
+\ucfield{Priority}{High}
+\ucfield{Frequency of Use}{About 10{,}000 Requests per year: roughly four per Team per Period.}
+\ucfield{Business Rules}{\BR{managers-submit}, \BR{required-optional}, \BR{line-atomic}, \BR{named-person}, \BR{hold-bounded}, \BR{price-formula}, \BR{quote-locked}, \BR{affordability}}
+\ucfield{Special Requirements}{\qaref{usable}: an untrained Manager completes flow 4.0 in under five minutes.}
+\ucfield{Assumptions}{Grants have been posted for the current Period (\asmref{planner}).}
+\ucfield{Notes and Issues}{Optional lines are never waitlisted; a Manager who wants to wait for something marks it Required.}
+\end{usecase}
+
+\begin{usecase}{shortlist}{Select Candidates from a Shortlist}
+\ucfield{Created By}{J.\ Nana, B.\ Lujan, F.\ Turopov, Y.\ Shnazbayev, \SRScreated}
+\ucfield{Actors}{Manager (requesting, primary)}
+\ucfield{Description}{For a skill-based Matched line the system shows the Candidates who hold every listed skill, are available for the whole window, and have no Loan overlapping it, ordered by fewest person-days lent in the current Period, and the requesting Manager picks the line's quantity of them. Each pick becomes an approval request to that Candidate's Manager.}
+\ucfield{Trigger}{A Request with a skill-based Matched line enters Pending, or a refusal calls for a replacement.}
+\ucfield{Preconditions}{\begin{enumerate}\item The Request is Pending or Waiting and the Manager is signed in.\end{enumerate}}
+\ucfield{Postconditions}{\begin{enumerate}\item The selected Candidates are recorded; one approval request has been sent per Candidate to their Manager; each Candidate has been notified.\end{enumerate}}
+\ucfield{Normal Flow}{\ucflow{5.0}{Select}
+\begin{enumerate}
+\item Manager opens the Matched line; system shows the Shortlist in order with Team, skills, and person-days lent in the current Period.
+\item Manager selects two Candidates.
+\item System records the selection, sends one approval request to each Candidate's Manager with the window and the Earning, and notifies the Candidates.
+\end{enumerate}}
+\ucfield{Alternative Flows}{\ucflow{5.1}{Named Person}
+\begin{enumerate}\item The line names a Person; system skips the Shortlist, checks availability and that the Person has no overlapping Loan, and sends the approval request on entering Pending.\end{enumerate}
+\ucflow{5.2}{Replacement after refusal}
+\begin{enumerate}\item An approval was refused; system asks the Manager to select a replacement from the Shortlist; the Objection Window keeps running; if it is still running the Request returns to Pending with Holds re-placed.\end{enumerate}}
+\ucfield{Exceptions}{\ucflow{5.0.E.1}{Too few Candidates}
+\begin{enumerate}\item The Shortlist holds fewer Candidates than the quantity; the line is unsatisfied; a Required line puts the Request in Waiting; system notifies the Manager when a new Candidate becomes available; the Manager may edit the line, which returns the Request to Draft.\end{enumerate}
+\ucflow{5.0.E.2}{Candidate no longer available}
+\begin{enumerate}\item Between Shortlist and selection the Candidate's availability changed or a Loan overlapping the window formed for them; system rebuilds the Shortlist and asks the Manager to select again.\end{enumerate}}
+\ucfield{Includes}{\UC{approve}}
+\ucfield{Priority}{High}
+\ucfield{Frequency of Use}{Once per skill-based Matched line, about half of all Requests.}
+\ucfield{Business Rules}{\BR{shortlist}, \BR{own-team}, \BR{named-person}, \BR{objection-window}}
+\ucfield{Special Requirements}{\peref{shortlist}: the Shortlist appears within 3~s against 500 Members.}
+\ucfield{Assumptions}{Members keep their skills and availability current.}
+\ucfield{Notes and Issues}{Automatic selection was rejected in design: it treats people as interchangeable and removes the one point where the requesting Manager exercises judgment.}
+\end{usecase}
+
+\begin{usecase}{approve}{Approve or Refuse a Loan}
+\ucfield{Created By}{J.\ Nana, B.\ Lujan, F.\ Turopov, Y.\ Shnazbayev, \SRScreated}
+\ucfield{Actors}{Manager (lending, primary); Manager (requesting) and Person (secondary)}
+\ucfield{Description}{The Manager of a selected Candidate approves or refuses lending that Member for the window. Approval of the last outstanding Required approval allocates the Request: Holds commit, Charges post to the requesting Team, Earnings post to the lending Teams, and the Loans form. A refusal releases every Hold and sends the requesting Manager back to the Shortlist.}
+\ucfield{Trigger}{An approval request arrives in the lending Manager's Approvals list.}
+\ucfield{Preconditions}{\begin{enumerate}\item The Request is Pending and its Objection Window is running.\item The signed-in Manager leads the Candidate's Team, which is not the requesting Team.\end{enumerate}}
+\ucfield{Postconditions}{\begin{enumerate}\item The decision is recorded with actor, timestamp, and reason.\item On approval of the last Required approval: the Request is Allocated, the Loans exist, and the Charges and Earnings are posted in one transaction.\item On refusal: no Hold remains, held credits are zero for this Request, and the Request is Waiting.\end{enumerate}}
+\ucfield{Normal Flow}{\ucflow{6.0}{Approve}
+\begin{enumerate}
+\item Lending Manager opens Approvals; system lists the request with requesting Team, Person, window, Earning, and time left.
+\item Lending Manager chooses Approve.
+\item System records the approval and marks the Candidate Approved.
+\item This was the last Required approval; system commits the Holds, posts the Charges at the locked Quotes, forms the Loans, posts the Earnings, drops any Optional line that cannot be satisfied, moves the Request to Allocated, and notifies the requesting Manager, the lending Managers, and the Persons.
+\end{enumerate}}
+\ucfield{Alternative Flows}{\ucflow{6.1}{Refuse}
+\begin{enumerate}
+\item Lending Manager chooses Refuse and gives a reason.
+\item System releases every Hold and its held credits, moves the Request to Waiting, and asks the requesting Manager to select a replacement (\UC{shortlist} 5.2).
+\end{enumerate}
+\ucflow{6.2}{Not the last approval}
+\begin{enumerate}\item Other Required approvals are outstanding; the Request stays Pending with its Holds.\end{enumerate}
+\ucflow{6.3}{Optional line approved after allocation}
+\begin{enumerate}\item The Request is already Allocated; system forms the Loan and posts the Earning now.\end{enumerate}}
+\ucfield{Exceptions}{\ucflow{6.0.E.1}{Objection Window lapsed}
+\begin{enumerate}\item The approval arrives after the lapse; system shows the request as escalated and routes the decision to the Capacity Planner (\UC{escalate}).\end{enumerate}
+\ucflow{6.0.E.2}{Own Team}
+\begin{enumerate}\item The requesting Manager is also the Candidate's Manager; system never sends the request and refuses the approval (\BR{own-team}).\end{enumerate}}
+\ucfield{Includes}{None}
+\ucfield{Priority}{High}
+\ucfield{Frequency of Use}{One per selected Candidate.}
+\ucfield{Business Rules}{\BR{own-team}, \BR{person-notified}, \BR{day-rate}, \BR{matched-free}, \BR{commit-atomic}, \BR{hold-bounded}}
+\ucfield{Special Requirements}{\qaref{atomic}: step 4 is one transaction.}
+\ucfield{Assumptions}{None}
+\ucfield{Notes and Issues}{The Person is notified and has no action; consent is a Future item.}
+\end{usecase}
+
+\begin{usecase}{escalate}{Resolve an Escalated Request}
+\ucfield{Created By}{J.\ Nana, B.\ Lujan, F.\ Turopov, Y.\ Shnazbayev, \SRScreated}
+\ucfield{Actors}{Capacity Planner (primary); Clock (trigger); both Managers (secondary)}
+\ucfield{Description}{When the Objection Window lapses with a Required approval outstanding, the system releases every Hold, moves the Request to Waiting, and escalates the outstanding approvals to the Capacity Planner, who approves or refuses on the silent Manager's behalf. The Request is then allocated only at a moment when every Required line can be satisfied at once.}
+\ucfield{Trigger}{The scheduled job finds a Pending Request whose Objection Window end has passed.}
+\ucfield{Preconditions}{\begin{enumerate}\item The Request is Pending with at least one Required approval outstanding.\end{enumerate}}
+\ucfield{Postconditions}{\begin{enumerate}\item No Hold remains for the Request; held credits for it are zero.\item The Request is Waiting, Allocated, or Refused, and every decision is recorded with the Capacity Planner as actor.\end{enumerate}}
+\ucfield{Normal Flow}{\ucflow{7.0}{Escalate and approve}
+\begin{enumerate}
+\item Within five minutes of the lapse the system releases the Holds, moves the Request to Waiting, and notifies the requesting Manager, the silent Manager, and the Capacity Planner.
+\item Capacity Planner opens the escalations list; system shows the Request, the outstanding approvals, the silent Manager, and the time since the lapse.
+\item Capacity Planner approves the outstanding approval.
+\item System re-evaluates the Request: every Required line can be satisfied now (the room and GPUs are still free); system allocates it at the locked Quotes, posts Charges and Earnings, forms the Loans, and notifies everyone.
+\end{enumerate}}
+\ucfield{Alternative Flows}{\ucflow{7.1}{Capacity no longer free}
+\begin{enumerate}\item At step 4 the room has been taken; system waitlists the room line; the Request stays Waiting and is allocated when the waitlist fills the room and every other Required line still fits (\UC{waitlist}).\end{enumerate}
+\ucflow{7.2}{Capacity Planner refuses}
+\begin{enumerate}\item System asks the requesting Manager for a replacement; further approvals on this Request go to the Capacity Planner directly; if no Candidate remains the Request becomes Refused.\end{enumerate}
+\ucflow{7.3}{Settle with a Grant}
+\begin{enumerate}\item The Capacity Planner posts a mid-Period Grant to one of the Teams with a reason, for example to compensate a Team whose Hold was lost.\end{enumerate}}
+\ucfield{Exceptions}{\ucflow{7.0.E.1}{Silent Manager decides after the lapse}
+\begin{enumerate}\item System shows the silent Manager that the decision has moved to the Capacity Planner and accepts no decision from them.\end{enumerate}}
+\ucfield{Includes}{None}
+\ucfield{Priority}{Medium}
+\ucfield{Frequency of Use}{Rare; the Objection Window is meant to make it rare.}
+\ucfield{Business Rules}{\BR{objection-window}, \BR{hold-bounded}, \BR{commit-atomic}, \BR{roles}}
+\ucfield{Special Requirements}{\peref{jobs}: step 1 happens within five minutes of the lapse.}
+\ucfield{Assumptions}{None}
+\ucfield{Notes and Issues}{After the lapse no Hold is placed again for this Request; this is what keeps every Hold bounded.}
+\end{usecase}
+
+\begin{usecase}{bump}{Bump a Standard Line with a Priority Line}
+\ucfield{Created By}{J.\ Nana, B.\ Lujan, F.\ Turopov, Y.\ Shnazbayev, \SRScreated}
+\ucfield{Actors}{Manager (requesting, primary); Manager (Bumped, secondary)}
+\ucfield{Description}{A Manager marks an Exclusive line as a Priority line and carries the premium. If no instance is free, the system Bumps the standard line that blocks it, outside the bump cutoff: the Bumped line is refunded in full and goes to the head of the waitlist, and its Manager is notified. Priority lines cannot be Bumped.}
+\ucfield{Trigger}{A Priority line is evaluated and finds no free instance.}
+\ucfield{Preconditions}{\begin{enumerate}\item The Team can afford the Priority line's Quote, premium included.\item The blocking line is a standard line whose window starts later than the bump cutoff from now.\end{enumerate}}
+\ucfield{Postconditions}{\begin{enumerate}\item The Priority line is on Hold or allocated on the freed instance.\item The Bumped line is at the head of its waitlist, its Charge is refunded in full, and its Request is Waiting if the line was Required in an Allocated Request.\item The Bump is recorded with both lines, actor, and timestamp.\end{enumerate}}
+\ucfield{Normal Flow}{\ucflow{8.0}{Bump}
+\begin{enumerate}
+\item Manager marks the Lab room line as a Priority line in the Draft; system shows the Quote with the premium.
+\item Manager submits (\UC{draft}); the Team can afford it.
+\item System finds no free instance for the window.
+\item System chooses the instance that needs the fewest Bumps, preferring the latest-submitted standard lines, and checks each is outside the bump cutoff.
+\item System Bumps the standard line: posts a full Refund, places it at the head of the waitlist, notifies its Manager with the reason, and returns its Request to Waiting if the line was Required.
+\item System places the Priority line on Hold or allocates it as the rest of the Request requires.
+\end{enumerate}}
+\ucfield{Alternative Flows}{\ucflow{8.1}{Inside the cutoff}
+\begin{enumerate}\item The blocking line starts within the bump cutoff; system does not Bump; the Priority line joins the waitlist ahead of every standard line.\end{enumerate}
+\ucflow{8.2}{Blocked by a Priority line}
+\begin{enumerate}\item The blocking line is itself a Priority line; no Bump; the new line waits behind it.\end{enumerate}
+\ucflow{8.3}{Bumped line finds another instance}
+\begin{enumerate}\item The waitlist offers the Bumped line another free instance at once (\UC{waitlist}); it is satisfied there and its Request re-evaluated.\end{enumerate}}
+\ucfield{Exceptions}{\ucflow{8.0.E.1}{Unaffordable}
+\begin{enumerate}\item The premium Quote exceeds the Available Balance; submission is refused (\UC{draft} 4.0.E.1).\end{enumerate}}
+\ucfield{Includes}{\UC{draft}, \UC{waitlist}}
+\ucfield{Priority}{Medium}
+\ucfield{Frequency of Use}{Rare; the premium is meant to make it rare.}
+\ucfield{Business Rules}{\BR{priority-premium}, \BR{bump-cutoff}, \BR{bumped-line}, \BR{waitlist-order}, \BR{priority-exclusive-only}}
+\ucfield{Special Requirements}{Step 5 is one transaction.}
+\ucfield{Assumptions}{None}
+\ucfield{Notes and Issues}{The Bumped Team is not penalized: full Refund, head of the waitlist. The disruption of being Bumped, rather than any deduction of credits, is what discourages gambling on a standard line for critical work.}
+\end{usecase}
+
+\begin{usecase}{release}{Release an Allocated Line}
+\ucfield{Created By}{J.\ Nana, B.\ Lujan, F.\ Turopov, Y.\ Shnazbayev, \SRScreated}
+\ucfield{Actors}{Manager (primary)}
+\ucfield{Description}{A Manager gives back an allocated Exclusive or Metered line, in whole or in part, before it is consumed, and receives a partial Refund on the Resource Type's Refund Schedule. A Manager may also end a Loan early, which prorates the lending Team's Earning.}
+\ucfield{Trigger}{The Team no longer needs some or all of what it was allocated.}
+\ucfield{Preconditions}{\begin{enumerate}\item The line is Allocated and the part to release has not started.\end{enumerate}}
+\ucfield{Postconditions}{\begin{enumerate}\item The released capacity is free and has been offered to the waitlist.\item A Refund is posted to the part of the Account the Charge was drawn from.\item The Release is recorded with lead time, fraction, and amount.\end{enumerate}}
+\ucfield{Normal Flow}{\ucflow{9.0}{Release a whole line}
+\begin{enumerate}
+\item Manager opens the Allocated Request and chooses Release on the GPU line, ten days before it starts.
+\item System shows the lead time (10 days), the fraction from the Refund Schedule (75\%), and the Refund amount.
+\item Manager confirms.
+\item System posts the Refund to granted and earned in the proportions of the Charge, marks the line Released, frees the units, and offers them to the waitlist (\UC{waitlist}).
+\end{enumerate}}
+\ucfield{Alternative Flows}{\ucflow{9.1}{Partial Release}
+\begin{enumerate}\item Manager shortens the window, removes occurrences, or reduces units; system computes the Refund on the released part only; the rest keeps its allocation and prices.\end{enumerate}
+\ucflow{9.2}{End a Loan early}
+\begin{enumerate}\item Manager ends a Loan from a chosen date; system shortens the Loan, posts an Earning correction to the lending Team for the days no longer lent, and notifies the lending Manager.\end{enumerate}}
+\ucfield{Exceptions}{\ucflow{9.0.E.1}{Already started}
+\begin{enumerate}\item The window has started; the fraction is 0\%; system still frees the remaining capacity if the Manager confirms, and posts no Refund.\end{enumerate}
+\ucflow{9.0.E.2}{Window ended}
+\begin{enumerate}\item Nothing remains to release; system refuses.\end{enumerate}}
+\ucfield{Includes}{\UC{waitlist}}
+\ucfield{Priority}{High}
+\ucfield{Frequency of Use}{A fraction of allocations per Period.}
+\ucfield{Business Rules}{\BR{refund-schedule}, \BR{spend-order}, \BR{day-rate}, \BR{no-negative}}
+\ucfield{Special Requirements}{None}
+\ucfield{Assumptions}{None}
+\ucfield{Notes and Issues}{Capacity that is neither used nor Released is never freed automatically; it shows as idle on the dashboard.}
+\end{usecase}
+
+\begin{usecase}{waitlist}{Fill a Freed Slot from the Waitlist}
+\ucfield{Created By}{J.\ Nana, B.\ Lujan, F.\ Turopov, Y.\ Shnazbayev, \SRScreated}
+\ucfield{Actors}{Clock and system events (primary); Manager of the waiting line (secondary)}
+\ucfield{Description}{When capacity frees through a Release, a Bump, or an expired Hold, the system offers it to the waiting lines for that Resource Type in order. The first line whose window fits is satisfied: if that completes its Request, the Request is allocated at its locked Quotes; if its Request is still awaiting approvals inside the Objection Window, the line is placed on Hold; otherwise the slot passes to the next line and positions are kept.}
+\ucfield{Trigger}{A Release, a Bump, a Hold expiry, or a Withdrawal frees capacity for which a waitlist exists.}
+\ucfield{Preconditions}{\begin{enumerate}\item At least one line is waiting for the Resource Type with a window overlapping the freed capacity.\end{enumerate}}
+\ucfield{Postconditions}{\begin{enumerate}\item The freed capacity is allocated, held, or remains free; no waiting line has lost its position without being satisfied or expiring.\item Every affected Manager has been notified.\end{enumerate}}
+\ucfield{Normal Flow}{\ucflow{10.0}{Fill and allocate}
+\begin{enumerate}
+\item Capacity frees.
+\item System takes the waitlist for the Resource Type in order: Priority lines, then submission time, Bumped lines at the head.
+\item The first line whose window fits belongs to a Waiting Request whose other Required lines are all satisfied.
+\item System allocates the line and the Request, posts the Charges at the locked Quotes, and notifies the Manager.
+\end{enumerate}}
+\ucfield{Alternative Flows}{\ucflow{10.1}{Request still awaiting approvals}
+\begin{enumerate}\item The line's Request is inside its Objection Window with approvals outstanding; system places the line on Hold and moves the Request to Pending.\end{enumerate}
+\ucflow{10.2}{Request cannot complete}
+\begin{enumerate}\item The Request has other unsatisfied Required lines and no running Objection Window; system offers the capacity to the next waiting line; the skipped line keeps its position.\end{enumerate}
+\ucflow{10.3}{Expiry}
+\begin{enumerate}\item A waiting line's window start has passed; system removes it, marks it Expired, notifies the Manager; the Request stays Waiting.\end{enumerate}}
+\ucfield{Exceptions}{\ucflow{10.0.E.1}{Team can no longer afford it}
+\begin{enumerate}\item The Team's Available Balance is below the locked Quotes of the Required lines; system skips the line, keeps its position, and notifies the Manager.\end{enumerate}}
+\ucfield{Includes}{None}
+\ucfield{Priority}{High}
+\ucfield{Frequency of Use}{Once per freed slot with a non-empty waitlist.}
+\ucfield{Business Rules}{\BR{waitlist-order}, \BR{hold-bounded}, \BR{commit-atomic}, \BR{quote-locked}, \BR{affordability}}
+\ucfield{Special Requirements}{\peref{jobs} for Hold expiry; a Release or Bump triggers the fill in the same transaction.}
+\ucfield{Assumptions}{None}
+\ucfield{Notes and Issues}{Because a skipped line keeps its position, a Request waiting for two things is allocated at the first moment both are free at once.}
+\end{usecase}
+
+\begin{usecase}{period}{Set Grants and Prices for a Period}
+\ucfield{Created By}{J.\ Nana, B.\ Lujan, F.\ Turopov, Y.\ Shnazbayev, \SRScreated}
+\ucfield{Actors}{Capacity Planner (primary); Clock (rollover)}
+\ucfield{Description}{The Capacity Planner sets the levers that shape demand: the Period, each Team's Grant, Unit Prices, Price Bands, the Day Rate, Refund Schedules, Quotas, the priority premium, bump cutoffs, and the Objection Window. At the Period boundary the system expires unspent granted credits and posts the new Grants.}
+\ucfield{Trigger}{A new Period approaches, or demand patterns call for a change.}
+\ucfield{Preconditions}{\begin{enumerate}\item The Capacity Planner is signed in.\end{enumerate}}
+\ucfield{Postconditions}{\begin{enumerate}\item Settings are stored with their change history.\item At rollover every Team's granted credits are zeroed, the expired amount is on the Statement, the new Grant is posted, and earned credits are unchanged.\end{enumerate}}
+\ucfield{Normal Flow}{\ucflow{11.0}{Prepare a Period}
+\begin{enumerate}
+\item Capacity Planner opens Settings.
+\item Capacity Planner enters each Team's Grant for the coming Period.
+\item Capacity Planner sets or reviews Unit Prices and Price Bands per Resource Type, the Day Rate, Refund Schedules, Quotas, the premium, cutoffs, and the Objection Window.
+\item System validates: bands do not overlap, no Refund step reaches 100\%, values are positive.
+\item Capacity Planner saves; system records each change.
+\item At the Period boundary the system, within fifteen minutes, expires granted credits, posts the Grants, and opens the new Statements.
+\end{enumerate}}
+\ucfield{Alternative Flows}{\ucflow{11.1}{Mid-Period Grant}
+\begin{enumerate}\item Capacity Planner posts an additional Grant to one Team with a reason; it is added to granted credits and expires with them.\end{enumerate}}
+\ucfield{Exceptions}{\ucflow{11.0.E.1}{Invalid setting}
+\begin{enumerate}\item Overlapping bands or a Refund step of 100\% or more; system refuses and names the field.\end{enumerate}
+\ucflow{11.0.E.2}{Missing Grant}
+\begin{enumerate}\item A Team has no Grant set when the Period starts; system posts a Grant of zero and notifies the Capacity Planner.\end{enumerate}}
+\ucfield{Includes}{None}
+\ucfield{Priority}{High}
+\ucfield{Frequency of Use}{Once per Period plus occasional adjustments.}
+\ucfield{Business Rules}{\BR{period}, \BR{grant-expiry}, \BR{price-bands}, \BR{refund-schedule}, \BR{priority-premium}, \BR{bump-cutoff}, \BR{objection-window}, \BR{quota}, \BR{roles}}
+\ucfield{Special Requirements}{\peref{rollover}}
+\ucfield{Assumptions}{None}
+\ucfield{Notes and Issues}{Price changes never alter a locked Quote.}
+\end{usecase}
+
+\begin{usecase}{dashboard}{View the Dashboard and Statement}
+\ucfield{Created By}{J.\ Nana, B.\ Lujan, F.\ Turopov, Y.\ Shnazbayev, \SRScreated}
+\ucfield{Actors}{Manager, Capacity Planner, Resource Owner (primary)}
+\ucfield{Description}{A viewer sees utilization and idle capacity per Resource Type, credits earned and spent per Team, and the per-Period Statement with every Transaction behind it. What is visible depends on the viewer's role.}
+\ucfield{Trigger}{The viewer opens the Dashboard or Statement screen.}
+\ucfield{Preconditions}{\begin{enumerate}\item The viewer is signed in with one of the three roles.\end{enumerate}}
+\ucfield{Postconditions}{\begin{enumerate}\item None; the use case changes no data.\end{enumerate}}
+\ucfield{Normal Flow}{\ucflow{12.0}{Manager's view}
+\begin{enumerate}
+\item Manager opens the Dashboard; system shows the current Period's utilization and idle capacity for every Resource Type, the Team's Grants, Charges, Earnings, Refunds, Balance and Available Balance, and person-days lent and borrowed.
+\item Manager opens the Statement; system shows the Period's opening amounts, every Transaction, the expired amount, and the closing amounts.
+\item Manager selects a past Period; system shows the same for that Period.
+\end{enumerate}}
+\ucfield{Alternative Flows}{\ucflow{12.1}{Capacity Planner}
+\begin{enumerate}\item System shows every Team's figures and Statements, and the waitlist lengths per Resource Type.\end{enumerate}
+\ucflow{12.2}{Resource Owner}
+\begin{enumerate}\item System shows utilization and idle capacity for the Resources the viewer owns.\end{enumerate}}
+\ucfield{Exceptions}{\ucflow{12.0.E.1}{Another Team's Statement}
+\begin{enumerate}\item A Manager requests another Team's Statement through the API; system refuses (\seref{visibility}).\end{enumerate}}
+\ucfield{Includes}{None}
+\ucfield{Priority}{Medium}
+\ucfield{Frequency of Use}{Weekly per Manager; daily for the Capacity Planner.}
+\ucfield{Business Rules}{\BR{transactions}, \BR{grant-expiry}, \BR{roles}}
+\ucfield{Special Requirements}{\peref{page}}
+\ucfield{Assumptions}{None}
+\ucfield{Notes and Issues}{Requested-versus-used figures appear only with the Stretch usage recording.}
+\end{usecase}

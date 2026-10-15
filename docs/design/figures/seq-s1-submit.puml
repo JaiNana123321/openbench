@@ -1,0 +1,81 @@
+@startuml seq-s1-submit
+' F11 Scenario S1: a Manager submits a Request (UC-4). One transaction; three outcomes.
+' Allocator stands for the bean AllocatorRegistry.forClass returns for each line's class.
+skinparam shadowing false
+skinparam defaultFontName Helvetica
+skinparam defaultFontSize 11
+skinparam ArrowColor #223
+skinparam sequenceMessageAlign left
+skinparam responseMessageBelowArrow true
+skinparam sequence {
+  ParticipantBackgroundColor #F4F6FA
+  ParticipantBorderColor #223
+  ActorBackgroundColor White
+  ActorBorderColor #223
+  LifeLineBorderColor #223
+  LifeLineBackgroundColor #DDE3EE
+  GroupBorderColor #223
+  GroupBackgroundColor #DDE3EE
+  DividerBackgroundColor #F4F6FA
+  DividerBorderColor #223
+}
+skinparam database {
+  BackgroundColor #F4F6FA
+  BorderColor #223
+}
+skinparam note {
+  BackgroundColor White
+  BorderColor #223
+}
+hide footbox
+autonumber
+
+actor Manager
+participant "Web\nclient" as Web
+participant RequestLifecycleService as RLS
+participant AllocationLock as Lock
+participant "Allocator\n(each line's\nclass)" as Alloc
+participant "MatchedAllocator\n(ApprovalDriven)" as AD
+participant LedgerService as Ledger
+participant Notifier
+database PostgreSQL as DB
+
+Manager -> Web : submit
+Web -> RLS : submit(r, actor)
+activate RLS
+note over Lock, Ledger
+  one transaction (READ COMMITTED); lock order: Resource Type
+  rows by ascending id, then the Team's account row; Quotes locked
+end note
+RLS -> Ledger : requireAffordable(team, Required sum)
+Ledger --> RLS : ok, or RuleViolation INSUFFICIENT_BALANCE\n(rollback; stays Draft)
+RLS -> Lock : lockTypes(types)
+Lock -> DB : SELECT ... FROM resource_type ORDER BY id FOR UPDATE
+loop evaluateAll: each Request Line
+  RLS -> Alloc : evaluate(line)
+  Alloc --> RLS : Evaluation
+end
+alt every Required line SATISFIABLE, no approval needed
+  RLS -> RLS : allocate (S2)
+else a line NEEDS_APPROVAL (unfit Required lines join the Waitlist)
+  RLS -> RLS : placeHolds
+  RLS -> Alloc : hold(line)
+  Alloc -> DB : INSERT rows in state HELD
+  RLS -> Ledger : holdCredits(team, line, quote)
+  RLS -> Alloc : join(line)
+  RLS -> RLS : routeApprovals
+  RLS -> AD : buildShortlist(line), or select(line, [person])
+  AD -> Notifier : notify(lending Manager)
+else no approval needed, a Required line UNSATISFIABLE
+  RLS -> RLS : toWaiting
+  RLS -> Alloc : join(line)
+end
+RLS -> RLS : record(event)
+RLS -> Notifier : notify(Manager, outcome)
+RLS --> Web : SubmitOutcome
+deactivate RLS
+note over Alloc, Notifier
+  Pending starts the Objection Window. For a skill-based Matched line,
+  select runs when the Manager picks from the Shortlist (S3).
+end note
+@enduml

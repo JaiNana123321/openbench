@@ -1,0 +1,175 @@
+% 04a-modules-foundation.tex: OpenBench Software Design Document, short edition. Condensed from sections/04a-modules-foundation.tex on 2026-10-05; the signatures are identical to the full edition.
+% Bottom layer of the module specifications: Members, Inventory, Settings, Notifications.
+
+% =====================================================================================================
+\modulespec{Members}{members}{members}
+
+\field{Purpose}
+Members records who the people are: Members, Teams, the assignable roles, the skill list, and each Member's availability. It is the identity that \code{security} authenticates against, and it answers the two questions matching asks of a profile: is this Member available for every day of a window, and which active Members outside a Team hold a set of skills and are available.
+
+\field{Provided interface}
+\begin{lstlisting}[language=Java]
+interface MemberService {
+  Member createMember(NewMember cmd);                       // ADMIN; team required; initial password hashed
+  void deactivate(MemberId id);                             // ADMIN; cannot log in, no Shortlist
+  void moveToTeam(MemberId id, TeamId team);                // ADMIN
+  void grantRole(MemberId id, Role role);                   // ADMIN; MANAGER: the Team's previous Manager loses it (exactly one per Team)
+  void revokeRole(MemberId id, Role role);                  // ADMIN; refused if it would leave a Team with no Manager
+  Team createTeam(String name); void renameTeam(TeamId, String); void retireTeam(TeamId);  // ADMIN; retire refused while Members remain
+  void updateSkills(MemberId id, Set<SkillId> skills);      // self
+  void updateAvailability(MemberId id, List<DateRange> ranges);  // self or own Manager
+  MemberProfile profile(MemberId id);                       // (read-only) self, own Manager, PLANNER, ADMIN
+  MemberSummary summary(MemberId id);                       // (read-only, unscoped) name, Team, active, roles; for other modules' rules
+  List<MemberSummary> roster(TeamId team);                  // (read-only) that Team's Manager, PLANNER, ADMIN
+  boolean isAvailable(MemberId id, DateRange window);       // (read-only) every day inside one range
+  Set<MemberId> availableWithSkills(Set<SkillId> skills, DateRange window, TeamId excludeTeam); // (read-only) active Members only
+  List<Skill> skills(); Skill addSkill(String name); void retireSkill(SkillId id);  // ADMIN for writes
+  List<MemberId> withRole(Role role);                       // (read-only) active Members holding the role
+  MemberId managerOf(TeamId team);                          // (read-only) the Team's current Manager
+  List<Team> teams();                                       // (read-only)
+}
+\end{lstlisting}
+
+\field{Required interfaces}
+{\sloppy None. Members hashes passwords with the bcrypt \code{PasswordEncoder} bean of the \code{security} configuration.\par}
+
+\field{Data owned}
+\code{team}, \code{member}, \code{member\_role}, \code{skill}, \code{member\_skill}, \code{availability\_range}.
+
+\field{Invariants}
+\begin{itemize}
+\item Each Team has exactly one Manager at any time once the role is first granted in it: the Manager is one column, so there cannot be two, and the role moves only to a successor. A Team that has never had a Manager can own no Request, since only its Manager can create one.
+\item A deactivated Member cannot log in and appears on no Shortlist: the \code{UserDetailsService} reports them disabled, \code{availableWithSkills} returns active Members only, and \code{isAvailable} returns false for them.
+\item A Member's ranges never overlap or touch, so ``available for a window'' is the single test ``one range contains it''; a Loan never changes them. At least one active Administrator always exists.
+\end{itemize}
+
+\field{Failure behavior}
+{\sloppy A refusal is a \code{RuleViolation} with one of the codes \code{USERNAME\_TAKEN}, \code{TEAM\_RETIRED}, \code{TEAM\_NEEDS\_MANAGER}, \code{LAST\_ADMINISTRATOR}, \code{MEMBER\_INACTIVE}, \code{TEAM\_NAME\_TAKEN}, \code{TEAM\_NOT\_EMPTY}, \code{SKILL\_RETIRED}, \code{SKILL\_NAME\_TAKEN}, or \code{RANGE\_INVALID}; the transaction rolls back whole, and the code reaches the client in the \code{problem+json} body (Section~\ref{sec:cross}). Unknown ids raise \code{NotFoundException}, and so does an object outside the caller's scope (404); acting on a visible object without the right to do so raises \code{ForbiddenException}.\par}
+
+% =====================================================================================================
+\modulespec{Inventory}{inventory}{inventory}
+
+\field{Purpose}
+Inventory holds Resource Types as data and the Resources that exist, with their type, attribute values, owner, and, for Metered Resources, units. It derives Pool Capacity and refuses a reduction below future usage, which it learns through the port \code{ReductionGuard} so that it never depends on the layer above.
+
+\field{Provided interface}
+\begin{lstlisting}[language=Java]
+interface ResourceTypeService {
+  ResourceType define(ResourceTypeDefinition def);          // ADMIN; unique name, one Allocation Class, attributes
+  ResourceType change(ResourceTypeId id, ResourceTypeDefinition def);  // ADMIN; class immutable once a Resource exists
+  void retire(ResourceTypeId id);                           // ADMIN; refused for built-in Person; retired types accept no new lines
+}
+interface ResourceService {
+  Resource add(NewResource cmd);                            // RESOURCE_OWNER; attributes per type; units for Metered
+  Resource edit(ResourceId id, ResourceEdit cmd);           // owner of that Resource
+  void setUnits(ResourceId id, int units);                  // owner; calls ReductionGuard; refused naming the earliest failing hour
+  void retire(ResourceId id);                               // owner; same guard with units 0
+}
+interface InventoryQueries {                                // all read-only
+  ResourceType type(ResourceTypeId id); List<ResourceType> types(boolean includeRetired);
+  List<Resource> instancesOf(ResourceTypeId id);           // unretired
+  int poolCapacity(ResourceTypeId id);                      // sum of units of unretired Resources
+  List<Resource> search(ResourceFilter f);                  // by type, attribute value; free-for-window answered by Allocation
+}
+interface ReductionGuard {                                   // port declared here, implemented in allocation
+  Optional<Instant> earliestHourExceeding(ResourceTypeId type, Optional<ResourceId> instance, int newUnits, Instant from);
+}
+\end{lstlisting}
+
+\field{Required interfaces}
+{\sloppy \module{Members}: \code{MemberService.summary}. \module{Allocation}, through the port only: \code{ReductionGuard.\allowbreak earliestHourExceeding}.\par}
+
+\field{Data owned}
+\code{resource\_type}, \code{resource\_type\_attribute}, \code{resource}, \code{resource\_attribute\_value}.
+
+\field{Invariants}
+\begin{itemize}
+\item A Resource Type's Allocation Class never changes once a Resource of it exists. The built-in Person type (class Matched) cannot be retired, and its class never changes.
+\item No Resource Type or Resource is ever deleted, only retired. A Matched type has no Resource rows (its Resources are Members); an Exclusive Resource has units 1.
+\item Pool Capacity equals the sum of the units of the unretired Resources of the type. It is one \code{SUM} on every call and never stored, so it cannot drift.
+\item A reduction or retirement is refused, naming the earliest hour at which allocated plus held units would exceed the new Pool Capacity, or at which the Exclusive instance is in use. A Hold counts exactly as an allocation.
+\item \code{instancesOf} never returns a retired Resource, so no allocator can pick one.
+\end{itemize}
+
+\field{Failure behavior}
+{\sloppy A refusal is a \code{RuleViolation} with one of the codes \code{TYPE\_NAME\_TAKEN}, \code{ATTRIBUTE\_INVALID}, \code{CLASS\_FIXED}, \code{PERSON\_TYPE\_FIXED}, \code{ATTRIBUTE\_IN\_USE}, \code{TYPE\_RETIRED}, \code{MATCHED\_HAS\_NO\_RESOURCES}, \code{UNITS\_INVALID}, \code{NOT\_A\_RESOURCE\_OWNER}, \code{NOT\_METERED}, \code{UNITS\_BELOW\_USAGE}, or \code{RESOURCE\_IN\_USE}, and nothing is written; the two guard refusals carry an \code{earliestHour} property so the screen names the blocking hour. A lock conflict surfaces as \code{ConcurrencyRetryException} after one retry.\par}
+
+% =====================================================================================================
+\modulespec{Settings}{settings}{settings}
+
+\field{Purpose}
+Settings holds every Capacity Planner setting as data and logs every change. Other modules read one typed snapshot, \code{PlannerSettings}, and never see how settings are stored.
+
+\field{Provided interface}
+\begin{lstlisting}[language=Java]
+interface SettingsService {
+  PlannerSettings current();                                // (read-only) typed snapshot, see below
+  void update(SettingChange change);                        // PLANNER; writes setting_change(actor, key, old, new, at)
+  List<Period> periods();                                   // (read-only) past and planned Periods
+}
+record PlannerSettings(Period currentPeriod, int objectionWindowWorkingDays, Credits dayRate,
+                       BigDecimal priorityPremium, Map<ResourceTypeId, TypePricing> pricing,
+                       Map<TeamTypeKey, Integer> quotas, Map<TeamId, Credits> grants) {}
+record TypePricing(Credits unitPrice, List<PriceBand> bands, RefundSchedule refundSchedule, Duration bumpCutoff) {}
+\end{lstlisting}
+\code{SettingChange} is a sealed interface with one record per kind of setting, so \code{update} is one entry point with typed arguments.
+\begin{lstlisting}[language=Java]
+sealed interface SettingChange {      // every record below implements SettingChange
+  record PeriodLength(int months) {}               record DayRate(Credits rate) {}
+  record PriorityPremium(BigDecimal multiple) {}   record ObjectionWindow(int workingDays) {}
+  record GrantPlan(TeamId team, PeriodId period, Credits amount) {}
+  record UnitPrice(ResourceTypeId type, Credits price) {}
+  record PriceBands(ResourceTypeId type, List<PriceBand> bands) {}
+  record Refunds(ResourceTypeId type, RefundSchedule schedule) {}
+  record BumpCutoff(ResourceTypeId type, Duration cutoff) {}
+  record Quota(TeamId team, ResourceTypeId type, Optional<Integer> maxUnits) {}   // empty: no Quota
+}
+record Period(PeriodId id, LocalDate startsOn, LocalDate endsOn, Optional<PeriodId> previous) {}
+record PriceBand(Set<DayOfWeek> weekdays, LocalTime start, LocalTime end, BigDecimal multiplier) {}  // end exclusive
+record RefundSchedule(List<RefundStep> steps) {}      record RefundStep(Duration minLead, BigDecimal fraction) {}
+\end{lstlisting}
+
+\field{Required interfaces}
+{\sloppy \module{Inventory}: \code{InventoryQueries.type}. \module{Members}: no call.\par}
+
+\field{Data owned}
+\code{period}, \code{grant\_plan}, \code{type\_pricing}, \code{price\_band}, \code{refund\_step}, \code{quota}, \code{planner\_setting}, \code{setting\_change}.
+
+\field{Invariants}
+\begin{itemize}
+\item Every setting change is logged: \code{update} writes exactly one \code{setting\_change} row (actor, key, old value, new value, timestamp) in the same transaction as the change, so neither exists without the other.
+\item A changed price affects only Quotes not yet locked: locked Quotes live on the Request Line, owned by \module{Requests}, and Settings never reads or writes them.
+\item The Price Bands of a type never overlap; an hour no band covers has multiplier 1.0. No refund step reaches 100\%.
+\item Periods are contiguous and never overlap, so exactly one contains any date; a started Period never changes its dates.
+\end{itemize}
+
+\field{Failure behavior}
+{\sloppy A refused change is a \code{RuleViolation} with one of the codes \code{VALUE\_OUT\_OF\_RANGE}, \code{PERIOD\_STARTED}, \code{CLASS\_MISMATCH}, \code{BAND\_INVALID}, \code{BANDS\_OVERLAP}, or \code{REFUND\_STEP\_TOO\_HIGH}; the change and its log row roll back together. \code{update} locks the changed row before reading the old value, so concurrent edits of one setting are serialized and each logged old value is the one replaced.\par}
+
+% =====================================================================================================
+\modulespec{Notifications}{notifications}{notifications}
+
+\field{Purpose}
+Notifications tells a Member, inside the application, that something concerning them has happened. Callers decide when a notice is due and what it says, and call \code{Notifier.notify} inside their own transaction; Notifications decides how the notice is stored and delivered.
+
+\field{Provided interface}
+\begin{lstlisting}[language=Java]
+interface Notifier { void notify(MemberId to, NotificationKind kind, String text, String link); }
+interface NotificationQueries { List<Notification> unread(MemberId me); void markRead(NotificationId id); }
+interface Delivery { void deliver(Notification n); }         // InAppDelivery (row only); EmailDelivery is Stretch
+\end{lstlisting}
+
+\field{Required interfaces}
+{\sloppy \module{Members}, for recipient identity only: \code{member\_id} references \code{member(id)} and no operation is called.\par}
+
+\field{Data owned}
+\code{notification}.
+
+\field{Invariants}
+\begin{itemize}
+\item Notifications are rows written in the caller's transaction: a notice exists exactly when the action that raised it committed, and nothing is sent after commit in Release~1.
+\item A notice is visible only to its recipient; \code{read\_at} is set at most once, and no notice is deleted.
+\end{itemize}
+
+\field{Failure behavior}
+{\sloppy No \code{RuleViolation} codes. If the insert fails, the caller's action rolls back with it. \code{markRead} on another Member's notice raises \code{NotFoundException}, which does not reveal that the notice exists.\par}

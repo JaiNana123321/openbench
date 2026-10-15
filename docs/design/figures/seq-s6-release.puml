@@ -1,0 +1,75 @@
+@startuml seq-s6-release
+' F16 Scenario S6: a Manager releases a line and the freed capacity goes to the Waitlist
+' (UC-9, UC-10). One transaction.
+skinparam shadowing false
+skinparam defaultFontName Helvetica
+skinparam defaultFontSize 11
+skinparam ArrowColor #223
+skinparam sequenceMessageAlign left
+skinparam responseMessageBelowArrow true
+skinparam sequence {
+  ParticipantBackgroundColor #F4F6FA
+  ParticipantBorderColor #223
+  ActorBackgroundColor White
+  ActorBorderColor #223
+  LifeLineBorderColor #223
+  LifeLineBackgroundColor #DDE3EE
+  GroupBorderColor #223
+  GroupBackgroundColor #DDE3EE
+  DividerBackgroundColor #F4F6FA
+  DividerBorderColor #223
+}
+skinparam database {
+  BackgroundColor #F4F6FA
+  BorderColor #223
+}
+skinparam note {
+  BackgroundColor White
+  BorderColor #223
+}
+hide footbox
+autonumber
+
+actor Manager
+participant "Web\nclient" as Web
+participant RequestLifecycleService as RLS
+participant AllocationLock as Lock
+participant "Allocator\n(Exclusive or\nMetered;\nWaitlistable)" as Alloc
+participant Pricing
+participant LedgerService as Ledger
+participant Notifier
+
+Manager -> Web : release\n(whole or part)
+Web -> RLS : releaseLine(l,\npart, actor)
+activate RLS
+note over Lock, Ledger
+  one transaction; lock order: Resource Type
+  rows by ascending id, then accounts
+end note
+RLS -> Lock : lockTypes(type)
+RLS -> Alloc : release(line, part)
+RLS -> Pricing : refund(charge, schedule, leadTime)
+Pricing --> RLS : Credits (never 100%)
+RLS -> Ledger : refund(team, line, amount)
+RLS -> RLS : record(event)
+RLS -> RLS : onCapacityFreed(\ntype, window)
+RLS -> Alloc : waitingFor(type, freed window)
+Alloc --> RLS : waiting lines
+note over Alloc, Ledger
+  Priority lines first, then by
+  submission time; Bumped at head
+end note
+loop each waiting Request in order, until one is placed
+  RLS -> RLS : evaluateAll
+  alt all its Required lines fit now, no approval needed
+    RLS -> RLS : allocate (S2)
+    RLS -> Alloc : leave(line)
+    RLS -> Notifier : notify(that Request's Manager)
+  else it needs approvals and its Objection Window runs
+    RLS -> RLS : placeHolds
+    note over Lock, Alloc : Waiting -> Pending
+  end
+end
+RLS --> Web : done
+deactivate RLS
+@enduml

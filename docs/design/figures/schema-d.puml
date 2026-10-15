@@ -1,0 +1,114 @@
+@startuml schema-d
+' schema part D: Allocation
+skinparam shadowing false
+skinparam defaultFontName Helvetica
+skinparam defaultFontSize 11
+skinparam ArrowColor #223
+skinparam classAttributeIconSize 0
+skinparam class {
+  BackgroundColor #F4F6FA
+  BorderColor #223
+  HeaderBackgroundColor #DDE3EE
+}
+skinparam package {
+  BackgroundColor White
+  BorderColor #223
+}
+skinparam note {
+  BackgroundColor #FFFBE6
+  BorderColor #223
+}
+hide circle
+hide empty members
+skinparam nodesep 10
+skinparam ranksep 22
+package "referenced tables" {
+  entity request_line {
+    id : PK
+  }
+  entity resource {
+    id : PK
+  }
+  entity member {
+    id : PK
+  }
+}
+
+package "allocation" {
+  entity exclusive_occurrence {
+    id PK
+    --
+    line_id FK
+    team_id FK
+    request_id FK
+    resource_id FK
+    starts_at, ends_at
+    state
+  }
+  entity metered_allocation {
+    id PK
+    --
+    line_id FK
+    team_id FK
+    request_id FK
+    type_id FK
+    units
+    starts_at, ends_at
+    state
+  }
+  entity waitlist_entry {
+    id PK
+    --
+    line_id FK
+    type_id FK
+    starts_at, ends_at
+    priority, bumped
+    joined_at
+  }
+  entity candidate {
+    id PK
+    --
+    line_id FK
+    member_id FK
+    position
+  }
+  entity approval {
+    id PK
+    --
+    candidate_id FK
+    approver_member_id FK
+    state, escalated
+    decided_by, decided_at
+    reason
+  }
+  entity loan {
+    id PK
+    --
+    line_id FK
+    member_id FK
+    lending_team_id FK
+    borrowing_team_id FK
+    starts_on, ends_on
+    days_lent, ended_early
+  }
+}
+
+' relations
+request_line ||--o{ exclusive_occurrence
+resource ||--o{ exclusive_occurrence
+request_line ||--o{ metered_allocation
+request_line ||--o| waitlist_entry
+request_line ||--o{ candidate
+candidate ||--o| approval
+request_line ||--o{ loan
+member ||--o{ loan
+note bottom of exclusive_occurrence
+  EXCLUDE USING gist (resource_id WITH =,
+    tstzrange(starts_at, ends_at, '[)') WITH &&)
+  WHERE (state IN ('HELD','ALLOCATED'))
+end note
+note bottom of loan
+  EXCLUDE USING gist (member_id WITH =,
+    daterange(starts_on, ends_on, '[]') WITH &&)
+end note
+@enduml

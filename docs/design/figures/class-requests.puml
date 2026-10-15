@@ -1,0 +1,168 @@
+@startuml class-requests
+' F6 Requests module: the three application services, the four entities, their state enums,
+' and the interfaces of other modules that RequestLifecycleService orchestrates (dashed).
+skinparam shadowing false
+skinparam defaultFontName Helvetica
+skinparam defaultFontSize 11
+skinparam ArrowFontSize 10
+skinparam ArrowColor #223
+skinparam classAttributeIconSize 0
+skinparam nodesep 16
+skinparam ranksep 30
+skinparam class {
+  BackgroundColor #F4F6FA
+  BorderColor #223
+  HeaderBackgroundColor #DDE3EE
+}
+skinparam package {
+  BackgroundColor White
+  BorderColor #223
+}
+skinparam note {
+  BackgroundColor White
+  BorderColor #223
+}
+hide empty members
+
+package "requests" as P_req {
+  interface RequestLifecycleService <<interface>> {
+    submit(RequestId, Actor): SubmitOutcome
+    selectCandidates(RequestLineId, List<MemberId>, Actor)
+    decideApproval(ApprovalId, Decision, String, Actor)
+    releaseLine(RequestLineId, ReleasePart, Actor)
+    endLoanEarly(LoanId, LocalDate, Actor)
+    withdraw(RequestId, Actor)
+    reopenForEdit(RequestId, Actor)
+    lapsedWindows(Instant): List<RequestId>
+    onWindowLapse(RequestId)
+    expireWaitingLines(Instant)
+    escalations(): List<EscalatedRequest>
+    detail(RequestId): RequestDetail
+    shortlist(RequestLineId): Shortlist
+  }
+  interface RequestService <<interface>> {
+    create(TeamId): Request
+    addLine(RequestId, NewLine): RequestLine
+    editLine(RequestLineId, LineEdit)
+    removeLine(RequestLineId)
+    splitLine(RequestLineId, int): RequestLine
+    setRequired(RequestLineId, boolean)
+    setPriority(RequestLineId, boolean)
+    view(RequestId): DraftView
+    list(TeamId, Optional<RequestState>,
+    {method}  PageRequest): Page<RequestSummary>
+  }
+  interface SuggestionService <<interface>> {
+    create(MemberId, NewLine, String): Suggestion
+    acceptIntoNewLine(SuggestionId, RequestId)
+    acceptIntoLine(SuggestionId, RequestLineId)
+    decline(SuggestionId, String)
+    forManager(TeamId): List<Suggestion>
+    mine(MemberId): List<Suggestion>
+  }
+
+  class Request <<entity>> {
+    id: RequestId
+    team: TeamId
+    state: RequestState
+    submittedAt: Instant
+    windowEndsAt: Instant
+  }
+  class RequestLine <<entity>> {
+    id: RequestLineId
+    type: ResourceTypeId
+    allocationClass: AllocationClass
+    quantity: int
+    units: int
+    startsAt, endsAt: Instant
+    recurrence
+    required: boolean
+    priority: boolean
+    namedMember: MemberId
+    skills: Set<SkillId>
+    lockedQuote: Credits
+    state: RequestLineState
+  }
+  class Suggestion <<entity>> {
+    id: SuggestionId
+    member: MemberId
+    proposal: NewLine
+    state: SuggestionState
+    acceptedLine: RequestLineId
+    reason: String
+  }
+  class RequestEvent <<entity>> {
+    request: RequestId
+    line: RequestLineId
+    fromState, toState
+    actor: MemberId
+    at: Instant
+    note: String
+  }
+
+  enum RequestState <<enumeration>> {
+    DRAFT
+    SUBMITTED
+    PENDING
+    WAITING
+    ALLOCATED
+    WITHDRAWN
+    REFUSED
+  }
+  enum RequestLineState <<enumeration>> {
+    DRAFT, EVALUATED
+    HELD, ALLOCATED, WAITING
+    RELEASED, PARTLY_RELEASED
+    BUMPED
+    AWAITING_APPROVAL, APPROVED
+    LOANED, REFUSED
+    DROPPED, CANCELED
+  }
+  enum SuggestionState <<enumeration>> {
+    OPEN
+    ACCEPTED
+    DECLINED
+  }
+}
+
+package "allocation" as P_alloc {
+  interface Allocator <<interface>>
+  interface AllocatorRegistry <<interface>>
+  interface AllocationLock <<interface>>
+}
+package "ledger" as P_led {
+  interface LedgerService <<interface>>
+  class Pricing <<utility>>
+}
+package "notifications" as P_not {
+  interface Notifier <<interface>>
+}
+
+note bottom of RequestLifecycleService
+  One transaction per call. Private steps:
+  evaluateAll, placeHolds, routeApprovals,
+  allocate, toWaiting, onCapacityFreed,
+  record(RequestEvent)
+end note
+
+Request "1" *-- "1..*" RequestLine
+Request "1" *-- "*" RequestEvent : history
+RequestLine "0..1" <-- "*" Suggestion : accepted into
+
+RequestLifecycleService ..> Request
+RequestService ..> RequestLine
+SuggestionService ..> Suggestion
+
+RequestLifecycleService .up.> AllocatorRegistry : forClass,\ncapability
+RequestLifecycleService .up.> Allocator
+RequestLifecycleService .up.> AllocationLock : lockTypes
+RequestLifecycleService .up.> LedgerService
+RequestLifecycleService .up.> Notifier
+RequestService .up.> Pricing : quote
+RequestService .up.> LedgerService : account
+SuggestionService .up.> Notifier : notify
+
+Request -[hidden]right- RequestState
+RequestEvent -[hidden]right- RequestLineState
+Suggestion -[hidden]right- SuggestionState
+@enduml

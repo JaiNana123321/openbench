@@ -1,0 +1,195 @@
+% 06-data.tex: OpenBench Software Design Document, Section 6 (Data Design).
+% Written on 2026-10-05 from .scratch/design-doc/brief.md (D-D, D-H, section 7 with the 20:30 addendum, RC-3)
+% and docs/research/allocation-concurrency-postgres.md (sections 1, 6a, 7, 8, local checks).
+% Every SQL listing below was run on PostgreSQL 16.15 on 2026-10-05, with the behavior described in the text.
+% The group below only sets \emergencystretch so that long \code{} identifiers do not overrun the margin.
+\begingroup\setlength{\emergencystretch}{2em}
+\section{Data Design}\label{sec:data}
+
+OpenBench keeps all its state in one PostgreSQL~16 database (\req{CO-db}, \req{SI-db}). This section lists the tables by owner, the constraints that carry business rules in the database itself, and how the schema is created and tested.
+
+% ======================================================================== 6.1
+\subsection{Schema by owner}
+
+Figures~\ref{fig:schema} and~\ref{fig:schema-core} show the tables grouped by owning module and Table~\ref{tab:data-tables} lists them. Conventions: primary keys are \code{bigint GENERATED ALWAYS AS IDENTITY} (join tables and per-Team or per-type settings use their natural keys); instants are \code{timestamptz}, mapped to \code{Instant}, and windows are half-open, so back-to-back windows do not overlap; Loan, availability, and Period days are \code{date}, inclusive at both ends; credits are \code{numeric(12,2)}; every row has \code{created\_at} and \code{created\_by} (null when a job writes it); states and kinds are \code{text} with a CHECK on the allowed values. A foreign key may cross a module boundary as a read-only reference (\code{request\_line.type\_id} references \code{resource\_type}), but only the owning module writes a table: its repositories are package-private, and the ArchUnit test checks it (Section~\ref{sec:arch}).
+% NOTE: brief section 4 describes Credits as "integer credits" while section 7 fixes numeric(12,2). Price Band multipliers
+% (x1.5, x0.5) and Refund fractions produce fractional credits, so the column type is numeric(12,2) and Credits should wrap BigDecimal.
+
+\begin{figure}[htbp]\centering
+\includegraphics[width=0.62\textwidth,keepaspectratio]{schema-a.pdf}\par\medskip
+\includegraphics[width=\textwidth,keepaspectratio]{schema-b.pdf}
+\caption{Database schema, foundation modules: above, the tables owned by \module{Members} and \module{Notifications}; below, those owned by \module{Inventory} and \module{Settings}, and the three read-only \module{Dashboard} views. Lines are foreign keys with crow's-foot cardinalities; only the owning module writes a table.}
+\label{fig:schema}
+\end{figure}
+\begin{figure}[htbp]\centering
+\includegraphics[width=0.7\textwidth,keepaspectratio]{schema-c.pdf}\par\medskip
+\includegraphics[width=\textwidth,keepaspectratio]{schema-d.pdf}
+\caption{Database schema, core modules: above, the tables owned by \module{Requests} and \module{Ledger}; below, those owned by \module{Allocation}. Foundation tables they reference appear as stubs; a key that crosses a module boundary is a read-only reference. The notes quote the two exclusion constraints and the append-only rule.}
+\label{fig:schema-core}
+\end{figure}
+
+{\footnotesize\setlength{\tabcolsep}{4pt}
+\begin{longtable}{@{}L{0.19\textwidth}L{0.19\textwidth}L{0.31\textwidth}L{0.25\textwidth}@{}}
+\caption{Tables by owning module (every table also has \code{created\_at}, \code{created\_by}).}\label{tab:data-tables}\\
+\toprule
+Table & Purpose & Key columns & Notable constraints \\
+\midrule
+\endfirsthead
+\multicolumn{4}{@{}l}{\itshape Table~\ref{tab:data-tables} (continued)}\\
+\toprule
+Table & Purpose & Key columns & Notable constraints \\
+\midrule
+\endhead
+\midrule\multicolumn{4}{@{}r}{\itshape continues on next page}\\
+\endfoot
+\bottomrule
+\endlastfoot
+\multicolumn{4}{@{}l}{\module{Members}}\\
+\code{team} & Team & id, name, manager\_member\_id, retired\_at & name unique \\
+\code{member} & Member, login identity & id, team\_id, name, email, username, password\_hash, active & username, email unique; no other personal data (\req{SE-data}) \\
+\code{member\_role} & Granted roles & member\_id, team\_id, role & one MANAGER per Team \\
+\code{skill} & Skill list & id, name, retired\_at & name unique \\
+\code{member\_skill} & A Member's skills & member\_id, skill\_id & composite key \\
+\code{availability\_range} & Days a Member may be lent & id, member\_id, from\_date, to\_date & from\_date $\le$ to\_date \\
+\midrule
+\multicolumn{4}{@{}l}{\module{Inventory}}\\
+\code{resource\_type} & Resource Type; the row \code{AllocationLock} locks & id, name, allocation\_class, retired\_at & name unique; Person seeded by the first migration \\
+\code{resource\_type\_\allowbreak attribute} & Attribute definitions & id, type\_id, name, kind, allowed\_values & (type\_id, name) unique \\
+\code{resource} & Exclusive instance or Metered unit source & id, type\_id, name, owner\_member\_id, units, retired\_at & units $>$ 0; Pool Capacity = sum of unretired units \\
+\code{resource\_attribute\_\allowbreak value} & Attribute values & resource\_id, attribute\_id, value & composite key \\
+\midrule
+\multicolumn{4}{@{}l}{\module{Settings}}\\
+\code{period} & Period & id, starts\_on, ends\_on & starts\_on $\le$ ends\_on \\
+\code{grant\_plan} & Grant per Team and Period & team\_id, period\_id, amount & amount $\ge$ 0 \\
+\code{type\_pricing} & Unit Price, bump cutoff & type\_id, unit\_price, bump\_cutoff\_hours & Exclusive and Metered types only \\
+\code{price\_band} & Price Band & id, type\_id, weekdays, start\_time, end\_time, multiplier & start $<$ end; multiplier $>$ 0 \\
+\code{refund\_step} & Refund Schedule step & id, type\_id, min\_lead\_hours, fraction & 0 $\le$ fraction $<$ 1 \\
+\code{quota} & Quota per Team and Metered type & team\_id, type\_id, max\_units & max\_units $>$ 0 \\
+\code{planner\_setting} & Single-valued settings & key, value & day\_rate, priority\_premium, objection\_\allowbreak window\_\allowbreak working\_\allowbreak days, period\_months \\
+\code{setting\_change} & Setting change log & id, key, old\_value, new\_value, actor\_id, at & insert-only grant \\
+\midrule
+\multicolumn{4}{@{}l}{\module{Requests}}\\
+\code{request} & Request & id, team\_id, state, submitted\_at, window\_ends\_at & window\_ends\_at set once \\
+\code{request\_line} & Request Line, locked Quote & id, request\_id, type\_id, allocation\_class, quantity, units, starts\_at, ends\_at, recurrence, required, priority, named\_member\_id, skills, locked\_quote, state & starts\_at $<$ ends\_at; quantity $>$ 0; priority only if Exclusive; locked\_quote never changes \\
+\code{suggestion} & Suggestion & id, member\_id, proposal columns, state, accepted\_line\_id, reason & never deleted \\
+\code{request\_event} & State history & id, request\_id, line\_id, from\_state, to\_state, actor\_id, at, note & insert-only grant \\
+\midrule
+\multicolumn{4}{@{}l}{\module{Allocation}}\\
+\code{exclusive\_occurrence} & One occurrence on one instance & id, line\_id, team\_id, request\_id, resource\_id, starts\_at, ends\_at, state & exclusion constraint on live rows \\
+\code{metered\_allocation} & Units over a window & id, line\_id, team\_id, request\_id, type\_id, units, starts\_at, ends\_at, state & units $>$ 0; partial GiST index \\
+\code{waitlist\_entry} & A waiting Required line & id, line\_id, type\_id, starts\_at, ends\_at, priority, bumped, joined\_at & line\_id unique; deleted on leaving \\
+\code{candidate} & Shortlist entry & id, line\_id, member\_id, position & (line\_id, member\_id) unique \\
+\code{approval} & Approval of a Candidate & id, candidate\_id, approver\_member\_id, state, decided\_by, decided\_at, reason, escalated & candidate\_id unique \\
+\code{loan} & Loan & id, line\_id, member\_id, lending\_team\_id, borrowing\_team\_id, starts\_on, ends\_on, days\_lent, ended\_early & exclusion constraint per Person; Teams differ \\
+\midrule
+\multicolumn{4}{@{}l}{\module{Ledger}}\\
+\code{account} & Account & team\_id, granted, earned, held & granted, held $\ge$ 0 \\
+\code{transaction} & Grant, Charge, Earning, Refund & id, team\_id, kind, amount, granted\_part, earned\_part, period\_id, line\_id, loan\_id, corrects\_id, reason, actor\_id, posted\_at & insert-only grant; amount = granted\_part + earned\_part \\
+\code{held\_credit} & Held credits per line on Hold & line\_id, team\_id, amount & one row per Held line; deleted when the Hold commits or releases \\
+\code{period\_close} & Expired and closing credits & team\_id, period\_id, expired, closing\_granted, closing\_earned, closed\_at & key (team\_id, period\_id): one row per Team and closed Period; the rollover idempotency key \\
+\midrule
+\multicolumn{4}{@{}l}{\module{Notifications}}\\
+\code{notification} & In-app notification & id, member\_id, kind, text, link, created\_at, read\_at & index on unread rows \\
+\midrule
+\multicolumn{4}{@{}l}{\module{Dashboard} (views; owns no table)}\\
+\code{v\_type\_hours} & Allocated and available hours per type and day & over \code{exclusive\_occurrence}, \code{metered\_allocation}, \code{resource} & read-only \\
+\code{v\_team\_credits} & Credits per Team and Period by kind, expired amount & over \code{transaction}, \code{loan}, \code{period}, \code{period\_close}, plus \code{account} & read-only \\
+\code{v\_waiting} & Waiting lines per type & over \code{waitlist\_entry} & read-only \\
+\end{longtable}}
+
+% ======================================================================== 6.2
+\subsection{Constraints that carry business rules}
+
+A rule between two rows, or between one row and a fixed bound, is stated in the schema, where no code path can skip it. A rule over a sum of rows is a query run under the type lock of Section~\ref{sec:runtime}.
+
+\paragraph{No overlapping allocation, no double Loan.} The \module{Allocation} migration states \req{Exclusive.Conflict} and the one-Loan rule of \rc{1}:
+\begin{lstlisting}[language=SQL]
+CREATE EXTENSION IF NOT EXISTS btree_gist;   -- GiST support for "bigint WITH ="
+
+CREATE TABLE exclusive_occurrence (
+  id          bigint      GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  line_id     bigint      NOT NULL REFERENCES request_line,
+  team_id     bigint      NOT NULL REFERENCES team,
+  request_id  bigint      NOT NULL REFERENCES request,
+  resource_id bigint      NOT NULL REFERENCES resource,
+  starts_at   timestamptz NOT NULL,
+  ends_at     timestamptz NOT NULL,
+  state       text        NOT NULL
+              CHECK (state IN ('HELD', 'ALLOCATED', 'RELEASED', 'BUMPED', 'EXPIRED')),
+  created_at  timestamptz NOT NULL DEFAULT now(),
+  created_by  bigint      REFERENCES member,
+  CHECK (starts_at < ends_at),
+  CONSTRAINT exclusive_occurrence_no_overlap EXCLUDE USING gist (
+    resource_id WITH =,
+    tstzrange(starts_at, ends_at, '[)') WITH &&
+  ) WHERE (state IN ('HELD', 'ALLOCATED'))
+);
+
+ALTER TABLE loan ADD CONSTRAINT loan_one_at_a_time EXCLUDE USING gist (
+  member_id WITH =,
+  daterange(starts_on, ends_on, '[]') WITH &&
+);
+\end{lstlisting}
+A row with the same Resource as a live row and an overlapping window is rejected. \code{btree\_gist}, a trusted contrib extension present in the official image, supplies GiST support for the scalar \code{resource\_id WITH =}. The second constraint keeps a Person in at most one Loan at a time on every code path, with no exception for \code{ended\_early}, which only marks that an Earning correction was posted. Only HELD and ALLOCATED rows take part in the first constraint; RELEASED, BUMPED, and EXPIRED rows stay as history and block nothing. The half-open range is built from two \code{timestamptz} columns, so 09:00 to 12:00 and 12:00 to 13:00 do not conflict, and Java sees only two \code{Instant} fields. The \code{loan} constraint uses inclusive \code{daterange} bounds because Loans are whole days: a Loan ending on a Friday and one starting that Friday overlap. \code{endLoanEarly} sets \code{ends\_on} to the new last day and \code{ended\_early}; the shortened Loan stays in the constraint for the days it lent.
+
+\paragraph{The append-only Ledger.} Flyway connects as the schema owner; the application connects as \code{openbench\_app}, which owns nothing and gets these grants and checks in the last migration:
+\begin{lstlisting}[language=SQL]
+GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO openbench_app;
+REVOKE UPDATE, DELETE ON transaction, request_event, setting_change FROM openbench_app;
+
+ALTER TABLE transaction
+  ADD CHECK (kind IN ('GRANT', 'CHARGE', 'EARNING', 'REFUND')),
+  ADD CHECK (amount = granted_part + earned_part),
+  ADD CHECK (amount >= 0 OR (kind = 'EARNING' AND corrects_id IS NOT NULL));
+\end{lstlisting}
+The application can insert and read Transactions but never change or delete one, so \req{Ledger.Transaction.Kinds} and \req{QA-audit} hold even against a bug. A correction is a new row whose \code{corrects\_id} names the one it corrects; the only one in Release~1, the Earning correction of an early Loan end, is the only negative amount and the only Transaction that may take a Balance below zero. \code{granted\_part} and \code{earned\_part} record where a Charge drew from, so a Refund returns credits in the same proportions. The \code{account} row is the running total, updated under its row lock. \code{request\_event} and \code{setting\_change} get the same insert-only grant.
+% NOTE: the role name openbench_app and extending the insert-only grant to request_event and setting_change are this section's
+% choices; the brief requires it for transaction only.
+
+\paragraph{Check constraints.} Positive amounts: \code{units > 0} (\code{resource}, \code{metered\_allocation}, Metered lines), \code{quantity > 0}, \code{max\_units > 0}, \code{multiplier > 0}, and \code{granted}, \code{held >= 0}. Ordered windows: \code{starts\_at < ends\_at} on every table with a window, and the same for the date and time pairs. A Refund Schedule never reaches 100\% (\req{Release.Refund}): \code{CHECK (fraction >= 0 AND fraction < 1)} on \code{refund\_step}. Priority only on Exclusive lines: \code{CHECK (NOT priority OR allocation\_class = 'EXCLUSIVE')}. A Loan crosses Teams: \code{lending\_team\_id <> borrowing\_team\_id}. Exactly one Manager per Team (\req{Admin.Member.Create}): ``at most one'' is the index below, and ``at least one'' is enforced by \code{revokeRole}, which refuses to remove the last Manager, and \code{grantRole}, which deletes the previous Manager's row and flushes before inserting the new one (the flush-order rule of Section~\ref{sec:runtime}). \code{member\_role.team\_id} follows \code{member.team\_id} through a composite foreign key with \code{ON UPDATE CASCADE}, so moving a Member moves their roles.
+\begin{lstlisting}[language=SQL]
+CREATE UNIQUE INDEX member_role_one_manager ON member_role (team_id) WHERE role = 'MANAGER';
+\end{lstlisting}
+
+\paragraph{The Metered hourly sum.} \req{Metered.Pool.Check} needs, in every hour of the window, the units of live rows on the type plus the requested units within Pool Capacity, and the Team's share within its Quota. \code{MeteredAllocator} runs this native query after \code{lockTypes}, in the same READ COMMITTED transaction, and reads Pool Capacity after the lock too:
+\begin{lstlisting}[language=SQL]
+-- :starts_at, :ends_at on the hour; one row per hour of the window, in order.
+SELECT h.hour_start,
+       coalesce(sum(m.units), 0)                                     AS pool_used,
+       coalesce(sum(m.units) FILTER (WHERE m.team_id = :team_id), 0) AS team_used
+FROM generate_series(:starts_at, :ends_at - interval '1 hour', interval '1 hour') AS h(hour_start)
+LEFT JOIN metered_allocation m
+       ON m.type_id = :type_id
+      AND m.state IN ('HELD', 'ALLOCATED')
+      AND tstzrange(m.starts_at, m.ends_at, '[)')
+          && tstzrange(h.hour_start, h.hour_start + interval '1 hour', '[)')
+GROUP BY h.hour_start
+ORDER BY h.hour_start;
+
+CREATE INDEX metered_allocation_live ON metered_allocation
+  USING gist (type_id, tstzrange(starts_at, ends_at, '[)'))
+  WHERE state IN ('HELD', 'ALLOCATED');
+\end{lstlisting}
+\code{generate\_series} yields the hours, and the join sums the live units overlapping each hour for the pool and, through \code{team\_id} on the row itself, for the Team, so the query reads only \module{Allocation}'s own table; the partial GiST index serves the overlap test. The pure class \code{HourlyLoad} (Section~\ref{mod:allocation}) then walks the hours in order and returns the earliest one in which \code{pool\_used} plus the requested units exceed Pool Capacity (\code{POOL\_FULL}) or, when the Team has a Quota on the type, \code{team\_used} plus them exceed it (\code{QUOTA\_EXCEEDED}); no such hour means the line fits. With zero requested units and the reduced capacity, the same query and \code{HourlyLoad} answer \code{ReductionGuard.earliestHourExceeding} (\req{Inventory.Resource.Add}). It is native SQL because JPQL has neither \code{generate\_series} nor range operators.
+
+\paragraph{State history.} \code{record} writes one \code{request\_event} per state change of a Request or line, in the same transaction: from and to states, actor (null for a job, named in \code{note}), time, and a note such as a refusal reason, the Bump partner, or the Refund. A Bump writes a row on each line, each naming the other. \code{RequestLifecycleService.detail} reads the timeline from these rows (\req{Lifecycle.States}, \req{QA-audit}).
+
+% ======================================================================== 6.3
+\subsection{Migrations and the test database}
+
+\paragraph{Flyway at start-up.} The schema is a series of versioned SQL files under \code{src/\allowbreak main/\allowbreak resources/\allowbreak db/\allowbreak migration} (\code{V<n>\_\_<name>.sql}), one per module in layer order, then the views and grants; a released file is never edited. Spring Boot runs Flyway at start-up, before Hibernate, because the \code{EntityManagerFactory} depends on database initialization. \code{spring.jpa.hibernate.ddl-auto=validate} then checks every entity against the migrated tables and stops start-up on a mismatch; Hibernate never creates a table, and the migrations alone own the extension, the exclusion constraints, the partial indexes, and the grants.
+
+\paragraph{Why H2 was dropped (\rc{3}).} The SRS first required tests on H2 in memory with the same migrations. H2 cannot run them: in PostgreSQL mode it rejects \code{CREATE EXTENSION}, has no range types or \code{EXCLUDE}, and cannot parse the hourly sum's interval arithmetic; nothing in its documentation says its locking behaves like PostgreSQL's. Keeping H2 would mean forking the migrations or dropping the constraints, and the most important test, two allocations racing for one type, could not run. SRS 0.3 therefore changes \req{CO-db} and \req{SI-db} to PostgreSQL~16 in a container started by the test suite.
+
+\paragraph{Testcontainers.} Integration tests extend one base class:
+\begin{lstlisting}[language=Java]
+@SpringBootTest @Testcontainers
+abstract class PostgresTest {
+  @Container @ServiceConnection
+  static PostgreSQLContainer<?> pg = new PostgreSQLContainer<>("postgres:16-alpine");
+}
+\end{lstlisting}
+\code{@ServiceConnection} points the data source at the container, so Flyway runs the production migrations, extension and constraints included. The concurrency test runs two allocations on two threads against one pool and asserts that exactly one succeeds; another connects as \code{openbench\_app} (created by the container's init script) and checks that updating a Transaction is refused (Section~\ref{sec:cross}). Developers need Docker, which building the application image already requires; unit tests of \code{Pricing} and the state rules need no database.
+
+\paragraph{Retention.} Nothing is purged in Release~1 (\req{QA-retention}): no code path deletes a Request, a line, a Suggestion, a \code{request\_event}, or a Transaction, and Teams, skills, Resource Types, and Resources are retired, not deleted. The application deletes only working state: Waitlist entries, whose history is in \code{request\_event}, \code{held\_credit} rows, which exist only while a line is on Hold, and revoked role rows. At 10,000 Requests a year (\req{PE-scale}), two years of rows are small for one database.
+\endgroup

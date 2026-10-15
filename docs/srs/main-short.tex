@@ -1,0 +1,42 @@
+% OpenBench — Software Requirements Specification, short form (the submission; target 20-25 pages).
+% Shares macros, figures, and the glossary generator with main.tex; every section has its own condensed copy
+% under sections/short/. The full specification (main.tex) remains the detailed reference; identifiers are the same in both.
+% Build: nix develop path:nix -c make -C docs/srs short
+\documentclass[10pt,letterpaper]{article}
+\input{macros}
+\geometry{margin=0.8in}
+\setlength{\reqgap}{3pt}
+\setlength{\parskip}{3pt plus 1pt}
+\setlength{\columnsep}{16pt}
+\usepackage[compact]{titlesec}   % tighter heading spacing in the short edition
+\setcounter{tocdepth}{1}
+\setlist{nosep}
+
+\hypersetup{
+  pdftitle={OpenBench Software Requirements Specification},
+  pdfauthor={Jai Nana, Brian Lujan, Fotih Turopov, Yerassyl Shnazbayev},
+  pdfsubject={CSDS 393 Software Engineering},
+}
+
+\begin{document}
+
+\input{sections/short/00-front-matter}
+\newcommand{\sectionbreak}{\clearpage}   % every section (and appendix) starts on a new page
+
+\input{sections/short/01-vision-and-scope}
+\input{sections/short/02-introduction}
+\input{sections/short/03-overall-description}
+\input{sections/short/04-system-features}
+\input{sections/short/05-external-interfaces}
+\input{sections/short/06-nonfunctional-requirements}
+
+\appendix
+\input{sections/short/appendix-a-glossary}
+\input{sections/short/appendix-b-data-model}
+\input{sections/short/appendix-c-analysis-models}
+\input{sections/short/appendix-d-use-cases}
+\input{sections/short/appendix-e-inspection-report}
+\renewcommand{\sectionbreak}{\bigskip}   % F follows E on the same page
+\input{sections/short/appendix-f-traceability}
+
+\end{document}

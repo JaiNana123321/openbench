@@ -1,0 +1,35 @@
+\section{External Interface Requirements}\label{sec:interfaces}
+
+\subsection{User Interfaces}
+
+The user interface is a browser application with one navigation menu whose entries depend on the Member's roles. Every screen shows the Member's name, Team, and a notification indicator. Field-level help is available for every setting and every column of the Draft Request screen (\udref{help}). The key screens are:
+
+\ui{shell}{The application shell shall show a role-dependent menu (Requests, Suggestions, Approvals, Inventory, Dashboard, Statement, Settings, Administration), the signed-in Member and Team, and an in-app notification list with unread count.}
+\ui{draft}{The Draft Request screen shall show the Request's lines as a table with, per line, Resource Type, Allocation Class, quantity, window, recurrence, Required or Optional, Priority mark where offered, and Quote; totals for Required and Optional lines; the Team's Available Balance and any shortfall; a panel of Open Suggestions that can be accepted into lines; and the actions Save, Split line, Submit, and Withdraw.}
+\ui{request}{The Request detail screen shall show the Request's state, the Objection Window end when Pending, each line with its state, instance, Hold or waitlist position, locked Quote, and the complete state history with actor and timestamp.}
+\ui{shortlist}{The Shortlist screen shall list Candidates in Shortlist order with name, Team, skills, and person-days lent in the current Period, with a selection control limited to the line's quantity.}
+\ui{approvals}{The Approvals screen shall list approval requests addressed to the signed-in Manager with requesting Team, Person, window, Earning, and time left in the Objection Window, with Approve and Refuse actions and a reason field.}
+\ui{inventory}{The Inventory screens shall list Resource Types and Resources with filters, and shall show for a chosen Resource a timeline of Holds and allocations; Resource Owners shall have the add, edit, retire, and units controls for their own Resources.}
+\ui{profile}{The Profile screen shall show and let the Member edit their skills and availability ranges and shall list their Loans; a Manager's Team roster shall show the same for each Member of the Team.}
+\ui{dashboard}{The Dashboard screen shall show the figures of Section~\ref{feat:dashboard} with a Period selector, as tables and bar charts.}
+\ui{statement}{The Statement screen shall show a Team's Statement for a chosen Period with the Transaction list beneath it.}
+\ui{planner}{The Settings screen, visible to the Capacity Planner only, shall show every setting of \FR{Planner.Settings} with its current value, example default, and change history, and the list of escalated Requests.}
+\ui{admin}{The Administration screens, visible to Administrators only, shall manage Members, Teams, roles, the skill list, and Resource Types.}
+
+\subsection{Hardware Interfaces}
+
+The system has no hardware interfaces. It controls no door, instrument, or compute node; a Loan, an Exclusive allocation, or a Metered allocation is a record that people act on.
+
+\subsection{Software Interfaces}
+
+\si{db}{The system shall store all persistent data in a PostgreSQL~16 database through JDBC; the schema shall be created and migrated by the application at start-up. Automated tests shall run against PostgreSQL~16 in a container started by the test suite (Testcontainers) with the same migrations.}
+\si{api}{The front end shall communicate with the back end only through a REST/JSON API over HTTPS. Every use case in Appendix~\ref{app:usecases} shall be achievable through that API with the same role enforcement as the user interface, so that automated tests and a future integration can drive the system.}
+\si{runtime}{The back end shall run on Java~17 with Spring Boot, packaged as one Docker image that contains the built front end.}
+\si{browser}{The front end shall run in the current release of Chrome, Firefox, Safari, and Edge on desktop without plug-ins.}
+\si{none}{Release~1 shall have no interface to any calendar, HR, identity, or cluster-scheduling system (\liref{integrations}).}
+
+\subsection{Communications Interfaces}
+
+\ci{https}{All traffic between browser and server shall use HTTPS; the server shall accept no plain HTTP connection except a redirect to HTTPS.}
+\ci{inapp}{All notifications in Release~1 shall be delivered inside the application, listed newest first and marked read by the Member; no notification shall leave the system.}
+\ci{email}{\stretchtag{} The system shall optionally send each in-app notification also by email through an SMTP server configured by the Administrator.}

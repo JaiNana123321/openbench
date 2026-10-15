@@ -1,0 +1,96 @@
+% 02-architecture.tex — OpenBench Software Design Document, short edition (condensed from sections/02-architecture.tex on 2026-10-05).
+\section{Architecture}\label{sec:arch}
+
+\subsection{Context}
+
+The five actors of the SRS are roles, not separate populations: every actor is a Member, and the Administrator may give one Member several roles, for example a Manager who is also the Capacity Planner. The Clock stands for the work the server does on its own when time passes, which runs inside the same process (\req{CO-jobs}). Release~1 has no external integrations (\req{LI-integrations}). The browser is the only client, and every flow is a REST/JSON call over HTTPS (\req{SI-api}, \req{CI-https}).
+
+\subsection{Architectural Style and the Dependency Rule}
+
+\textbf{D-A Modular monolith} (\adr{0005}). \SRSproduct{} is one Spring Boot~3 application (Java~17, built with Maven), one PostgreSQL~16 database, and one React single-page application served by the same process. The back end has nine modules, one Java package each under \code{edu.cwru.openbench.<module>}: \code{members}, \code{inventory}, \code{settings}, \code{notifications}, \code{allocation}, \code{ledger}, \code{requests}, \code{dashboard}, and \code{jobs}. The web client is the tenth component. Modules collaborate by calling each other's application services (Spring beans) directly, inside the caller's transaction. There are no events between modules and no message broker.
+
+The style follows from the two requirements that cannot bend: Holds commit and Charges and Earnings post in one transaction (\req{CO-tx}, \req{QA-atomic}), and concurrent submissions never double-allocate or oversell (\req{QA-correct}). With direct calls in one process, the calling service's transaction spans \module{Requests}, \module{Allocation}, and \module{Ledger}, so atomicity needs no compensation logic.
+
+\textbf{D-B The dependency rule} keeps the modules apart inside one deployable:
+\begin{enumerate}[label=(\arabic*)]
+  \item A module's only public surface is its application service classes and the DTOs they take and return. Entities and repositories are package-private.
+  \item A module writes only its own tables (the sole-writer rule). Foreign keys may point into another module's tables as read-only references.
+  \item Dependencies point downward in the layer order of D-C, with no cycles.
+  \item The one upward hook is the port \code{ReductionGuard}: \module{Inventory} declares it and \module{Allocation} implements it, so Inventory can refuse a capacity reduction below future usage without depending on Allocation.
+  \item \module{Dashboard} is read-only. It may query any table through SQL views, and it writes nothing.
+\end{enumerate}
+One ArchUnit test class checks rules (1) and (3) and fails the build on a violation.
+
+\textbf{D-C Layers}, top to bottom: the web client; then \module{Requests}, \module{Dashboard}, and \module{Jobs}; then \module{Allocation} and \module{Ledger}; then \module{Inventory}, \module{Members}, \module{Settings}, and \module{Notifications}. Inside every module the same four layers repeat: controller (REST), application service, domain (entities and pure rules), and repository (Spring Data JPA). \figref{fig:modules} shows every module and dependency. Three packages are shared infrastructure, not modules: \code{security} (the Spring Security configuration, which loads users from \module{Members}), \code{common} (the error types and their mapping to problem responses, the value types \code{Credits}, \code{DateRange}, and \code{TimeWindow}, and the typed ids), and \code{config}.
+
+\subsection{Module Map}\label{sec:arch-modules}
+
+The modules are listed bottom-up, in layer order; Section~\ref{sec:modules} specifies each in full.
+
+{\footnotesize\setlength{\tabcolsep}{4pt}\renewcommand{\arraystretch}{1.08}
+\begin{longtable}{@{}L{1.9cm}L{0.3\textwidth}L{\dimexpr\textwidth-1.9cm-0.3\textwidth-2.9cm-6\tabcolsep\relax}L{2.9cm}@{}}
+\toprule
+\textbf{Module} & \textbf{Purpose} & \textbf{Owns (tables)} & \textbf{Depends on} \\
+\midrule
+\endfirsthead
+\multicolumn{4}{@{}l}{\itshape Module map (continued)}\\ \toprule
+\textbf{Module} & \textbf{Purpose} & \textbf{Owns (tables)} & \textbf{Depends on} \\
+\midrule
+\endhead
+\midrule \multicolumn{4}{@{}r}{\itshape continues on next page}\\
+\endfoot
+\bottomrule
+\endlastfoot
+\module{Members} (\ref{mod:members}) & Members, Teams with exactly one Manager each, roles, the skill list, skills and availability ranges, the login identity & \code{team}, \code{member}, \code{member\_role}, \code{skill}, \code{member\_skill}, \code{availability\_range} & nothing \\
+\module{Inventory} (\ref{mod:inventory}) & Resource Types as data and Resources (instances, units, owner); Pool Capacity computed, never stored; declares the port \code{ReductionGuard} & \code{resource\_type}, \code{resource\_type\_attribute}, \code{resource}, \code{resource\_attribute\_value} & \module{Members} \\
+\module{Settings} (\ref{mod:settings}) & Every Capacity Planner setting as data, with a change log; other modules read one typed snapshot, \code{PlannerSettings} & \code{period}, \code{grant\_plan}, \code{type\_pricing}, \code{price\_band}, \code{refund\_step}, \code{quota}, \code{planner\_setting}, \code{setting\_change} & \module{Inventory}, \module{Members} \\
+\module{Notifications} (\ref{mod:notifications}) & In-app notifications written in the transaction of the change they report; \code{Delivery} with \code{InAppDelivery} now & \code{notification} & \module{Members} \\
+\module{Allocation} (\ref{mod:allocation}) & Whether capacity exists, and who has it: the \code{Allocator} interface, the registry, the three allocators, Holds, the Waitlist, Shortlists, approvals, Loans, the type lock & \code{exclusive\_occurrence}, \code{metered\_allocation}, \code{waitlist\_entry}, \code{candidate}, \code{approval}, \code{loan} & \module{Inventory}, \module{Members}, \module{Settings}, \module{Notifications} \\
+\module{Ledger} (\ref{mod:ledger}) & Everything about credits: Accounts, append-only Transactions, Statements, affordability, rollover, and the pure \code{Pricing} & \code{account}, \code{transaction}, \code{held\_credit}, \code{period\_close} & \module{Settings}, \module{Members}, \module{Notifications} \\
+\module{Requests} (\ref{mod:requests}) & The Request from Draft to a final state: Drafts, Suggestions, submission, the state machine driven by \code{RequestLifecycleService}, history, Release & \code{request}, \code{request\_line}, \code{suggestion}, \code{request\_event} & \module{Allocation}, \module{Ledger}, \module{Inventory}, \module{Members}, \module{Settings}, \module{Notifications} \\
+\module{Dashboard} (\ref{mod:dashboard}) & Showback figures scoped to the viewer's roles & no tables; views \code{v\_type\_hours}, \code{v\_team\_credits}, \code{v\_waiting} & read-only SQL; \module{Members} \\
+\module{Jobs} (\ref{mod:jobs}) & \code{DueWorkJob} every 60~seconds and \code{PeriodRolloverJob} daily and at start-up; the \code{Clock} bean & nothing & \module{Requests}, \module{Ledger}, \module{Settings} \\
+Web client (\ref{mod:web}) & The React single-page application, one route per screen of the SRS; never computes a Quote & nothing & the REST API only (\req{CO-api}) \\
+\end{longtable}
+}
+
+\begin{figure}[htbp]\centering\includegraphics[width=0.5\textwidth]{modules.pdf}\caption[Modules and their dependencies (UML component diagram)]{Modules and their dependencies (UML component diagram). A solid arrow is a call to the target's application services. The ball on \module{Allocation} and the socket on \module{Inventory} show the port \code{ReductionGuard}, declared by Inventory and implemented by Allocation. The dashed arrows labeled read-only are \module{Dashboard}'s SQL access through views, the one exception to calling services.}\label{fig:modules}\end{figure}
+
+\subsection{Deployment}
+
+\figref{fig:deployment} shows the one deployment of Release~1. A single on-premises server runs one Docker container holding the Spring Boot executable jar. Its embedded Tomcat serves the REST API under \code{/api} and the compiled single-page application from the same origin, so the browser needs no cross-origin access, and the scheduled jobs run as threads of the same process (\req{CO-jobs}). One artifact holds the whole system (\req{CO-stack}). The process talks to PostgreSQL~16 over JDBC. At start-up Flyway applies the SQL migrations and Hibernate validates the schema against the entities (\req{SI-db}). An optional nginx reverse proxy terminates TLS and redirects plain HTTP to HTTPS (\req{CI-https}). There is exactly one instance: the SRS sets no high-availability requirement (\req{LI-company}, \req{QA-available}), and the two jobs assume no second copy of themselves (Section~\ref{sec:evo}).
+
+\begin{figure}[htbp]\centering\includegraphics[width=\textwidth,height=0.27\textheight,keepaspectratio]{deployment.pdf}\caption[Deployment (UML deployment diagram)]{Deployment (UML deployment diagram). One server runs one container holding the Spring Boot jar; embedded Tomcat serves \code{/api} and the single-page application, and the scheduled jobs run in the same process. PostgreSQL~16 holds all data. The nginx node is optional and only terminates TLS.}\label{fig:deployment}\end{figure}
+
+\subsection{How the Quality Attributes Are Met}
+
+Each keyed requirement that shapes the architecture is met by a named mechanism, detailed in the section given; the remaining identifiers are traced in Appendix~\ref{app:trace}.
+
+{\small\renewcommand{\arraystretch}{1.06}
+\begin{tabularx}{\textwidth}{@{}L{2.0cm}YL{2.4cm}@{}}
+\toprule
+\textbf{Requirement} & \textbf{Mechanism} & \textbf{Detailed in} \\
+\midrule
+\req{QA-correct} & Exclusive: a partial exclusion constraint on \code{exclusive\_occurrence} over (Resource, time range) for Held and Allocated rows. Metered: lock each touched \code{resource\_type} row in ascending id order, then check every hour against Pool Capacity and Quota, at READ COMMITTED. Loans: an exclusion constraint on \code{loan}. & \ref{sec:runtime}, \ref{sec:data}, \adr{0006} \\
+\req{QA-atomic}, \req{CO-tx} & One \code{@Transactional} method of \code{RequestLifecycleService} commits the Holds and posts the Charges and Earnings, by direct calls. & \ref{mod:requests}, \ref{sec:runtime} \\
+\req{QA-audit} & A \code{request\_event} row for every state change, in the same transaction; \code{setting\_change}; \code{transaction} is append-only, with no UPDATE or DELETE grant. & \ref{sec:cross}, \ref{sec:data} \\
+\req{QA-extensible}, \req{CO-plugin} & A Resource Type is a row; a new Allocation Class is one new \code{Allocator} bean found by \code{AllocatorRegistry}, with the optional \code{Waitlistable}, \code{Bumpable}, and \code{ApprovalDriven}. & \ref{mod:allocation}, \adr{0007} \\
+\req{PE-jobs}, \req{CO-jobs} & \code{DueWorkJob} every 60~s against a five-minute bound; \code{PeriodRolloverJob} at 00:05 and at start-up against a fifteen-minute bound; Spring \code{@Scheduled} methods inside the server process. & \ref{mod:jobs}, \ref{sec:runtime} \\
+\req{SE-roles} & Roles as granted authorities, checked by \code{@PreAuthorize} on application services: one path for the client and the API. & \ref{sec:cross} \\
+\req{SE-visibility} & The caller's scope (own record, Team, owned Resources, or the whole company) is a SQL condition of every query. & \ref{sec:cross} \\
+\bottomrule
+\end{tabularx}
+}
+
+\subsection{Decisions and Alternatives}
+
+The decisions D-A to D-C above and the ones the module specifications and the runtime view state were each weighed against alternatives, which the longer edition tabulates; decisions that are hard to reverse have a record in \code{docs/adr/}, and the first four records date from the SRS.
+
+\textbf{Architecture decision records} (\code{docs/adr/} in the project repository):
+\phantomsection\label{adr:0001}\textbf{ADR-0001} Holds bounded by the Objection Window (lines are Required or Optional; a Pending Request places uncharged Holds that never outlive the Objection Window);
+\phantomsection\label{adr:0002}\textbf{ADR-0002} a two-part Account (granted credits expire at the end of the Period, earned credits carry over; a Charge draws granted credits first and records the split);
+\phantomsection\label{adr:0003}\textbf{ADR-0003} Priority bought with a premium, not granted by rank (a Priority line may Bump a standard Exclusive line outside the bump cutoff and is never Bumped; the Bumped line gets a full Refund);
+\phantomsection\label{adr:0004}\textbf{ADR-0004} Matched lines cost nothing (lending earns a flat Day Rate per person-day, posted when the Loan forms);
+\phantomsection\label{adr:0005}\textbf{ADR-0005} one process, nine modules, direct calls (this section's dependency rule and layers);
+\phantomsection\label{adr:0006}\textbf{ADR-0006} allocation correctness enforced in PostgreSQL, and tests run on PostgreSQL;
+\phantomsection\label{adr:0007}\textbf{ADR-0007} one Allocator interface plus optional capability interfaces found through the registry.

@@ -1,0 +1,115 @@
+% 04c-modules-edge.tex: OpenBench Software Design Document, short edition. Condensed from sections/04c-modules-edge.tex on 2026-10-05; the signatures are identical to the full edition.
+% Top layer of the module specifications: Dashboard, Jobs, Web client.
+
+% =====================================================================================================
+\modulespec{Dashboard}{dashboard}{dashboard}
+
+\field{Purpose}
+Dashboard answers the showback questions: how much of each Resource Type was used and how much stood idle, how many lines wait, and what each Team was granted, charged, and earned. It is the one read-only reporting module the dependency rule allows (Section~\ref{sec:arch}): it reads other modules' tables through SQL views, writes nothing, and limits every answer to the caller's scope.
+
+\field{Provided interface}
+\begin{lstlisting}[language=Java]
+// dashboard (read-only)
+interface DashboardQueries {
+  Utilization utilization(ResourceTypeId type, PeriodId period);   // allocated hours / available hours; idle = available - allocated
+  Idle idleNextDays(ResourceTypeId type, int days); int waitingCount(ResourceTypeId type);
+  TeamCredits credits(TeamId team, PeriodId period);        // Grants, Charges, Earnings, Refunds, expired, Balance, Available
+  PersonDays personDays(TeamId team, PeriodId period);      // lent and borrowed
+}
+\end{lstlisting}
+
+\field{Required interfaces}
+Read-only SQL through the views below. \module{Members}: \code{MemberService.profile}.
+
+\field{Data owned}
+No tables; the views \code{v\_type\_hours}, \code{v\_team\_credits}, and \code{v\_waiting}.
+
+\field{Invariants}
+\begin{itemize}
+\item Dashboard writes nothing. Every method is \code{@Transactional(readOnly = true)}, which the PostgreSQL driver runs as a \code{READ ONLY} transaction, so an accidental write fails in the database; the ArchUnit test also forbids saving repositories here.
+\item Figures include everything committed before the query began: plain views are read at request time and nothing is cached. A Hold is not utilization.
+\end{itemize}
+
+\field{Failure behavior}
+{\sloppy An unknown type or Period raises \code{NotFoundException}, and so does an object outside the caller's scope (404). The one \code{RuleViolation}, \code{CLASS\_MISMATCH}, refuses utilization of a Matched type.\par}
+
+% =====================================================================================================
+\modulespec{Jobs}{jobs}{jobs}
+
+\field{Purpose}
+Jobs runs the timed work inside the server process: lapsing Objection Windows, removing waiting lines whose window has started, and rolling a Period over. It decides when work is due and calls the module that owns it; it never decides what the work does.
+
+\field{Provided interface}
+Jobs has no callers; its interface is its schedule.
+\begin{lstlisting}[language=Java]
+class DueWorkJob { @Scheduled(fixedDelay = 60_000) void run(); }   // lapsedWindows(now) -> onWindowLapse; expireWaitingLines
+class PeriodRolloverJob { @Scheduled(cron = "0 5 0 * * *") void run(); @EventListener(ApplicationReadyEvent) void catchUp(); }
+\end{lstlisting}
+Both jobs run under a system security context, so \code{@PreAuthorize} admits them and every audit row they cause names the system as actor.
+
+\field{Required interfaces}
+\module{Requests}, through \code{RequestLifecycleService}: \code{lapsedWindows}, \code{onWindowLapse}, and \code{expireWaitingLines}. \module{Ledger}: \code{LedgerService.rollover}. \module{Settings}: \code{SettingsService.current}.
+
+\field{Data owned}
+None.
+
+\field{Invariants}
+\begin{itemize}
+\item Jobs are idempotent: running one twice for the same due item has the effect of running it once. Each call re-checks state in its own transaction, so a Request with no unescalated Outstanding approval is skipped, and \code{rollover} ignores a boundary it has already recorded.
+\item Each Request is its own transaction, so one failure never blocks the others. No job acts before the due time read from the \code{Clock}.
+\item One instance runs the jobs; a second would need a job lock table (Section~\ref{sec:evo}).
+\end{itemize}
+
+\field{Failure behavior}
+{\sloppy Jobs defines no \code{RuleViolation} codes. When the call for one Request throws, a concurrency failure included, the error is logged with the Request id and the run moves on; the Request still has a lapsed window and an unescalated Outstanding approval, so the next run retries it.\par}
+
+% =====================================================================================================
+\modulespec{Web client}{web}{web}
+
+\field{Purpose}
+The Web client is the single-page browser application through which every role works; its only interface to the system is the REST API, and it holds no business rule.
+
+\field{Provided interface}
+The client's interface is its routes. Each screen calls the API groups of the modules named (endpoints in Section~\ref{sec:api}); the roles are those the server enforces, which the client uses only to choose menu items.
+
+{\footnotesize\setlength{\tabcolsep}{4pt}\renewcommand{\arraystretch}{1.1}
+\begin{longtable}{@{}L{2.2cm}L{3.6cm}L{\dimexpr\textwidth-8.8cm-6\tabcolsep\relax}L{3.0cm}@{}}
+\toprule
+\textbf{Screen} & \textbf{Route} & \textbf{API groups} & \textbf{Roles} \\
+\midrule
+\endfirsthead
+\toprule
+\textbf{Screen} & \textbf{Route} & \textbf{API groups} & \textbf{Roles} \\
+\midrule
+\endhead
+\bottomrule
+\endlastfoot
+Requests & \code{/requests} & \module{Requests} & Manager; Planner reads \\
+Draft Request & \code{/requests/:id} (Draft) & \module{Requests} (Draft view, line edits, split, submit, withdraw, Suggestions), \module{Inventory} (types) & Manager \\
+Request detail & \code{/requests/:id} & \module{Requests} (detail, Release, end Loan early), \module{Allocation} (Waitlist position) & Manager; Planner reads \\
+Suggestions & \code{/suggestions} & \module{Requests} (Suggestions) & Member; Manager decides \\
+Shortlist & \code{/shortlist/:lineId} & \module{Requests} (\code{shortlist}, \code{selectCandidates}) & requesting Manager \\
+Approvals & \code{/approvals} & \module{Allocation} (outstanding), \module{Requests} (\code{decideApproval}) & lending Manager \\
+Inventory & \code{/inventory}, \code{/inventory/resources/:id} & \module{Inventory}, \module{Allocation} (Holds timeline, free for a window) & everyone; Resource Owner edits own \\
+Dashboard & \code{/dashboard} & \module{Dashboard} & by role \\
+Statement & \code{/statement} & \module{Ledger} (Statement; mid-Period Grant) & Manager (own); Planner \\
+Settings & \code{/settings} & \module{Settings}; escalated Requests from \module{Requests} & Capacity Planner \\
+Escalations & \code{/escalations} & \module{Requests} (\code{escalations}, \code{decideApproval}) & Capacity Planner \\
+Administration & \code{/admin/members}, \code{/admin/teams}, \code{/admin/skills}, \code{/admin/types} & \module{Members}, \module{Inventory} (Resource Types) & Administrator \\
+Profile & \code{/profile}, \code{/profile/:memberId} & \module{Members}, \module{Allocation} (Loans) & self; own Manager \\
+\end{longtable}}
+
+\field{Required interfaces}
+The REST API only (Section~\ref{sec:api}), described by the OpenAPI document at \code{/api/docs}.
+
+\field{Data owned}
+None on the server; in the browser, the in-memory query cache (cleared on sign-out) and the \code{HttpOnly} session cookie.
+
+\field{Invariants}
+\begin{itemize}
+\item The Web client never computes a Quote, a Balance, eligibility, or a state transition; it shows what the API returns, which is already scoped to the signed-in Member.
+\item Every write is an API call carrying the CSRF header; hiding a menu item is never the only guard.
+\end{itemize}
+
+\field{Failure behavior}
+{\sloppy A \code{RuleViolation} (409 or 422) is shown at the field or line concerned, worded from a message table keyed by \code{code}. A 403 shows the ``not allowed'' page, a 401 returns to sign-in, a 503 asks the user to try again.\par}

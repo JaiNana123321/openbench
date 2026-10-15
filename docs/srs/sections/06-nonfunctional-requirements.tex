@@ -1,0 +1,84 @@
+\section{Other Nonfunctional Requirements}\label{sec:nfr}
+
+\subsection{Performance Requirements}
+
+\pe{scale}{The system shall support 500 Members, 50 Teams, 200 Resources, and 10,000 Requests per year without violating \peref{page} or \peref{shortlist}.}
+\pe{page}{Any page shall be served in at most 2~s at the 95th percentile with 50 concurrent users, at the scale of \peref{scale}.}
+\pe{shortlist}{Building a Shortlist against 500 Members shall take at most 3~s.}
+\pe{jobs}{Objection Window lapse, Hold expiry, and waitlist expiry shall take effect within 5~min of their due time.}
+\pe{rollover}{Period rollover (expiring granted credits and posting the new Grants) shall take effect within 15~min of the Period boundary.}
+
+\subsection{Safety Requirements}
+
+None. The system controls no physical equipment and its records cannot cause injury or damage; an incorrect allocation is corrected by a Release or a Bump.
+
+\subsection{Security Requirements}
+
+\se{roles}{The server shall enforce the signed-in Member's roles on every action, whether it arrives from the user interface or directly through the API; the user interface hiding a control shall never be the only protection.}
+\se{password}{Passwords shall be stored only as salted hashes produced by an adaptive algorithm such as bcrypt; no password shall be logged or shown.}
+\se{https}{All communication shall be encrypted in transit (\ciref{https}).}
+\se{data}{The system shall store no personal data beyond name, email address, Team, skills, and availability.}
+\se{visibility}{A Member shall see only what their roles allow: their own profile and Loans; as Manager, their Team's roster, Requests, and Statements and the Shortlists of their own Requests; as Capacity Planner, every Team's; as Resource Owner, the timelines of their Resources. Statements of other Teams shall never be visible to a Manager.}
+\se{session}{Sessions shall expire after 12 hours of inactivity and every authentication attempt, success or failure, shall be logged with timestamp and username.}
+
+\subsection{Software Quality Attributes}
+
+\qa{correct}{\textbf{Correctness.} Under concurrent submissions the system shall never double-book an Exclusive instance for overlapping windows and shall never allocate a Metered Resource Type beyond its Pool Capacity in any hour. Conflict detection and allocation shall be serialized per Resource Type in the database.}
+\qa{atomic}{\textbf{Atomicity.} Holds shall commit and the corresponding Charges and Earnings shall post in one transaction or not at all; a failure part-way shall leave no Hold committed and no Transaction posted (\BR{commit-atomic}).}
+\qa{audit}{\textbf{Auditability.} Ledger Transactions shall be append-only, and every Request and line state change shall record actor, change, and timestamp (\BR{audit}).}
+\qa{available}{\textbf{Availability.} The system shall be available during business hours; planned maintenance shall be scheduled outside them. There is no high-availability requirement: a single server with a nightly database backup is sufficient for Release~1.}
+\qa{usable}{\textbf{Usability.} An untrained Manager shall be able to draft and submit a three-line Request in under 5~min. This shall be tested with at least 3 people from outside the team before the final demonstration, and the results recorded in the inspection report.}
+\qa{browsers}{\textbf{Portability.} The user interface shall work in the current release of Chrome, Firefox, Safari, and Edge; no mobile layout is required.}
+\qa{extensible}{\textbf{Extensibility.} Adding a Resource Type shall require no code. Adding an Allocation Class shall require implementing one allocator interface and no change to the existing allocators, the Request lifecycle, or the Ledger.}
+\qa{retention}{\textbf{Data retention.} Requests, their state histories, Suggestions, and Transactions shall be kept for at least 2 years; nothing is purged in Release~1.}
+\qa{testable}{\textbf{Testability.} Every business rule in Section~\ref{sec:rules} shall be covered by at least one automated test that runs against PostgreSQL in a container started by the test suite, so that the allocation and Ledger rules can be checked on every build.}
+
+\subsection{Business Rules}\label{sec:rules}
+
+The rules below govern behavior across features. Each is referenced by number from the requirements and use cases that depend on it.
+
+\brgroup{Requests and lines}
+\br{managers-submit}{Only a Manager creates, submits, edits, or withdraws a Request, and only on behalf of their own Team. Members express needs as Suggestions to their own Manager.}
+\br{required-optional}{Every Request Line is Required (default) or Optional. A Request is Allocated only when every Required line is satisfied. Optional lines allocate if they can, never block the outcome, and are dropped rather than waitlisted when they cannot.}
+\br{line-atomic}{A Request Line is atomic in every Allocation Class: it is satisfied with its full quantity, for its full window, and for every occurrence of a recurrence, or not at all. A Manager who will accept less splits the line.}
+\br{resource-type}{Every Resource has exactly one Resource Type; every Resource Type has exactly one Allocation Class; every Request Line takes its Allocation Class from its Resource Type.}
+\br{named-person}{A Matched line either lists skills with a quantity, or names one Person with quantity one. A named Person is checked only for availability and for a Loan overlapping the window; both forms need the lending Manager's approval.}
+
+\brgroup{Holds and the Objection Window}
+\br{hold-bounded}{A Hold is a tentative, uncharged allocation placed while a Request's Matched lines await approval. It blocks other Requests as an allocation does. It lives at most until the Request's Objection Window lapses, and it releases whenever the Request leaves Pending without being Allocated. No Hold is placed for a Request whose Objection Window has lapsed.}
+\br{commit-atomic}{When a Request becomes Allocated, all of its Holds commit and all of its Charges and Earnings post in one transaction. Nothing posts while a Request is Pending or Waiting.}
+\br{objection-window}{The Objection Window is the period, set by the Capacity Planner (example default two working days), that lending Managers have to approve or refuse. It starts when the Request first enters Pending, belongs to the Request, and does not restart when a Candidate is replaced. When it lapses, outstanding approvals escalate to the Capacity Planner, who decides on the silent Manager's behalf, and every later approval on that Request goes to the Capacity Planner directly.}
+\br{audit}{Every change of a Request's or line's state records the actor, the change, and the timestamp. Timed changes record the system as actor.}
+
+\brgroup{Matched lines}
+\br{matched-free}{Matched lines have no Unit Price and cost the requesting Team nothing.}
+\br{day-rate}{A Loan earns the lending Team the Day Rate for every person-day of the Loan, the same for every Person regardless of skill, posted when the Loan forms. If the Loan ends early the Earning is corrected to the days actually lent; no Refund Schedule applies.}
+\br{own-team}{A Manager cannot approve lending to their own Team, and Members of the requesting Team are never Candidates for it. Work inside a Team is not a Loan.}
+\br{shortlist}{A Candidate for a skill-based line holds every listed skill, is available for the whole window, and has no Loan overlapping any day of it: a Person is in at most one Loan at a time. Availability ranges are the Member's own and a Loan never changes them; a Loan that ends early frees the Person from the day after its new last day. The Shortlist is ordered by fewest person-days lent in the current Period, counting every formed Loan, ties by name. The requesting Manager selects; the system never selects automatically. Each selected Candidate needs one approval from their own Manager.}
+\br{person-notified}{A Person is notified when selected and when their Loan forms, and cannot decline in Release~1.}
+
+\brgroup{Exclusive lines, Priority, and the waitlist}
+\br{priority-premium}{A Priority line is an Exclusive line whose Quote is multiplied by the priority premium set by the Capacity Planner (example default 2$\times$). A Priority line can Bump standard lines, cannot be Bumped, and never Bumps another Priority line; among Priority lines the earlier submission wins.}
+\br{bump-cutoff}{No Bump happens inside the bump cutoff, set per Exclusive Resource Type by the Capacity Planner (example default 24 hours), before the Bumped line's window or occurrence starts.}
+\br{bumped-line}{A Bumped line goes to the head of the waitlist for its Resource Type and window, its Manager is notified, and its Charge is refunded in full because the Team did nothing wrong. If it was a Required line of an Allocated Request, that Request returns to Waiting while its other lines stay allocated.}
+\br{waitlist-order}{Waitlists exist per Resource Type and window. Required lines that cannot be satisfied join them; Optional lines never do. Order is Priority lines first, then submission time of the Request; a Bumped line goes to the head. A waiting line expires when its window start passes; its Request stays Waiting until edited or withdrawn.}
+\br{priority-exclusive-only}{Priority lines are offered for Exclusive lines only in Release~1. Extending them to Metered lines is the Stretch item ``service tiers and preemption.''}
+
+\brgroup{Metered lines}
+\br{pool-capacity}{In every hour of a Metered line's window, the units already allocated plus the units on Hold plus the line's units may not exceed the Resource Type's Pool Capacity.}
+\br{quota}{A Quota is an optional per-Team cap on concurrent units of one Metered Resource Type, set by the Capacity Planner. Where set, the Team's allocated plus held plus requested units may not exceed it in any hour. Unset means uncapped.}
+
+\brgroup{Credits and prices}
+\br{price-formula}{The Quote of an Exclusive or Metered line is the sum over each hour of each occurrence of quantity $\times$ Unit Price $\times$ Price Band multiplier, times the priority premium for a Priority line. For a Metered line the quantity is its units; for an Exclusive line its instances.}
+\br{price-bands}{Price Bands are defined per Exclusive and Metered Resource Type by the Capacity Planner as non-overlapping weekday and time-of-day windows with a multiplier; hours in no band have multiplier 1.0 (example defaults: weekdays 09:00--17:00 $\times$1.5, all other hours $\times$0.5). The Day Rate is never banded.}
+\br{quote-locked}{The Quote is shown while drafting and locked at submission. The Charge that posts equals the locked Quote, and held credits equal the locked Quote. Price changes affect only lines not yet submitted.}
+\br{refund-schedule}{On Release, the Refund is the Charge for the released part times a fraction from the Resource Type's Refund Schedule, a step function of the lead time to the released part's start (example default: 75\% at seven or more days ahead, 25\% at less than seven days ahead, 0\% after the start). No step is 100\% or more.}
+\br{spend-order}{A Charge draws granted credits first, then earned credits. A Refund returns credits to the part they were drawn from, in the same proportions.}
+\br{grant-expiry}{Granted credits expire at the end of the Period in which they were granted. Earned credits carry over indefinitely. At rollover the system sets granted credits to zero, records the expired amount on the Statement, and posts the new Grant.}
+\br{affordability}{Available Balance equals granted plus earned minus held credits. A Request can be submitted only if the sum of the locked Quotes of its Required lines does not exceed the Team's Available Balance at submission. Optional lines that no longer fit at allocation are dropped.}
+\br{no-negative}{No Charge may take a Team's Balance below zero. There is no borrowing and no transfer of credits between Teams. The only Transaction that may take a Balance below zero is an Earning correction after a Loan ends early; until a Grant or Earning restores it, that Team can submit no Request with a Required Exclusive or Metered line.}
+\br{transactions}{The Ledger holds exactly four kinds of Transaction: Grant, Charge, Earning, and Refund. Transactions are append-only; a correction is a new Transaction that references the one it corrects.}
+\br{period}{The Period is a fixed calendar interval set by the Capacity Planner (example default one calendar month). Grants are issued at its start and expire at its end.}
+
+\brgroup{Roles}
+\br{roles}{Roles are enforced on the server for every action. The Capacity Planner and the Administrator are distinct roles that one Member may hold together; the Administrator sets no policy, the Capacity Planner administers no users, and a Resource Owner never approves an allocation.}

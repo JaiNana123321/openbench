@@ -1,0 +1,118 @@
+@startuml data-model
+' Figure: data model (Appendix B). Attributes are the ones the requirements name; the data dictionary gives types.
+' Rendered on a landscape page; keep it wider than tall.
+left to right direction
+skinparam shadowing false
+skinparam defaultFontName Helvetica
+skinparam defaultFontSize 12
+skinparam classAttributeIconSize 0
+skinparam nodesep 6
+skinparam ranksep 14
+skinparam class {
+  BackgroundColor #F4F6FA
+  BorderColor #223
+  HeaderBackgroundColor #DDE3EE
+}
+hide circle
+hide methods
+class Team {
+  name
+}
+class Member {
+  name
+  email
+  skills
+  availability
+  roles
+}
+class "Resource Type" as RT {
+  name
+  Allocation Class
+  attributes
+  Unit Price
+  bump cutoff
+  Refund Schedule
+}
+class Resource {
+  name
+  units (Metered)
+}
+class "Price Band" as PB {
+  weekdays
+  start, end
+  multiplier
+}
+class Quota {
+  max concurrent units
+}
+class Request {
+  state
+  submitted at
+  Objection Window end
+}
+class "Request Line" as RL {
+  Allocation Class
+  quantity
+  window, recurrence
+  Required or Optional
+  Priority line?
+  locked Quote
+  state
+}
+class Suggestion {
+  original ask
+  state
+}
+class Candidate {
+  decision
+}
+class Hold {
+  placed at
+  expires at
+}
+class Loan {
+  start, end
+  days lent
+}
+class "Waitlist entry" as WL {
+  position
+  joined at
+}
+class Account {
+  granted
+  earned
+  held
+}
+class Transaction {
+  kind
+  amount
+  posted at
+}
+class Period {
+  start, end
+  Day Rate
+}
+Team "1" -- "1..*" Member : has
+Team "1" -- "1" Member : led by
+Team "1" -- "1" Account
+Team "1" -- "*" Request : owns
+Team "1" -- "*" Quota
+Member "1" -- "*" Suggestion : proposes
+Member "1" -- "*" Resource : owns records of
+Member "1" -- "*" Candidate
+Member "1" -- "*" Loan : Person
+RT "1" -- "*" Resource
+RT "1" -- "*" PB
+RT "1" -- "*" Quota
+RT "1" -- "*" RL
+Request "1" *-- "1..*" RL
+RL "0..1" -- "*" Suggestion : accepted into
+RL "1" -- "*" Candidate : Shortlist
+RL "1" -- "0..1" Hold
+RL "1" -- "*" Loan
+RL "1" -- "0..1" WL
+RL "*" -- "0..1" Resource : instance
+Account "1" -- "*" Transaction
+Transaction "*" -- "0..1" RL
+Period "1" -- "*" Transaction
+@enduml

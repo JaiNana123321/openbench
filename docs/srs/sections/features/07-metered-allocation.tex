@@ -1,0 +1,23 @@
+\subsection{Metered Allocation}\label{feat:metered}
+
+\subsubsection{Description and Priority}
+A Metered line asks for a number of units held concurrently over a window, such as four GPUs for two weeks; it is not a bag of hours. A line is satisfiable when, in every hour of its window, the units already allocated or held plus the new units do not exceed the Resource Type's Pool Capacity, and the Team's concurrent units stay within its Quota if one is set. Credits govern affordability; the Quota prevents one credit-rich Team from taking a whole pool. Waitlist rules are the same as for Exclusive lines. Priority lines are Exclusive-only in Release~1; extending them to Metered pools is the Stretch item ``service tiers and preemption.'' This feature realizes \FE{metered} and is exercised by \UC{draft} and \UC{waitlist}. \priority{High; the Stretch requirements are Low.}
+
+\subsubsection{Stimulus/Response Sequences}
+\begin{itemize}
+  \item \textbf{Stimulus:} A Request with a Metered line is evaluated. \textbf{Response:} The system checks Pool Capacity and Quota for every hour of the window; the line is held or allocated, or a Required line joins the waitlist.
+  \item \textbf{Stimulus:} A Resource Owner reduces Pool Capacity. \textbf{Response:} The system refuses a reduction below what is allocated or held in any future hour (\FR{Inventory.Pool.Reduce}).
+\end{itemize}
+
+\subsubsection{Functional Requirements}
+\fr{Metered.Line.Form}{A Metered line shall name a Resource Type, a number of units to hold concurrently, and a window; the system shall not offer a specific Resource or a Priority mark on a Metered line.}
+\fr{Metered.Pool.Check}{A Metered line shall be satisfiable only if, for every hour of its window, the units allocated plus the units on Hold for that Resource Type plus the line's units do not exceed the Pool Capacity (\BR{pool-capacity}).}
+\fr{Metered.Quota.Check}{If the Capacity Planner has set a Quota for the requesting Team on the Resource Type, a Metered line shall be satisfiable only if, for every hour of its window, the Team's units allocated plus held plus the line's units do not exceed the Quota (\BR{quota}). With no Quota set there shall be no per-Team cap.}
+\fr{Metered.Quota.Show}{While drafting, the system shall show the Team's Quota for the Resource Type, if any, and the Team's peak concurrent units already allocated or held inside the line's window.}
+\fr{Metered.Quote}{The Quote of a Metered line shall be the sum over the hours of its window of units times Unit Price times the Price Band multiplier for that hour (\BR{price-formula}).}
+\fr{Metered.Waitlist}{A Required Metered line that is unsatisfiable shall join the waitlist for its Resource Type and window under the rules of \FR{Exclusive.Waitlist.Join} to \FR{Exclusive.Waitlist.View}, and shall be satisfied from the waitlist when its units fit in every hour of its window.}
+\fr{Metered.Atomic}{A Metered line shall be satisfied with its full number of units for its full window or not at all (\BR{line-atomic}).}
+\fr[Stretch]{Metered.Tier.Define}{The system shall let the Capacity Planner define service tiers for a Metered Resource Type, each with a premium multiple on the Unit Price, so that a Manager can mark a Metered line with a tier in the same way as a Priority line.}
+\fr[Stretch]{Metered.Tier.Bump}{A line of a higher tier shall be able to Bump units of lower-tier lines under the rules of \FR{Exclusive.Priority.Bump} to \FR{Exclusive.Bump.Effect}, the bump cutoff included; the Bumped line shall receive a full Refund and the head of the waitlist.}
+\fr[Stretch]{Metered.Usage.Record}{The system shall let a Resource Owner record, at the end of a Period, the units actually consumed by each Metered allocation of that Period.}
+\fr[Stretch]{Metered.Usage.Compare}{The dashboard shall show requested versus used units per Team and Resource Type per Period. Recorded usage shall have no effect on the Ledger.}

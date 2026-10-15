@@ -1,0 +1,24 @@
+\section{Traceability}\label{app:trace}
+
+Each feature maps to its Section~\ref{sec:features} subsection, whose requirements share its identifier prefix, and to the use cases of Appendix~\ref{app:usecases} that exercise it.
+
+{\footnotesize\renewcommand{\arraystretch}{1.05}\setlength{\tabcolsep}{4pt}
+\begin{tabularx}{\textwidth}{@{}L{5.2cm}Y@{}}
+\toprule
+\textbf{Feature (section)} & \textbf{Use cases} \\
+\midrule
+\FE{inventory} Inventory (\ref{feat:inventory}) & \UC{define-type}, \UC{inventory} \\
+\FE{profiles} Profiles (\ref{feat:profiles}) & \UC{shortlist} \\
+\FE{suggestions} Suggestions (\ref{feat:suggestions}) & \UC{suggest}, \UC{draft} \\
+\FE{draft} Draft and Submit (\ref{feat:draft}) & \UC{draft}, \UC{bump} \\
+\FE{matched} Matched (\ref{feat:matched}) & \UC{shortlist}, \UC{approve}, \UC{escalate} \\
+\FE{exclusive} Exclusive (\ref{feat:exclusive}) & \UC{draft}, \UC{bump}, \UC{waitlist} \\
+\FE{metered} Metered (\ref{feat:metered}) & \UC{draft}, \UC{waitlist} \\
+\FE{lifecycle} Lifecycle (\ref{feat:lifecycle}) & \UC{draft}, \UC{approve}, \UC{escalate}, \UC{waitlist} \\
+\FE{release} Release (\ref{feat:release}) & \UC{release}, \UC{waitlist} \\
+\FE{ledger} Ledger (\ref{feat:ledger}) & \UC{period}, \UC{dashboard} \\
+\FE{dashboard} Dashboard (\ref{feat:dashboard}) & \UC{dashboard} \\
+\FE{admin} Administration (\ref{feat:admin}) & \UC{define-type}, \UC{period}, \UC{escalate} \\
+\bottomrule
+\end{tabularx}
+}

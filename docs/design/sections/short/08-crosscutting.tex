@@ -1,0 +1,59 @@
+% 08-crosscutting.tex (short edition) : OpenBench Software Design Document. Condensed from sections/08-crosscutting.tex on 2026-10-05.
+% No \section command here: this file continues the merged section "Interfaces and Crosscutting Concerns" (labels sec:api and
+% sec:cross) that sections/short/07-api.tex opens, so the subsections below are numbered inside it.
+
+\subsection{Authorization and Data Scoping}
+
+Every request passes two checks: a role check and a scope (\req{SE-roles}, \req{SE-visibility}).
+
+\textbf{Roles.} Each \code{member\_role} row becomes a Spring Security granted authority, \code{MANAGER}, \code{RESOURCE\_OWNER}, \code{PLANNER}, or \code{ADMIN}, and every signed-in Member also holds \code{MEMBER}. Each application-service method a controller calls carries \code{@PreAuthorize} with the roles of its endpoint group (Section~\ref{sec:api}), so the check runs on the server in the same place whether the call comes from a screen or a script (\req{CO-auth}, \req{CO-api}); an ArchUnit rule fails the build if a controller reaches a service method without one.
+
+\textbf{Scope.} Which rows a role may see is decided inside the query, by the caller's Team, own id, or owned Resources, never by loading rows and filtering them afterward. The controller passes the caller as an \code{Actor} (Member id, Team id, roles), and repositories take its fields as parameters. A row outside the scope is not found, so the caller gets 404 and learns nothing about it.
+
+\begin{lstlisting}[language=Java]
+// RequestRepository: the scope is part of the query
+@Query("select r from Request r where r.id = :id and (r.teamId = :team or :planner = true)")
+Optional<Request> findVisible(RequestId id, TeamId team, boolean planner);
+// RequestLifecycleService.detail
+Request r = requests.findVisible(id, actor.teamId(), actor.has(PLANNER)).orElseThrow(NotFoundException::new);
+\end{lstlisting}
+
+\subsection{Audit Trail}
+
+Three records keep the history, each written by its owning module in the same transaction as the change it records, so a change and its record commit together or not at all (\req{QA-audit}, \req{Lifecycle.States}). \code{RequestLifecycleService.record} writes a \code{request\_event} row (Request, line, from-state, to-state, actor, time, note) for every state change of a Request or a Request Line. \code{SettingsService.update} writes a \code{setting\_change} row (key, old value, new value, actor, time) for every Capacity Planner change (\req{Admin.Member.Create}, \req{Planner.Settings}). Rows of \code{transaction} are append-only (\req{Ledger.Transaction.Kinds}): the application's database role may insert and select them but not update or delete them, so a correction is a new row naming the one it corrects.
+
+\subsection{Notifications}
+
+\textbf{Written in the caller's transaction.} The module that causes the event calls \code{Notifier.notify(to, kind, text, link)} inside its own transaction, and \code{Notifier} inserts the row and hands it to each \code{Delivery}; \code{InAppDelivery}, the only one in Release~1, does nothing more, so a rolled-back action leaves no notification and nothing is sent after commit (\req{CI-inapp}). The client polls GET \path{/api/notifications} every 30 seconds and shows the unread count; \code{link} is the client route to open, such as \path{/requests/42}. Recipients are resolved through \module{Members}: a Team's Manager, or every Member holding \code{PLANNER}.
+
+\subsection{Error Taxonomy and Validation}
+
+Four exception classes in \code{common} carry every refusal, and one \code{@RestControllerAdvice} in \code{common} turns them into the problem details of Table~\ref{tab:api-errors}.
+
+\begin{itemize}
+  \item \code{NotFoundException}: the object does not exist or lies outside the caller's scope (404).
+  \item \code{ForbiddenException}: the caller sees the object but may not act on it, such as a lending Manager ending a Loan only the borrowing Manager may end (403).
+  \item \code{RuleViolation(code, message)}: a business rule refused the action. Codes that describe the object's current state (\code{WRONG\_STATE}, \code{ALREADY\_DECIDED}, \code{WINDOW\_LAPSED}, \code{SUGGESTION\_CLOSED}, \code{NOT\_ALLOCATED}, \code{PERIOD\_STARTED}) map to 409, all others to 422.
+  \item \code{ConcurrencyRetryException}: an allocation transaction failed twice on a deadlock or lock timeout, which Spring reports as \code{PessimisticLocking\allowbreak FailureException} (503).
+\end{itemize}
+
+\textbf{Where validation happens.} At the edge, bean validation (\code{@Valid} on request bodies) checks shape only: presence, types, ranges such as a positive quantity, formats, an end after a start; it reads no data. The application services and domain objects check every business rule: a window in the future, a type not retired, affordability, the Candidate count and eligibility, capacity, the allowed transitions.
+
+\subsection{Configuration and Time}
+
+Deployment configuration comes from environment variables through Spring Boot's relaxed binding, so the one Docker image runs unchanged everywhere and no secret lives in the image or the repository (\req{UD-admin}). Fixed settings (Flyway on, schema validation, a two-thread scheduler) ship in the jar. Time is read only from one injected \code{java.time.Clock} bean set to the company zone, never from the no-argument \code{now()} methods, which an ArchUnit rule forbids; tests swap in a clock they move by hand to lapse an Objection Window or cross a Period boundary. All windows, Price Bands, and Periods are in the one company time zone (\req{LI-company}).
+
+\subsection{Testing Strategy}
+
+Pure rules are tested as plain objects; everything the database guarantees is tested on PostgreSQL~16 in a container started by the test suite with the production migrations, never an in-memory substitute (\rc{3}, \req{CO-db}). \code{mvn verify} runs every level below except usability; the container tests need Docker.
+\begin{itemize}
+  \item \textbf{Unit: pricing and time.} JUnit~5 with a fixed \code{Clock}, no Spring or database: \code{Pricing.quote} (band edges, premium, a daylight-saving day) and \code{Pricing.refund} (each step, never 100\%) (\req{Ledger.Price.Formula}, \req{Release.Refund}).
+  \item \textbf{Unit: rules.} The Shortlist filter (skills, availability, overlapping Loan, own Team, inactive) and order; the Request and line state machines, every allowed transition and every other one refused (\req{Matched.Shortlist.Build}, \req{Lifecycle.States}).
+  \item \textbf{Integration.} Spring Boot tests on PostgreSQL~16 in Testcontainers with the Flyway migrations: the hourly-sum SQL with Pool Capacity and Quota, both exclusion constraints, the append-only permissions on \code{transaction}, lapse and rollover with a moved clock, scoping (another Team's Request is 404), the problem-detail mapping (\req{QA-correct}, \req{QA-audit}, \req{SE-visibility}, \req{PE-jobs}).
+  \item \textbf{Concurrency.} Two threads released together by a latch, each in its own transaction. Metered: both ask for the last units of one hour; exactly one is Allocated, the other Waiting, and no hour exceeds Pool Capacity (\req{QA-correct}, \req{CO-tx}).
+  \item \textbf{Architecture.} One ArchUnit test class: the dependency rule of Section~\ref{sec:arch} (layer order, no cycles, entities and repositories private to their module, \code{ReductionGuard} the only upward reference); \code{@PreAuthorize} on every service method a controller calls; no no-argument \code{now()}; no \code{isolation} attribute on \code{@Transactional} in \module{Allocation} and \module{Requests} (\req{CO-plugin}, \req{QA-extensible}, \req{SE-roles}).
+  \item \textbf{End-to-end.} One test over HTTP with a real session and CSRF token: a Manager submits the three-line Request (Matched, Exclusive, Metered) and selects a Candidate; the lending Manager approves; the Request is Allocated and the Charges and the Earning appear on both Teams' Statements (\req{Lifecycle.Allocate}, \req{QA-atomic}).
+  \item \textbf{Front end.} Vitest and React Testing Library at the route level, the API mocked through the generated types: each route renders for the right roles, sends the right call, and shows the problem \code{detail} on a refusal (\req{UI-draft}, \req{UI-shortlist}, \req{UI-inventory}).
+  \item \textbf{Usability.} Before the final demonstration, at least three untrained people from outside the project team each draft and submit a three-line Request in under five minutes (\req{QA-usable}).
+\end{itemize}
+Each test's display name carries the identifiers it covers, so the traceability of Appendix~\ref{app:trace} can be checked against the test report (\req{QA-retention}).

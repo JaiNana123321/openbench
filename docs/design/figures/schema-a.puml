@@ -1,0 +1,82 @@
+@startuml schema-a
+' schema part A: Members and Notifications
+skinparam shadowing false
+skinparam defaultFontName Helvetica
+skinparam defaultFontSize 11
+skinparam ArrowColor #223
+skinparam classAttributeIconSize 0
+skinparam class {
+  BackgroundColor #F4F6FA
+  BorderColor #223
+  HeaderBackgroundColor #DDE3EE
+}
+skinparam package {
+  BackgroundColor White
+  BorderColor #223
+}
+skinparam note {
+  BackgroundColor #FFFBE6
+  BorderColor #223
+}
+hide circle
+hide empty members
+skinparam nodesep 10
+skinparam ranksep 22
+package "members" {
+  entity team {
+    id PK
+    --
+    name
+    manager_member_id FK
+    retired_at
+  }
+  entity member {
+    id PK
+    --
+    team_id FK
+    name, email, username
+    password_hash
+    active
+  }
+  entity member_role {
+    member_id PK FK
+    role PK
+    --
+    team_id FK
+  }
+  entity skill {
+    id PK
+    --
+    name, retired_at
+  }
+  entity member_skill {
+    member_id PK FK
+    skill_id PK FK
+  }
+  entity availability_range {
+    id PK
+    --
+    member_id FK
+    from_date, to_date
+  }
+}
+
+package "notifications" {
+  entity notification {
+    id PK
+    --
+    member_id FK
+    kind, text, link
+    created_at, read_at
+  }
+}
+
+' relations
+team ||--o{ member
+member ||--o| team : manages
+member ||--|{ member_role
+member ||--o{ member_skill
+skill ||--o{ member_skill
+member ||--o{ availability_range
+member ||--o{ notification
+@enduml

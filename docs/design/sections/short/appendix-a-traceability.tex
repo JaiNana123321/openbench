@@ -1,0 +1,110 @@
+% appendix-a-traceability.tex — OpenBench Software Design Document, short edition (condensed from sections/appendix-a-traceability.tex on 2026-10-05:
+% same rows, the requirement wording dropped; identifiers, modules, and section references identical).
+\section{Traceability}\label{app:trace}
+
+Each row traces one identifier of the SRS version~\SRSversion{} short edition to the module or modules that satisfy it, the first named owning the requirement, and to the sections of this document that design it; Stretch requirements point at their extension point in Section~\ref{sec:evo}. Every Release~1 requirement maps to at least one module; the requirement wording is in the SRS.
+
+{\footnotesize\renewcommand{\arraystretch}{1.0}\setlength{\tabcolsep}{4pt}
+\begin{longtable}{@{}L{4.6cm}L{\dimexpr\textwidth-4.6cm-3.2cm-4\tabcolsep\relax}L{3.2cm}@{}}
+\caption{Traceability from SRS identifiers to modules and sections.}\label{tab:trace}\\
+\toprule
+\textbf{Identifier} & \textbf{Module(s)} & \textbf{Section} \\
+\midrule
+\endfirsthead
+\multicolumn{3}{@{}l}{\itshape Traceability (continued)}\\ \toprule
+\textbf{Identifier} & \textbf{Module(s)} & \textbf{Section} \\
+\midrule
+\endhead
+\bottomrule
+\endlastfoot
+\multicolumn{3}{@{}l}{\itshape Functional requirements, Release~1}\\
+\req{Inventory.Type.Define} & \module{Inventory} & \ref{mod:inventory}, \ref{sec:data} \\
+\req{Inventory.Resource.Add} & \module{Inventory}, \module{Allocation} & \ref{mod:inventory}, \ref{mod:allocation} \\
+\req{Inventory.View.Holder} & \module{Allocation}, \module{Inventory} & \ref{mod:allocation}, \ref{mod:inventory}, \ref{sec:api} \\
+\req{Profile.Skills} & \module{Members} & \ref{mod:members} \\
+\req{Profile.Availability} & \module{Members}, \module{Allocation} & \ref{mod:members}, \ref{mod:allocation}, \ref{sec:data} \\
+\req{Suggest.Create} & \module{Requests} & \ref{mod:requests} \\
+\req{Suggest.Accept.Existing} & \module{Requests}, \module{Notifications} & \ref{mod:requests}, \ref{mod:notifications} \\
+\req{Draft.Create} & \module{Requests} & \ref{mod:requests}, \ref{sec:cross} \\
+\req{Draft.Line.Add} & \module{Requests} & \ref{mod:requests} \\
+\req{Draft.Line.Required} & \module{Requests} & \ref{mod:requests} \\
+\req{Draft.Quote.Line} & \module{Requests}, \module{Ledger} & \ref{mod:requests}, \ref{mod:ledger} \\
+\req{Draft.Submit.Lock} & \module{Requests} & \ref{mod:requests}, \ref{sec:runtime} \\
+\req{Matched.Shortlist.Build} & \module{Allocation}, \module{Members} & \ref{mod:allocation}, \ref{sec:runtime} \\
+\req{Matched.Approve.Route} & \module{Allocation}, \module{Requests}, \module{Notifications} & \ref{mod:allocation}, \ref{sec:runtime} \\
+\req{Matched.Refuse.Replace} & \module{Requests}, \module{Allocation} & \ref{mod:requests}, \ref{sec:runtime} \\
+\req{Matched.Escalate} & \module{Requests}, \module{Allocation} & \ref{mod:requests}, \ref{sec:runtime} \\
+\req{Matched.Loan.Form} & \module{Allocation}, \module{Ledger}, \module{Notifications} & \ref{mod:allocation}, \ref{sec:runtime}, \ref{sec:data} \\
+\req{Exclusive.Conflict} & \module{Allocation} & \ref{mod:allocation}, \ref{sec:runtime}, \ref{sec:data} \\
+\req{Exclusive.Waitlist.Join} & \module{Allocation}, \module{Requests} & \ref{mod:allocation}, \ref{sec:runtime} \\
+\req{Exclusive.Priority.Bump} & \module{Allocation} & \ref{mod:allocation}, \ref{sec:runtime} \\
+\req{Exclusive.Bump.Effect} & \module{Allocation}, \module{Requests}, \module{Ledger}, \module{Notifications} & \ref{mod:allocation}, \ref{sec:runtime} \\
+\req{Metered.Line.Form} & \module{Allocation}, \module{Requests}, \module{Ledger} & \ref{mod:allocation}, \ref{mod:requests} \\
+\req{Metered.Pool.Check} & \module{Allocation} & \ref{mod:allocation}, \ref{sec:runtime}, \ref{sec:data} \\
+\req{Lifecycle.States} & \module{Requests} & \ref{mod:requests}, \ref{sec:runtime} \\
+\req{Lifecycle.Evaluate} & \module{Requests}, \module{Allocation} & \ref{mod:requests}, \ref{sec:runtime} \\
+\req{Lifecycle.Hold.Place} & \module{Requests}, \module{Allocation}, \module{Ledger} & \ref{mod:requests}, \ref{mod:allocation}, \ref{sec:runtime} \\
+\req{Lifecycle.Window.Start} & \module{Requests}, \module{Jobs} & \ref{mod:requests}, \ref{mod:jobs}, \ref{sec:runtime} \\
+\req{Lifecycle.Allocate} & \module{Requests}, \module{Allocation}, \module{Ledger}, \module{Notifications} & \ref{mod:requests}, \ref{sec:runtime} \\
+\req{Lifecycle.Waiting.Reevaluate} & \module{Requests}, \module{Allocation} & \ref{mod:requests}, \ref{sec:runtime} \\
+\req{Release.Line} & \module{Requests}, \module{Allocation} & \ref{mod:requests}, \ref{mod:allocation}, \ref{sec:runtime} \\
+\req{Release.Refund} & \module{Ledger}, \module{Requests} & \ref{mod:ledger}, \ref{sec:runtime} \\
+\req{Release.Loan.Prorate} & \module{Requests}, \module{Allocation}, \module{Ledger} & \ref{mod:requests}, \ref{mod:ledger} \\
+\req{Ledger.Account} & \module{Ledger} & \ref{mod:ledger}, \ref{sec:data} \\
+\req{Ledger.Transaction.Kinds} & \module{Ledger} & \ref{mod:ledger}, \ref{sec:data} \\
+\req{Ledger.Grant.Period} & \module{Ledger}, \module{Jobs} & \ref{mod:ledger}, \ref{mod:jobs}, \ref{sec:runtime} \\
+\req{Ledger.Price.Formula} & \module{Ledger}, \module{Settings} & \ref{mod:ledger}, \ref{mod:settings} \\
+\req{Ledger.Earning.Post} & \module{Ledger} & \ref{mod:ledger} \\
+\req{Dashboard.Utilization} & \module{Dashboard} & \ref{mod:dashboard}, \ref{sec:data} \\
+\req{Dashboard.Credits} & \module{Dashboard} & \ref{mod:dashboard}, \ref{sec:cross} \\
+\req{Admin.Member.Create} & \module{Members}, \module{Settings} & \ref{mod:members}, \ref{mod:settings}, \ref{sec:cross} \\
+\req{Planner.Settings} & \module{Settings}, \module{Requests} & \ref{mod:settings}, \ref{mod:requests} \\
+\multicolumn{3}{@{}l}{\itshape Functional requirements, Stretch}\\
+\req{Metered.Tier.Define} & \module{Settings}, \module{Ledger} (tier premium in \code{Pricing}) & \ref{sec:evo}, service tiers \\
+\req{Metered.Tier.Bump} & \module{Allocation} (\code{Bumpable} on \code{MeteredAllocator}) & \ref{sec:evo}, service tiers \\
+\req{Metered.Usage.Record} & \module{Allocation} (usage beside \code{metered\_allocation}) & \ref{sec:evo} \\
+\req{Metered.Usage.Compare} & \module{Dashboard} (one more view) & \ref{sec:evo} \\
+\req{Ledger.Surcharge} & \module{Ledger} (multiplier in \code{Pricing}), \module{Settings} & \ref{sec:evo}, demand surcharge \\
+\req{Dashboard.Usage} & \module{Dashboard} (one more view) & \ref{sec:evo} \\
+\multicolumn{3}{@{}l}{\itshape Constraints, interfaces, and nonfunctional requirements}\\
+\req{CO-1} & All modules & \ref{sec:arch}, \ref{mod:web} \\
+\req{CO-2} & All back-end modules & \ref{sec:data}, \ref{sec:cross} \\
+\req{CO-3} & \module{Web client} & \ref{sec:api}, \ref{mod:web} \\
+\req{CO-4} & \module{Ledger}, \module{Requests} & \ref{mod:ledger}, \ref{sec:runtime} \\
+\req{CO-5} & \module{Jobs} & \ref{mod:jobs}, \ref{sec:runtime} \\
+\req{CO-6} & \module{Members}, \code{security} package & \ref{sec:api}, \ref{sec:cross} \\
+\req{CO-7} & \module{Allocation} & \ref{mod:allocation}, \ref{sec:evo} \\
+\req{UI-1} & \module{Web client}, \module{Requests} & \ref{mod:web}, \ref{mod:requests} \\
+\req{UI-2} & \module{Web client}, \module{Allocation} & \ref{mod:web}, \ref{mod:allocation} \\
+\req{UI-3} & \module{Web client} & \ref{mod:web} \\
+\req{SI-1} & All back-end modules & \ref{sec:data} \\
+\req{SI-2} & All back-end modules, \module{Web client} & \ref{sec:api} \\
+\req{CI-1} & All modules (deployment) & \ref{sec:arch}, \ref{sec:api} \\
+\req{CI-2} & \module{Notifications} & \ref{mod:notifications}, \ref{sec:cross} \\
+\req{PE-1} & All modules & \ref{sec:arch}, \ref{sec:data} \\
+\req{PE-2} & All modules & \ref{sec:arch}, \ref{sec:api} \\
+\req{PE-3} & \module{Allocation} & \ref{mod:allocation} \\
+\req{PE-4} & \module{Jobs} & \ref{mod:jobs}, \ref{sec:runtime} \\
+\req{SE-1} & All modules, \code{security} package & \ref{sec:cross}, \ref{sec:api} \\
+\req{SE-2} & \module{Members}, \code{security} package & \ref{sec:api}, \ref{sec:cross} \\
+\req{SE-3} & \module{Members} & \ref{mod:members}, \ref{sec:data} \\
+\req{SE-4} & All modules & \ref{sec:cross} \\
+\req{QA-1} & \module{Allocation} & \ref{mod:allocation}, \ref{sec:runtime}, \ref{sec:data} \\
+\req{QA-2} & \module{Requests}, \module{Ledger} & \ref{mod:requests}, \ref{sec:runtime} \\
+\req{QA-3} & \module{Ledger}, \module{Requests}, \module{Settings} & \ref{sec:cross}, \ref{sec:data} \\
+\req{QA-4} & \module{Web client} & \ref{mod:web}, \ref{sec:arch} \\
+\req{QA-5} & \module{Web client} & \ref{mod:web} \\
+\req{QA-6} & \module{Allocation}, \module{Inventory} & \ref{mod:allocation}, \ref{sec:evo} \\
+\req{QA-7} & All modules & \ref{sec:data}, \ref{sec:cross} \\
+\multicolumn{3}{@{}l}{\itshape User documentation, assumptions, and dependencies}\\
+\req{UD-1} & \module{Web client} & \ref{mod:web} \\
+\req{UD-2} & \module{Members}, \module{Settings} & \ref{sec:cross}, \ref{sec:evo} \\
+\req{UD-3} & \module{Web client} & \ref{mod:web} \\
+\req{AS-1} & \module{Settings}, \module{Ledger} & \ref{mod:settings}, \ref{sec:evo} \\
+\req{AS-2} & \module{Inventory} & \ref{mod:inventory} \\
+\req{AS-3} & \module{Allocation} & \ref{mod:allocation}, \ref{sec:evo} \\
+\req{AS-4} & \module{Members} & \ref{mod:members}, \ref{sec:evo} \\
+\req{DE-1} & All modules & \ref{sec:arch} \\
+\req{DE-2} & All modules (build) & \ref{sec:arch} \\
+\end{longtable}
+}

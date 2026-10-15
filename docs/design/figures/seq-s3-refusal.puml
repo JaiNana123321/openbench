@@ -1,0 +1,78 @@
+@startuml seq-s3-refusal
+' F13 Scenario S3: a lending Manager refuses; the requesting Manager picks a replacement
+' (UC-6, UC-5). Two transactions; the Objection Window is not restarted.
+skinparam shadowing false
+skinparam defaultFontName Helvetica
+skinparam defaultFontSize 11
+skinparam ArrowColor #223
+skinparam sequenceMessageAlign left
+skinparam responseMessageBelowArrow true
+skinparam sequence {
+  ParticipantBackgroundColor #F4F6FA
+  ParticipantBorderColor #223
+  ActorBackgroundColor White
+  ActorBorderColor #223
+  LifeLineBorderColor #223
+  LifeLineBackgroundColor #DDE3EE
+  GroupBorderColor #223
+  GroupBackgroundColor #DDE3EE
+  DividerBackgroundColor #F4F6FA
+  DividerBorderColor #223
+}
+skinparam database {
+  BackgroundColor #F4F6FA
+  BorderColor #223
+}
+skinparam note {
+  BackgroundColor White
+  BorderColor #223
+}
+hide footbox
+autonumber
+
+actor "Lending\nManager" as LM
+actor Manager
+participant "Web\nclient" as Web
+participant RequestLifecycleService as RLS
+participant AllocationLock as Lock
+participant "Allocator\n(Exclusive,\nMetered)" as Alloc
+participant "MatchedAllocator\n(ApprovalDriven)" as MA
+participant LedgerService as Ledger
+participant Notifier
+
+LM -> Web : refuse
+Web -> RLS : decideApproval(a,\nREFUSE, reason,\nactor)
+note over Lock, Ledger
+  transaction 1; lock order: Resource Type
+  rows by ascending id, then account
+end note
+RLS -> Lock : lockTypes(types)
+RLS -> MA : decide(a, REFUSE, reason, actor)
+MA --> RLS : ApprovalOutcome (refused)
+opt the refused line is Required
+  RLS -> Alloc : cancel(line), each held line
+  RLS -> Ledger : releaseCredits(team, line)
+end
+note over Lock, Ledger : a refused Optional line leaves the Request Pending with its Holds
+alt a Candidate is left on the Shortlist
+  RLS -> RLS : toWaiting (Required line)
+  RLS -> RLS : record(event)
+  RLS -> Notifier : notify(Manager, pick a replacement)
+  ... Manager opens the Shortlist (UC-5) while the Objection Window runs ...
+  Manager -> Web : pick
+  Web -> RLS : selectCandidates(l,\nmembers, actor)
+  note over Lock, Ledger : transaction 2
+  RLS -> Lock : lockTypes(types)
+  RLS -> RLS : placeHolds
+  note over Lock, MA : hold, holdCredits as in S1
+  RLS -> RLS : routeApprovals
+  RLS -> MA : select(line, candidates)
+  MA -> Notifier : notify(lending Manager)
+  RLS -> RLS : record(event)
+  note over Lock, MA : Waiting -> Pending; Window not restarted
+else no Candidate left and the line is Required
+  RLS -> RLS : record(event)
+  note over Lock, MA : Pending -> Refused
+  RLS -> Notifier : notify(Manager, Refused)
+end
+@enduml

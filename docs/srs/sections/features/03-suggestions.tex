@@ -1,0 +1,23 @@
+\subsection{Suggestions}\label{feat:suggestions}
+
+\subsubsection{Description and Priority}
+A Suggestion is a single Request Line that a Member proposes to their own Manager: ``we need four GPUs in weeks 42--43'' or ``bring on Dana for the pilot.'' It has no allocation effect until the Manager accepts it into a Request. Several Suggestions may be accepted into the same line, which is how three engineers asking for the same thing are grouped. Each Suggestion keeps its original ask, so what was asked can later be compared with what was formalized; declined Suggestions are kept as the raw data for the Future unmet-demand analytics. This feature realizes \FE{suggestions} and is exercised by \UC{suggest}. \priority{Medium.}
+
+\subsubsection{Stimulus/Response Sequences}
+\begin{itemize}
+  \item \textbf{Stimulus:} A Member submits a Suggestion. \textbf{Response:} The system stores it as Open and shows it in the Manager's Open list.
+  \item \textbf{Stimulus:} The Manager accepts a Suggestion into a Draft Request. \textbf{Response:} The system creates or extends a line, marks the Suggestion Accepted, links it to the line, and tells the Member.
+  \item \textbf{Stimulus:} The Manager declines a Suggestion. \textbf{Response:} The system marks it Declined and tells the Member, with the reason if one was given.
+\end{itemize}
+
+\subsubsection{Functional Requirements}
+\fr{Suggest.Create}{The system shall let a Member create a Suggestion addressed to their own Manager, containing exactly one proposed Request Line: a Resource Type, a quantity, a time window, for a Matched line either a skill set or a named Person, and an optional note.}
+\fr{Suggest.States}{A Suggestion shall be in exactly one of the states Open, Accepted, or Declined. Only Open Suggestions may change state.}
+\fr{Suggest.Accept.New}{The system shall let the Manager accept an Open Suggestion into a Draft Request of their Team as a new Request Line pre-filled from the Suggestion.}
+\fr{Suggest.Accept.Existing}{The system shall let the Manager accept an Open Suggestion into an existing line of a Draft Request that has the same Resource Type, so that several Suggestions point at one line.}
+\fr{Suggest.Link}{An Accepted Suggestion shall record the Request Line it became. The link shall survive later edits to the line.}
+\fr{Suggest.Keep}{The system shall keep a Suggestion's original ask unchanged after acceptance, even if the Manager edits the line, so that asked and formalized can be compared.}
+\fr{Suggest.Decline}{The system shall let the Manager decline an Open Suggestion with an optional reason, and shall notify the Member.}
+\fr{Suggest.NoEffect}{A Suggestion shall have no effect on the Inventory, Holds, or the Ledger until the line it was accepted into is submitted as part of a Request.}
+\fr{Suggest.View}{A Member shall see the state of each of their Suggestions; a Manager shall see all Suggestions addressed to them, Open ones first.}
+\fr{Suggest.Retain}{The system shall never delete a Suggestion; Declined and Open Suggestions are retained for the data-retention period (\qaref{retention}).}

@@ -1,0 +1,119 @@
+@startuml schema-b
+' schema part B: Inventory and Settings
+skinparam shadowing false
+skinparam defaultFontName Helvetica
+skinparam defaultFontSize 11
+skinparam ArrowColor #223
+skinparam classAttributeIconSize 0
+skinparam class {
+  BackgroundColor #F4F6FA
+  BorderColor #223
+  HeaderBackgroundColor #DDE3EE
+}
+skinparam package {
+  BackgroundColor White
+  BorderColor #223
+}
+skinparam note {
+  BackgroundColor #FFFBE6
+  BorderColor #223
+}
+hide circle
+hide empty members
+skinparam nodesep 10
+skinparam ranksep 22
+package "inventory" {
+  entity resource_type {
+    id PK
+    --
+    name
+    allocation_class
+    retired_at
+  }
+  entity resource_type_attribute {
+    id PK
+    --
+    type_id FK
+    name, kind, allowed_values
+  }
+  entity resource {
+    id PK
+    --
+    type_id FK
+    owner_member_id FK
+    name, units, retired_at
+  }
+  entity resource_attribute_value {
+    resource_id PK FK
+    attribute_id PK FK
+    --
+    value
+  }
+}
+
+package "settings" {
+  entity period {
+    id PK
+    --
+    starts_on, ends_on
+  }
+  entity grant_plan {
+    team_id PK FK
+    period_id PK FK
+    --
+    amount
+  }
+  entity type_pricing {
+    type_id PK FK
+    --
+    unit_price
+    bump_cutoff_hours
+  }
+  entity price_band {
+    id PK
+    --
+    type_id FK
+    weekdays, start_time,
+    end_time, multiplier
+  }
+  entity refund_step {
+    id PK
+    --
+    type_id FK
+    min_lead_hours, fraction
+  }
+  entity quota {
+    team_id PK FK
+    type_id PK FK
+    --
+    max_units
+  }
+  entity planner_setting {
+    key PK
+    --
+    value
+  }
+  entity setting_change {
+    id PK
+    --
+    key, old_value, new_value
+    actor_id FK, at
+  }
+}
+
+package "dashboard (read-only views)" {
+  entity v_type_hours <<view>>
+  entity v_team_credits <<view>>
+}
+
+' relations
+resource_type ||--o{ resource_type_attribute
+resource_type ||--o{ resource
+resource ||--o{ resource_attribute_value
+resource_type_attribute ||--o{ resource_attribute_value
+period ||--o{ grant_plan
+resource_type ||--o| type_pricing
+resource_type ||--o{ price_band
+resource_type ||--o{ refund_step
+resource_type ||--o{ quota
+@enduml

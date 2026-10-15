@@ -1,0 +1,53 @@
+% OpenBench — Software Design Document, short edition (target 30 to 35 pages).
+% Shares macros, figures, and the glossary generator with main.tex; every part has its own condensed copy under
+% sections/short/. The full edition (main.tex) remains the detailed reference; identifiers, module names, operation
+% names, table names, error codes, and figure captions are the same in both. Build: nix develop path:nix -c make -C docs/design short
+\documentclass[10pt,letterpaper]{article}
+\input{macros}
+\geometry{margin=0.8in}
+\setlength{\reqgap}{2pt}
+\setlength{\parskip}{3pt plus 1pt}
+\usepackage[compact]{titlesec}
+\makeatletter\@secpenalty=0\makeatother   % a heading is not a preferred page break: pages fill before a module heading moves
+\setlist{nosep}
+\setcounter{tocdepth}{1}   % sections only; the module subsections are listed in Section 4's opening paragraph
+% Figures share their page with text: a float page needs 80% float, a page may carry 85% float on top.
+\renewcommand{\floatpagefraction}{0.95}\renewcommand{\topfraction}{0.9}\renewcommand{\bottomfraction}{0.5}\renewcommand{\textfraction}{0.05}
+
+\hypersetup{
+  pdftitle={OpenBench Software Design Document (short edition)},
+  pdfauthor={Jai Nana, Brian Lujan, Fotih Turopov, Yerassyl Shnazbayev},
+  pdfsubject={CSDS 393 Software Engineering},
+}
+
+\begin{document}
+
+\input{sections/short/00-front-matter}
+\newcommand{\sectionbreak}{\clearpage}   % every section and appendix starts on a new page; modules run on inside Section 4
+\setlength{\emergencystretch}{1.5em}
+
+\input{sections/short/01-introduction}
+\input{sections/short/02-architecture}
+\input{sections/short/03-decomposition}
+
+% Modules run on: no page break per module in the short edition (the full edition clears the page before each one).
+\renewcommand{\modulespec}[3]{\needspace{8\baselineskip}\subsection{#1 \normalfont\normalsize(\code{#2})}\label{mod:#3}}
+\section{Module Specifications}\label{sec:modules}
+Each module is specified with the same six fields: purpose, provided interface, required interfaces, data owned, invariants, and failure behavior. Signatures are Java; every application-service method runs in one transaction unless marked read-only. The modules are presented bottom-up, in the order of the layers of Section~\ref{sec:arch}. Figures~\ref{fig:class-allocation}, \ref{fig:class-ledger}, and \ref{fig:class-requests} give the class diagrams of the three core modules. The longer edition adds, for every module, the responsibilities with their requirement identifiers, an operation table of preconditions and errors, an information-hiding statement, and worked examples.
+\input{sections/short/04a-modules-foundation}
+\input{sections/short/04b-modules-core}
+\input{sections/short/04c-modules-edge}
+\input{sections/short/05-runtime}
+\input{sections/short/06-data}
+\input{sections/short/07-api}
+\input{sections/short/08-crosscutting}
+\input{sections/short/09-evolution}
+\input{sections/short/10-references}
+\renewcommand{\sectionbreak}{\bigskip}   % the appendices follow the references without page breaks, as the SRS short edition does for its last appendices
+
+\appendix
+\input{sections/short/appendix-a-traceability}
+\input{sections/short/appendix-b-glossary}
+\input{sections/short/appendix-c-inspection}
+
+\end{document}

@@ -1,0 +1,70 @@
+% Short-edition Section 3, reworded after the 2026-09-21 review.
+\section{Overall Description}\label{sec:overall}
+
+\subsection{Product Perspective}
+
+\SRSproduct{} is a new, standalone web application. It replaces the combination of booking calendars, spreadsheets, chat messages, and negotiations that Teams presently employ in order to obtain people, rooms, and computing from each other. Release~1 has no interface with external systems (\liref{integrations}). Consequently, all flows in \figref{fig:context} occur between the system and its five actors. There is a single server program serving the web browser front end and the REST API. The database behind it contains the Inventory, the Requests, and the Ledger.
+
+\begin{center}
+  \includegraphics[width=0.58\textwidth]{context.pdf}
+  \captionof{figure}{Context diagram. The five actors are roles held by Members; one Member may hold several.}
+  \label{fig:context}
+\end{center}
+
+\subsection{User Classes and Characteristics}
+
+Everyone becomes a \term{Member} in the system. The Administrator has the ability to give another four types of roles to a Member, and one Member could have many of them at once, for example a Manager who is also the Capacity Planner. The server checks a Member's roles on every action (\seref{roles}).
+
+{\small
+\begin{longtable}{@{}L{2.6cm}L{\dimexpr\textwidth-4.8cm-4\tabcolsep\relax}L{2.2cm}@{}}
+\toprule
+\textbf{User class} & \textbf{Characteristics and what they do in the system} & \textbf{Importance} \\
+\midrule
+\endfirsthead
+\multicolumn{3}{@{}l}{\itshape User classes (continued)}\\ \toprule
+\textbf{User class} & \textbf{Characteristics and what they do in the system} & \textbf{Importance} \\
+\midrule
+\endhead
+\bottomrule
+\endlastfoot
+Member & Up to 500 people with varying levels of technical skill who access the system several times a month. A Member updates their technical skills and availability information, makes Suggestions to their Manager, and views their Loans. Any Member can be loaned out as a Person. & Favored (as Person) \\
+Manager & Up to 50 people, one for each Team, who access the system on a weekly basis. The Manager is the sole actor who drafts and submits Requests, selects Candidates, approves or refuses Loans of their own Team's Members, Releases lines, and views their Team's Statement. & Most important \\
+Resource Owner & Dozens of people who update the Inventory records of specific Exclusive and Metered Resources, including Pool Capacity. A Resource Owner does not approve any allocation. & Important \\
+Capacity Planner & 1 or 2 people. The Capacity Planner decides on each Team's Grant per Period, Unit Prices, Price Bands, the Day Rate, Refund Schedules, Quotas, the priority premium, the bump cutoff, the Objection Window, and the Period. Escalations come to the Capacity Planner, who decides a lapsed approval on the silent Manager's behalf or settles the matter by adjusting the Grant mid-Period. They also view the dashboard and Statements for every Team. & Most important \\
+Administrator & 1--2 IT people. The Administrator manages Members and Teams, assigns roles, manages the skills list, and specifies Resource Types as data. Policy is not set by the Administrator. & Important \\
+\end{longtable}
+}
+
+\subsection{Operating Environment}
+
+\begin{itemize}
+  \item \textbf{Server:} one on-site server with one Java~17 (Spring Boot) process, packed into a Docker image. The process handles the REST API and serves the compiled front end as static files. An nginx reverse proxy is placed in front of the server if TLS termination is required.
+  \item \textbf{Database:} PostgreSQL~16 for production use, and PostgreSQL~16 in a container started by the test suite (Testcontainers) for test automation, with the same schema migrations.
+  \item \textbf{Clients:} latest versions of Chrome, Firefox, Safari, and Edge. No mobile view is present.
+  \item \textbf{Organization:} one firm in one time zone. All windows, Price Bands, and Periods are expressed in that time zone.
+\end{itemize}
+
+\subsection{Design and Implementation Constraints}
+
+\co{stack}{The back end shall be implemented using Java~17 and Spring Boot and shall be packaged using Maven. The front end shall be implemented using TypeScript, React, and Vite, and the same Maven packaging shall include it in the Spring Boot application.}
+\co{db}{Persistent data shall be stored in PostgreSQL~16, and the tests shall run against PostgreSQL~16 in a container started by the test suite (Testcontainers) with the same schema migrations as production.}
+\co{api}{The front end shall communicate with the back end only via the REST/JSON API. All actions that are available in the user interface shall be available in the API too, with the same role restrictions.}
+\co{tx}{Committing Holds and posting the corresponding Charges and Earnings shall happen in one database transaction.}
+\co{jobs}{Timed functionality (expiration of the Objection Window, Hold and waitlist expiry, Period rollover) shall run as scheduled jobs inside the server process rather than as separate cron jobs.}
+\co{auth}{User authentication shall use username and password, and passwords shall be stored hashed. Roles shall be enforced by the Spring Security framework running in the server.}
+\co{plugin}{Each Allocation Class shall be one allocator behind a common interface, so that a new class can be added by implementing that interface without changing the existing allocators (\qaref{extensible}).}
+
+\subsection{User Documentation}
+
+\ud{guide}{A brief guide consisting of one page per role, available within the application. This guide explains how to create a Request, understand a Quote and the Available Balance, approve a Loan, Release a line, and view a Statement.}
+\ud{admin}{An installation and configuration guide covering the Docker image, database configuration, creation of the first Administrator, and the Capacity Planner settings along with their example defaults.}
+\ud{help}{Help text for each field of each Capacity Planner setting and each column of the Draft Request screen.}
+
+\subsection{Assumptions and Dependencies}
+
+\asm{planner}{A Capacity Planner exists and assigns a Grant to every Team prior to the first Period. Without Grants, there is no way for a Team to afford an Exclusive or Metered line.}
+\asm{inventory}{Inventory is maintained by Resource Owners, in particular Pool Capacity. Conflicts are checked only against the system's own records.}
+\asm{honest}{Loans are recorded honestly by Managers. There is no way for the system to confirm that a borrowed Person did work for the borrowing Team.}
+\asm{calendar}{Availability of a Member is determined by their profile information. No calendar is consulted by the system.}
+\dep{platform}{The system requires Java~17, Spring Boot, PostgreSQL, and current desktop browsers to be available on the company's infrastructure.}
+\dep{tooling}{The build and documentation toolchain of the project is pinned in the repository's Nix flake, so teammates need Nix to reproduce the build.}

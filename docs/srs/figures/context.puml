@@ -1,0 +1,37 @@
+@startuml context
+' Figure: system context. OpenBench in the center, the five actors around it,
+' labeled flows in glossary vocabulary. No external systems in Release 1 (D14).
+left to right direction
+skinparam shadowing false
+skinparam defaultFontName Helvetica
+skinparam defaultFontSize 12
+skinparam ArrowFontSize 10
+skinparam rectangle {
+  BackgroundColor #F4F6FA
+  BorderColor #223
+  RoundCorner 20
+}
+skinparam actor {
+  BackgroundColor White
+  BorderColor #223
+}
+
+actor Member
+actor Manager
+actor "Resource Owner" as RO
+actor "Capacity Planner" as CP
+actor Administrator as Admin
+
+rectangle "OpenBench" as OB
+
+Member  --> OB : skill profile, availability,\nSuggestion
+OB      --> Member : Loan notice
+Manager --> OB : Request, Candidate selection,\napproval or refusal of a Loan,\nRelease, Withdrawal
+OB      --> Manager : Quote, Shortlist,\napproval request, outcome,\nStatement, dashboard
+OB      <-- RO : Inventory record,\nPool Capacity
+OB      --> RO : holder of each Resource
+OB      <-- CP : Grant, Unit Price, Day Rate,\nPrice Band, Refund Schedule,\nQuota, Period
+OB      --> CP : escalated Request,\nall-Team dashboard, Statements
+OB      <-- Admin : Member, Team, role,\nResource Type definition
+OB      --> Admin : configuration view
+@enduml

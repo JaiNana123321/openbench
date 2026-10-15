@@ -1,0 +1,132 @@
+@startuml schema-c
+' schema part C: Requests and Ledger
+skinparam shadowing false
+skinparam defaultFontName Helvetica
+skinparam defaultFontSize 11
+skinparam ArrowColor #223
+skinparam classAttributeIconSize 0
+skinparam class {
+  BackgroundColor #F4F6FA
+  BorderColor #223
+  HeaderBackgroundColor #DDE3EE
+}
+skinparam package {
+  BackgroundColor White
+  BorderColor #223
+}
+skinparam note {
+  BackgroundColor #FFFBE6
+  BorderColor #223
+}
+hide circle
+hide empty members
+skinparam nodesep 10
+skinparam ranksep 22
+package "referenced tables" {
+  entity team {
+    id : PK
+  }
+  entity resource_type {
+    id : PK
+  }
+  entity period {
+    id : PK
+  }
+}
+
+package "requests" {
+  entity request {
+    id PK
+    --
+    team_id FK
+    state
+    submitted_at
+    window_ends_at
+  }
+  entity request_line {
+    id PK
+    --
+    request_id FK
+    type_id FK
+    named_member_id FK
+    allocation_class
+    quantity, units
+    starts_at, ends_at, recurrence
+    required, priority
+    skills, locked_quote
+    state
+  }
+  entity suggestion {
+    id PK
+    --
+    member_id FK
+    accepted_line_id FK
+    proposal..., state, reason
+  }
+  entity request_event {
+    id PK
+    --
+    request_id FK
+    line_id FK
+    from_state, to_state
+    actor_id FK, at, note
+  }
+}
+
+package "ledger" {
+  entity account {
+    team_id PK FK
+    --
+    granted
+    earned
+    held
+  }
+  entity transaction {
+    id PK
+    --
+    team_id FK
+    period_id FK
+    line_id FK
+    loan_id FK
+    corrects_id FK
+    actor_id FK
+    kind, amount
+    granted_part, earned_part
+    reason
+    posted_at
+  }
+  entity held_credit {
+    line_id PK FK
+    --
+    team_id FK
+    amount
+  }
+  entity period_close {
+    team_id PK FK
+    period_id PK FK
+    --
+    expired
+    closing_granted
+    closing_earned
+    closed_at
+  }
+}
+
+' relations
+team ||--o{ request
+request ||--|{ request_line
+resource_type ||--o{ request_line
+request_line |o--o{ suggestion
+request ||--o{ request_event
+team ||--|| account
+account ||--o{ transaction
+period ||--o{ transaction
+account ||--o{ held_credit
+period ||--o{ period_close
+request_line |o--o{ transaction
+transaction |o--o| transaction : corrects
+note bottom of transaction
+  append-only: the database role
+  has INSERT and SELECT only
+end note
+@enduml

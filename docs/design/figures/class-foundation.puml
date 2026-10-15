@@ -1,0 +1,189 @@
+@startuml class-foundation
+' F8 Foundation modules (compact): Members, Inventory, Settings. Each package shows its
+' application service interfaces (operation names only, except the ones other modules rely on;
+' full signatures are in the module listings) and its entities. ReductionGuard is the port that
+' Inventory declares and Allocation implements (see the modules figure).
+skinparam shadowing false
+skinparam defaultFontName Helvetica
+skinparam defaultFontSize 11
+skinparam ArrowFontSize 10
+skinparam ArrowColor #223
+skinparam classAttributeIconSize 0
+skinparam nodesep 14
+skinparam ranksep 26
+skinparam class {
+  BackgroundColor #F4F6FA
+  BorderColor #223
+  HeaderBackgroundColor #DDE3EE
+}
+skinparam package {
+  BackgroundColor White
+  BorderColor #223
+}
+skinparam note {
+  BackgroundColor White
+  BorderColor #223
+}
+hide empty members
+
+package "members" as P_mem {
+  interface MemberService <<interface>> {
+    createMember(), deactivate(), moveToTeam()
+    grantRole(), revokeRole()
+    createTeam(), renameTeam(), retireTeam()
+    updateSkills(), updateAvailability()
+    profile(), roster()
+    isAvailable(MemberId, DateRange): boolean
+    availableWithSkills(Set<SkillId>, DateRange,
+    {method}  TeamId): Set<MemberId>
+    skills(), addSkill(), retireSkill()
+    withRole(Role): List<MemberId>
+    managerOf(TeamId): MemberId
+    teams(): List<Team>
+    summary(MemberId): MemberSummary
+  }
+  class Team <<entity>> {
+    id: TeamId
+    name
+    manager: MemberId
+    retiredAt
+  }
+  class Member <<entity>> {
+    id: MemberId
+    team: TeamId
+    name, email, username
+    passwordHash
+    active: boolean
+  }
+  enum Role <<enumeration>> {
+    MEMBER
+    MANAGER
+    RESOURCE_OWNER
+    PLANNER
+    ADMIN
+  }
+  class Skill <<entity>> {
+    id: SkillId
+    name
+    retiredAt
+  }
+  class AvailabilityRange <<entity>> {
+    from, to: LocalDate
+  }
+}
+
+package "inventory" as P_inv {
+  interface ResourceTypeService <<interface>> {
+    define(), change(), retire()
+  }
+  interface ResourceService <<interface>> {
+    add(), edit()
+    setUnits(ResourceId, int)
+    retire(ResourceId)
+  }
+  interface InventoryQueries <<interface>> {
+    type(), types(), instancesOf()
+    poolCapacity(ResourceTypeId): int
+    search(ResourceFilter): List<Resource>
+  }
+  interface ReductionGuard <<port>> {
+    earliestHourExceeding(ResourceTypeId,
+    {method}  Optional<ResourceId>, int newUnits,
+    {method}  Instant from): Optional<Instant>
+  }
+  class ResourceType <<entity>> {
+    id: ResourceTypeId
+    name
+    allocationClass: AllocationClass
+    retiredAt
+  }
+  class ResourceTypeAttribute <<entity>> {
+    name, kind
+    allowedValues
+  }
+  class Resource <<entity>> {
+    id: ResourceId
+    type: ResourceTypeId
+    name
+    owner: MemberId
+    units: int
+    retiredAt
+  }
+  class ResourceAttributeValue <<entity>> {
+    value
+  }
+  enum AllocationClass <<enumeration>> {
+    MATCHED
+    EXCLUSIVE
+    METERED
+  }
+}
+
+package "settings" as P_set {
+  interface SettingsService <<interface>> {
+    current(): PlannerSettings
+    update(SettingChange)
+    periods(): List<Period>
+  }
+  class PlannerSettings <<record>> {
+    currentPeriod: Period
+    objectionWindow: Duration
+    dayRate: Credits
+    priorityPremium: BigDecimal
+    pricing: Map<ResourceTypeId, TypePricing>
+    quotas: Map<TeamTypeKey, Integer>
+    grants: Map<TeamId, Credits>
+  }
+  class TypePricing <<record>> {
+    unitPrice: Credits
+    bands: List<PriceBand>
+    refundSchedule: RefundSchedule
+    bumpCutoff: Duration
+  }
+  class Period <<entity>> {
+    id: PeriodId
+    startsOn, endsOn: LocalDate
+  }
+  class PriceBand <<entity>> {
+    weekdays
+    startTime, endTime
+    multiplier
+  }
+  class RefundSchedule {
+    steps: (minLeadHours, fraction)*
+  }
+  class SettingChange <<entity>> {
+    key, oldValue, newValue
+    actor: MemberId
+    at: Instant
+  }
+}
+
+Team "1" -- "1..*" Member
+Team "1" --> "manager 1" Member
+MemberService ..> Team
+MemberService ..> Member
+Member "*" -- "*" Skill
+Member "1" *-- "*" AvailabilityRange
+Member "*" --> "1..*" Role
+
+ResourceTypeService ..> ResourceType
+ResourceService ..> Resource
+ResourceService ..> ReductionGuard : setUnits,\nretire
+InventoryQueries ..> Resource
+ResourceType "1" *-- "*" ResourceTypeAttribute
+ResourceType "1" -- "*" Resource
+ResourceType --> AllocationClass
+Resource "1" *-- "*" ResourceAttributeValue
+ResourceAttributeValue "*" --> "1" ResourceTypeAttribute
+
+SettingsService ..> PlannerSettings : builds
+SettingsService ..> SettingChange : logs
+PlannerSettings --> Period
+PlannerSettings *-- "*" TypePricing
+TypePricing *-- "*" PriceBand
+TypePricing *-- "1" RefundSchedule
+
+AvailabilityRange -[hidden]down- ResourceTypeService
+MemberService -[hidden]right- SettingsService
+@enduml

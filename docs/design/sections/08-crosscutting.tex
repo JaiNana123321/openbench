@@ -1,0 +1,176 @@
+% 08-crosscutting.tex — OpenBench Software Design Document. Written from .scratch/design-doc/brief.md on 2026-10-05.
+\section{Crosscutting Concerns}\label{sec:cross}
+
+Each concern below is solved once, in the \code{security}, \code{common}, or \code{config} package or in one module.
+
+\subsection{Authorization and Data Scoping}
+
+Every request passes two checks: a role check and a scope (\req{SE-roles}, \req{SE-visibility}).
+
+\textbf{Roles.} Each \code{member\_role} row becomes a Spring Security granted authority, \code{MANAGER}, \code{RESOURCE\_OWNER}, \code{PLANNER}, or \code{ADMIN}, and every signed-in Member also holds \code{MEMBER}. Each application-service method a controller calls carries \code{@PreAuthorize} with the roles of Table~\ref{tab:api-endpoints}, so the check runs on the server in the same place whether the call comes from a screen or a script (\req{CO-auth}, \req{CO-api}); an ArchUnit rule fails the build if a controller reaches a service method without one. Operations that only other modules or the jobs call carry no role check, because no controller reaches them.
+
+\textbf{Scope.} Which rows a role may see is decided inside the query, by the caller's Team, own id, or owned Resources, never by loading rows and filtering them afterward. The controller passes the caller as an \code{Actor} (Member id, Team id, roles), and repositories take its fields as parameters. Read operations without an \code{Actor} parameter take it from a request-scoped \code{CurrentActor} bean filled by the controller (the system actor in jobs). A module reading another module's data for its own rule (Allocation's Candidate check, Inventory's new-owner check) calls an unscoped internal read such as \code{MemberService.summary(MemberId)}. A row outside the scope is not found, so the caller gets 404 and learns nothing about it. A Member with several roles sees the union of their scopes: the query joins the predicates of their roles with OR. Table~\ref{tab:cross-visibility} gives the scopes; a Manager never sees another Team's Statement, Account, or Requests.
+
+\begin{lstlisting}[language=Java]
+// RequestRepository: the scope is part of the query
+@Query("select r from Request r where r.id = :id and (r.teamId = :team or :planner = true)")
+Optional<Request> findVisible(RequestId id, TeamId team, boolean planner);
+// RequestLifecycleService.detail
+Request r = requests.findVisible(id, actor.teamId(), actor.has(PLANNER)).orElseThrow(NotFoundException::new);
+\end{lstlisting}
+
+{\footnotesize\renewcommand{\arraystretch}{1.08}
+\begin{longtable}{@{}L{0.15\textwidth}L{0.55\textwidth}L{\dimexpr0.30\textwidth-4\tabcolsep\relax}@{}}
+\caption{What each role sees. Roles add up: a Member sees the union of the rows for the roles they hold.}\label{tab:cross-visibility}\\
+\toprule
+\textbf{Role} & \textbf{Sees} & \textbf{Scope in the query} \\
+\midrule
+\endfirsthead
+\toprule
+\textbf{Role} & \textbf{Sees} & \textbf{Scope in the query} \\
+\midrule
+\endhead
+\bottomrule
+\endlastfoot
+Member (everyone) & Own profile, Loans, Suggestions, and notifications; the skill list, Teams, Resource Types, Resources, and whether each Resource is free, on Hold, or allocated in a window & \code{member\_id = caller}; Inventory open, holding Team and Request hidden \\
+Manager & Own Team's roster, profiles, and Loans; the Team's Requests with Shortlists, Holds, Waitlist positions, and history; Suggestions and approvals addressed to them; the Team's Account, Statements, credits, and person-days; company-wide utilization, idle capacity, and waiting counts & \code{team\_id = caller's Team}; approvals by \code{approver\_member\_id} \\
+Resource Owner & Timelines of the Resources they own, with holding Team and Request; utilization of their Resources & \code{owner\_member\_id = caller} \\
+Capacity Planner & Every Team's roster, Requests, Shortlists, Account, Statements, credits, and person-days; every timeline; escalated Requests; every setting & none \\
+Administrator & Members, Teams, roles, skills, profiles, and Resource Types; no Requests, Ledger, or settings & Members and Inventory definitions only \\
+\end{longtable}
+}
+
+\subsection{Audit Trail}
+
+Three records keep the history, each written by its owning module in the same transaction as the change it records, so a change and its record commit together or not at all (\req{QA-audit}, \req{Lifecycle.States}).
+
+\begin{itemize}
+  \item \textbf{Request history.} \code{RequestLifecycleService.record} writes a \code{request\_event} row (Request, line, from-state, to-state, actor, time, note) for every state change of a Request or a Request Line. A Bump writes one row for each of the two lines, each naming the other (\req{Exclusive.Bump.Effect}); an approval decision also keeps \code{decided\_by}, \code{decided\_at}, and \code{reason} on the \code{approval} row.
+  \item \textbf{Setting changes.} \code{SettingsService.update} writes a \code{setting\_change} row (key, old value, new value, actor, time) for every Capacity Planner change (\req{Admin.Member.Create}, \req{Planner.Settings}).
+  \item \textbf{Ledger.} Rows of \code{transaction} are append-only (\req{Ledger.Transaction.Kinds}): the application's database role may insert and select them but not update or delete them, so a correction is a new row naming the one it corrects.
+\end{itemize}
+
+Every table also carries \code{created\_at} and \code{created\_by}. There is no Hibernate Envers and no generic event store: one explicit table per concern, written where the change happens and readable with plain SQL. Nothing is purged in Release~1 (\req{QA-retention}).
+
+\textbf{Who the actor is.} The actor is the Member who acted. Changes a job makes (Objection Window lapse, Waitlist expiry, Period rollover) record the system: \code{actor\_id} is null and the note names the job. Consequences the system draws on other objects from a Member's action, such as a Waitlist fill after a Release or an Optional line dropped at allocation, also record the system, with a note naming the cause. When the Capacity Planner decides an escalated approval on a silent Manager's behalf, both are kept: the \code{approval} row keeps \code{approver\_member\_id}, the lending Manager it was addressed to, and sets \code{decided\_by} to the Capacity Planner and \code{escalated} to true; the \code{request\_event} row names the Capacity Planner as actor and the Manager in its note (\req{Matched.Escalate}).
+
+\subsection{Notifications}
+
+Table~\ref{tab:cross-notify} lists every notification, derived from the SRS sentences cited in its last column. Texts are sketches; angle brackets mark values filled in.
+
+{\footnotesize\setlength{\tabcolsep}{4pt}\renewcommand{\arraystretch}{1.05}
+\begin{longtable}{@{}L{0.155\textwidth}L{0.145\textwidth}L{0.38\textwidth}L{\dimexpr0.32\textwidth-6\tabcolsep\relax}@{}}
+\caption{Notifications: event, recipient, text, and where they are raised.}\label{tab:cross-notify}\\
+\toprule
+\textbf{Event} & \textbf{Recipient} & \textbf{Text sketch} & \textbf{Raised in (SRS)} \\
+\midrule
+\endfirsthead
+\toprule
+\textbf{Event} & \textbf{Recipient} & \textbf{Text sketch} & \textbf{Raised in (SRS)} \\
+\midrule
+\endhead
+\bottomrule
+\endlastfoot
+Request Allocated & requesting Manager & ``Request 42 is Allocated. Optional line 3 was dropped: no longer affordable.'' & \code{allocate} (\req{Lifecycle.Allocate}) \\
+Request to Pending, Waiting, or Refused & requesting Manager & ``Request 42 is Waiting: line 2 does not fit. Waitlist position 3.'' & each transition in \module{Requests} (\req{Lifecycle.Allocate}, \req{Exclusive.Waitlist.Join}) \\
+Approval request & Candidate's Manager & ``Team $\langle$T$\rangle$ asks to borrow $\langle$Person$\rangle$ Oct 12 to 23, for an Earning of 1000 credits. Decide by Oct 8, 17:00.'' & \code{select} (\req{Matched.Approve.Route}) \\
+Candidate selected & the Candidate & ``You are proposed for a Loan to Team $\langle$T$\rangle$, Oct 12 to 23. Your Manager decides.'' & \code{select} (\req{Matched.Loan.Form}) \\
+Approval refused & requesting Manager & ``$\langle$Manager$\rangle$ refused $\langle$Person$\rangle$ for line 1: $\langle$reason$\rangle$. Select a replacement.'' & \code{decideApproval} (\req{Matched.Refuse.Replace}) \\
+Loan formed & the Person; lending Manager & ``You are on Loan to Team $\langle$T$\rangle$ from Oct 12 to 23.'' / ``Earning of 1000 credits posted for $\langle$Person$\rangle$.'' & \code{allocate} (\req{Matched.Loan.Form}) \\
+Objection Window lapsed & each Capacity Planner; requesting Manager & ``Request 42 is escalated: 1 approval is outstanding past the Objection Window.'' & \code{onWindowLapse} (\req{Matched.Escalate}) \\
+Line Bumped & Bumped line's Manager & ``Line 2 ($\langle$Resource$\rangle$, Oct 14, 09:00 to 12:00) was Bumped by a Priority line. Full Refund of 270 credits; first on the Waitlist.'' & after \code{applyBump} (\req{Exclusive.Bump.Effect}) \\
+Waitlist fill, or waiting line expired & waiting Request's Manager & ``Freed capacity filled line 2. Request 42 is Allocated.'' & \code{onCapacityFreed}, \code{expireWaiting\-Lines} (\req{Exclusive.Waitlist.Join}) \\
+Suggestion accepted or declined & the Member who made it & ``Your Suggestion ($\langle$type$\rangle$, Oct 12 to 16) was declined: $\langle$reason$\rangle$.'' & \code{SuggestionService} (\req{Suggest.Accept.Existing}) \\
+Period rollover, mid-Period Grant & each Manager & ``Period $\langle$P$\rangle$ began: Grant of 5000 credits. 320 granted credits expired.'' & \code{rollover}, \code{postGrant} (\req{Ledger.Grant.Period}) \\
+\end{longtable}
+}
+
+\textbf{Written in the caller's transaction.} The module that causes the event calls \code{Notifier.notify(to, kind, text, link)} inside its own transaction, and \code{Notifier} inserts the row and hands it to each \code{Delivery}; \code{InAppDelivery}, the only one in Release~1, does nothing more, so a rolled-back action leaves no notification and nothing is sent after commit (\req{CI-inapp}). The client polls GET \path{/api/notifications} every 30 seconds and shows the unread count; \code{link} is the client route to open, such as \path{/requests/42}. Recipients are resolved through \module{Members}: a Team's Manager, or every Member holding \code{PLANNER}.
+
+\textbf{Email (Stretch).} \code{EmailDelivery} implements \code{Delivery}. Inside the transaction it only registers an after-commit callback, which sends the message through the SMTP server the Administrator configured. A failed send is logged and the in-app row remains, so email is a copy and never the record. No caller of \code{Notifier} changes (Section~\ref{sec:evo}).
+
+\subsection{Error Taxonomy and Validation}
+
+Four exception classes in \code{common} carry every refusal, and one \code{@RestControllerAdvice} in \code{common} turns them into the problem details of Table~\ref{tab:api-errors}.
+
+\begin{itemize}
+  \item \code{NotFoundException}: the object does not exist or lies outside the caller's scope (404).
+  \item \code{ForbiddenException}: the caller sees the object but may not act on it, such as a lending Manager ending a Loan only the borrowing Manager may end (403). A missing role surfaces as Spring's \code{AccessDeniedException}, also 403.
+  \item \code{RuleViolation(code, message)}: a business rule refused the action. Codes that describe the object's current state (\code{WRONG\_STATE}, \code{ALREADY\_DECIDED}, \code{WINDOW\_LAPSED}, \code{SUGGESTION\_CLOSED}, \code{NOT\_ALLOCATED}, \code{PERIOD\_STARTED}) map to 409, all others to 422; the message, written for a Manager, becomes \code{detail}.
+  \item \code{ConcurrencyRetryException}: an allocation transaction failed twice on a deadlock or lock timeout, which Spring reports as \code{PessimisticLocking\allowbreak FailureException} (503). The retry advice sits outside the transaction advice and repeats the whole transaction, and since audit and notification rows are written inside it, a retry repeats no side effect. With ordered locks this should not happen, so a 503 points at a bug or an overloaded database.
+\end{itemize}
+
+An exclusion-constraint violation (SQLSTATE \code{23P01}) on \code{exclusive\_occurrence} or \code{loan} cannot occur while the allocators choose under the type lock; if one does, it is logged as a bug, with its stack trace, and answered with 409 \code{ALLOCATION\_CONFLICT}. Anything else is a 500 whose details stay in the log.
+
+\textbf{Where validation happens.} At the edge, bean validation (\code{@Valid} on request bodies) checks shape only: presence, types, ranges such as a positive quantity, formats, an end after a start; it reads no data. The application services and domain objects check every business rule: a window in the future, a type not retired, affordability, the Candidate count and eligibility, capacity, the allowed transitions. Rules never live in controllers or in the client: the client may disable Submit when the draft view reports a shortfall, but it shows what the server computed, and Quotes are always fetched (Section~\ref{mod:web}). A refusal rolls back the whole transaction, audit and notification rows included (\req{QA-atomic}).
+
+\subsection{Configuration and Time}
+
+Deployment configuration comes from environment variables through Spring Boot's relaxed binding (Table~\ref{tab:cross-config}), so the one Docker image runs unchanged everywhere and no secret lives in the image or the repository (\req{UD-admin}). Fixed settings (Flyway on, schema validation, a two-thread scheduler) ship in the jar. Policy is not configuration: everything the Capacity Planner sets is data in \module{Settings}, changed at run time without a restart (\req{Planner.Settings}).
+
+{\footnotesize\renewcommand{\arraystretch}{1.08}
+\begin{longtable}{@{}L{0.38\textwidth}L{0.36\textwidth}L{\dimexpr0.26\textwidth-4\tabcolsep\relax}@{}}
+\caption{Environment variables.}\label{tab:cross-config}\\
+\toprule
+\textbf{Variable} & \textbf{Meaning} & \textbf{Default or example} \\
+\midrule
+\endfirsthead
+\toprule
+\textbf{Variable} & \textbf{Meaning} & \textbf{Default or example} \\
+\midrule
+\endhead
+\bottomrule
+\endlastfoot
+\code{SPRING\_DATASOURCE\_URL} & JDBC URL of the PostgreSQL~16 database & \path{jdbc:postgresql://db:5432/openbench} \\
+\code{SPRING\_DATASOURCE\_USERNAME}, \code{SPRING\_DATASOURCE\_PASSWORD} & the application's database role (INSERT and SELECT only on \code{transaction}) & required \\
+\code{SERVER\_SERVLET\_SESSION\_TIMEOUT} & idle session expiry & \code{12h} \\
+\code{OPENBENCH\_TIME\_ZONE} & the company time zone, an IANA id & required, e.g.\ \code{America/New\_York} \\
+\code{OPENBENCH\_LOCK\_TIMEOUT} & PostgreSQL \code{lock\_timeout} on allocation transactions & \code{5s} \\
+\code{OPENBENCH\_INITIAL\_ADMIN\_USERNAME}, \code{OPENBENCH\_INITIAL\_ADMIN\_PASSWORD} & the first Administrator, created only while no Member exists & unset after the first start \\
+\end{longtable}
+}
+
+\textbf{Time.} Time is read only from one injected \code{java.time.Clock} bean set to the company zone, never from the no-argument \code{now()} methods, which an ArchUnit rule forbids; tests swap in a clock they move by hand to lapse an Objection Window or cross a Period boundary. All windows, Price Bands, and Periods are in the one company time zone (\req{LI-company}). Instants are stored as \code{timestamptz}, and the zone is applied wherever the calendar matters: the weekday and hour for Price Bands, the Monday-to-Friday days of a Loan, the midnight that starts a Period, the bump cutoff, the rollover job's \code{cron}, and the API's offsets. The JVM default zone and the database session's \code{TimeZone} are the same zone, so dates convert alike in Java and SQL. Pricing and the hourly check step through real hours as instants, so a daylight-saving day's 23 or 25 hours are each counted once.
+
+\subsection{Testing Strategy}
+
+Pure rules are tested as plain objects; everything the database guarantees is tested on PostgreSQL~16 in a container started by the test suite with the production migrations, never an in-memory substitute (\rc{3}, \req{CO-db}). \code{mvn verify} runs every level of Table~\ref{tab:cross-tests} except usability; the container tests need Docker.
+
+{\footnotesize\renewcommand{\arraystretch}{1.08}
+\begin{longtable}{@{}L{0.13\textwidth}L{0.58\textwidth}L{\dimexpr0.29\textwidth-4\tabcolsep\relax}@{}}
+\caption{Test levels.}\label{tab:cross-tests}\\
+\toprule
+\textbf{Level} & \textbf{What it covers and how} & \textbf{Requirements} \\
+\midrule
+\endfirsthead
+\toprule
+\textbf{Level} & \textbf{What it covers and how} & \textbf{Requirements} \\
+\midrule
+\endhead
+\bottomrule
+\endlastfoot
+Unit: pricing and time & JUnit~5 with a fixed \code{Clock}, no Spring or database: \code{Pricing.quote} (band edges, premium, a daylight-saving day) and \code{Pricing.refund} (each step, never 100\%); window overlap and weekly recurrence expansion; hourly sums and the earliest failing hour & \req{Ledger.Price.Formula}, \req{Release.Refund}, \req{Exclusive.Conflict}, \req{Metered.Pool.Check} \\
+Unit: rules & The Shortlist filter (skills, availability, overlapping Loan, own Team, inactive) and order; the Request and line state machines, every allowed transition and every other one refused & \req{Matched.Shortlist.Build}, \req{Lifecycle.States} \\
+Integration & Spring Boot tests on PostgreSQL~16 in Testcontainers with the Flyway migrations: the hourly-sum SQL with Pool Capacity and Quota, both exclusion constraints, the append-only permissions on \code{transaction}, lapse and rollover with a moved clock, scoping (another Team's Request is 404), the problem-detail mapping & \req{QA-correct}, \req{QA-audit}, \req{SE-visibility}, \req{PE-jobs} \\
+Concurrency & Two threads released together by a latch, each in its own transaction. Metered: both ask for the last units of one hour; exactly one is Allocated, the other Waiting, and no hour exceeds Pool Capacity. Exclusive: both ask for one instance in overlapping windows; exactly one gets it & \req{QA-correct}, \req{CO-tx} \\
+Architecture & One ArchUnit test class: the dependency rule of Section~\ref{sec:arch} (layer order, no cycles, entities and repositories private to their module, \code{ReductionGuard} the only upward reference); \code{@PreAuthorize} on every service method a controller calls; no no-argument \code{now()}; no \code{isolation} attribute on \code{@Transactional} in \module{Allocation} and \module{Requests} & \req{CO-plugin}, \req{QA-extensible}, \req{SE-roles} \\
+End-to-end & One test over HTTP with a real session and CSRF token: a Manager submits the three-line Request (Matched, Exclusive, Metered) and selects a Candidate; the lending Manager approves; the Request is Allocated and the Charges and the Earning appear on both Teams' Statements & \req{Lifecycle.Allocate}, \req{QA-atomic} \\
+Front end & Vitest and React Testing Library at the route level, the API mocked through the generated types: each route renders for the right roles, sends the right call, and shows the problem \code{detail} on a refusal & \req{UI-draft}, \req{UI-shortlist}, \req{UI-inventory} \\
+Usability & Before the final demonstration, at least three untrained people from outside the project team each draft and submit a three-line Request in under five minutes; times and problems are recorded & \req{QA-usable} \\
+\end{longtable}
+}
+
+Every Release~1 functional requirement also has at least one integration test on PostgreSQL in Testcontainers whose display name carries its identifier (\req{QA-retention}); unit tests add the edge cases. Each test's display name carries the identifiers it covers, so the traceability of Appendix~\ref{app:trace} can be checked against the test report (\req{QA-retention}).
+
+\subsection{Logging}
+
+The server writes one JSON object per line to standard output (Spring Boot structured logging), which Docker keeps. A servlet filter gives every HTTP request a correlation id, or takes the one nginx sent in \code{X-Request-Id}, puts it in the logging context, and returns it in the \code{X-Request-Id} response header, so a Manager reporting an error can cite it; every job run gets its own.
+
+\code{RequestLifecycleService.record} writes one INFO line per state transition next to the \code{request\_event} row, with Request id, line id, from-state, to-state, actor id or \code{system}, and the correlation id. There is also one line per Transaction posted, setting change, authentication attempt (username, remote address, outcome), and job run (job, items processed, duration); ERROR with the stack trace for every 500 and exclusion-constraint violation; WARN for every 503.
+
+\begin{lstlisting}
+{"@timestamp":"2026-10-12T09:14:03.512-04:00","level":"INFO","correlationId":"7f3c2a9e",
+ "event":"transition","request":42,"line":null,"from":"PENDING","to":"ALLOCATED","actor":17}
+\end{lstlisting}
+
+Logs carry no personal data beyond ids (\req{SE-data}): Member, Team, Request, and Resource ids, never names, email addresses, skills, availability, notes, reasons, or request bodies. The username appears only in authentication lines, where it is the identifier being checked; a password never appears.

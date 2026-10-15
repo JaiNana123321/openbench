@@ -1,0 +1,38 @@
+@startuml context
+' F1 System context: OpenBench as one system, the five roles and the Clock (scheduled jobs).
+' Trimmed copy of the SRS context figure; no external systems in Release 1.
+left to right direction
+skinparam shadowing false
+skinparam defaultFontName Helvetica
+skinparam defaultFontSize 12
+skinparam ArrowFontSize 10
+skinparam ArrowColor #223
+skinparam rectangle {
+  BackgroundColor #F4F6FA
+  BorderColor #223
+  RoundCorner 20
+}
+skinparam actor {
+  BackgroundColor White
+  BorderColor #223
+}
+
+actor Member
+actor Manager
+actor "Clock\n(scheduled jobs)" as Clock
+actor "Resource Owner" as RO
+actor "Capacity Planner" as CP
+actor Administrator as Admin
+
+rectangle "OpenBench\n(one web application)" as OB
+
+Member  --> OB : skill profile, availability,\nSuggestion
+OB      --> Member : Loan notice
+Manager --> OB : Request, Candidate selection,\napproval or refusal, Release
+OB      --> Manager : Quote, Shortlist, outcome,\nStatement, dashboard
+Clock   --> OB : every 60 s: lapsed Objection\nWindows; Period start
+OB      <-- RO : Inventory record,\nPool Capacity
+OB      <-- CP : Grant, Unit Price, Price Band,\nRefund Schedule, Day Rate, Quota
+OB      --> CP : escalated Request,\nall-Team dashboard
+OB      <-- Admin : Member, Team, role,\nResource Type
+@enduml

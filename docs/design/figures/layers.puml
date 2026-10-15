@@ -1,0 +1,77 @@
+@startuml layers
+!pragma layout smetana
+' F3 Layers. Left: the four layers of the dependency rule (D-C); a module calls only modules in a
+' lower layer. Right: the four parts inside every module, shown for Requests (D-C, D-B rule 1).
+skinparam shadowing false
+skinparam defaultFontName Helvetica
+skinparam defaultFontSize 12
+skinparam ArrowFontSize 10
+skinparam ArrowColor #223
+skinparam classAttributeIconSize 0
+skinparam nodesep 14
+skinparam ranksep 26
+skinparam package {
+  BackgroundColor #F4F6FA
+  BorderColor #223
+}
+skinparam class {
+  BackgroundColor White
+  BorderColor #223
+  HeaderBackgroundColor #DDE3EE
+}
+hide empty members
+hide circle
+
+package "Module layers" as Layers {
+  package "1  Client" as L1 {
+    package "web/ (React SPA)" as m_web {
+    }
+  }
+  package "2  Orchestration and reporting" as L2 {
+    package "requests" as m_requests {
+    }
+    package "dashboard" as m_dashboard {
+    }
+    package "jobs" as m_jobs {
+    }
+  }
+  package "3  Allocation and credits" as L3 {
+    package "allocation" as m_allocation {
+    }
+    package "ledger" as m_ledger {
+    }
+  }
+  package "4  Foundation" as L4 {
+    package "inventory" as m_inventory {
+    }
+    package "members" as m_members {
+    }
+    package "settings" as m_settings {
+    }
+    package "notifications" as m_notifications {
+    }
+  }
+}
+L1 ..> L2 : REST /api
+L2 ..> L3
+L3 ..> L4
+
+package "Inside one module (requests)" as Inside {
+  package "controller (REST)" as P_ctl {
+    class "REST controllers for\n~/api/requests, ~/api/suggestions" as Ctl
+  }
+  package "application service\n(public; @Transactional,\n@PreAuthorize)" as P_svc {
+    class "RequestLifecycleService,\nRequestService,\nSuggestionService" as Svc <<interface>>
+  }
+  package "domain (entities, pure\nrules; package-private)" as P_dom {
+    class "Request, RequestLine,\nSuggestion, RequestEvent" as Dom <<entity>>
+  }
+  package "repository (Spring Data\nJPA; package-private)" as P_rep {
+    class "one repository per entity;\nwrites only its own tables" as Repo
+  }
+}
+P_ctl ..> P_svc
+P_svc ..> P_dom
+P_dom ..> P_rep
+m_requests .. Inside : expanded
+@enduml

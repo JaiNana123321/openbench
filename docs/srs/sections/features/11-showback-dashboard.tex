@@ -1,0 +1,21 @@
+\subsection{Showback Dashboard}\label{feat:dashboard}
+
+\subsubsection{Description and Priority}
+The dashboard makes capacity and credits visible without any billing: utilization and idle capacity per Resource Type, and credits earned and spent per Team. Managers see their own Team against the company-wide utilization; the Capacity Planner sees every Team; Resource Owners see their own Resources. It is the showback artifact promised in the proposal, together with the Statement. This feature realizes \FE{dashboard} and is exercised by \UC{dashboard}. \priority{Medium.}
+
+\subsubsection{Stimulus/Response Sequences}
+\begin{itemize}
+  \item \textbf{Stimulus:} A Manager opens the dashboard. \textbf{Response:} The system shows the current Period's utilization and idle capacity per Resource Type and the Team's credits earned, spent, and remaining.
+  \item \textbf{Stimulus:} The Capacity Planner selects a past Period. \textbf{Response:} The system shows the same figures for that Period for every Team.
+\end{itemize}
+
+\subsubsection{Functional Requirements}
+\fr{Dashboard.Utilization}{For each Exclusive and Metered Resource Type and Period the dashboard shall show utilization: allocated instance-hours divided by available instance-hours for Exclusive types, and allocated unit-hours divided by Pool Capacity times hours for Metered types, both as a percentage.}
+\fr{Dashboard.Idle}{For each Exclusive and Metered Resource Type the dashboard shall show idle capacity: available minus allocated, for the current Period to date and for the coming seven days, so that free capacity is visible before it is wasted.}
+\fr{Dashboard.Credits}{For each Team and Period the dashboard shall show Grants received, Charges, Earnings, Refunds, credits expired, and the current Balance and Available Balance, with a link to the Statement.}
+\fr{Dashboard.Loans}{For each Team and Period the dashboard shall show person-days lent to other Teams and person-days borrowed.}
+\fr{Dashboard.Waitlist}{For each Exclusive and Metered Resource Type the dashboard shall show the number of lines waiting and the oldest waiting submission time.}
+\fr{Dashboard.Scope}{A Manager shall see company-wide utilization and idle capacity and only their own Team's credits and Loans; the Capacity Planner shall see every Team; a Resource Owner shall see utilization and idle capacity for the Resources they own.}
+\fr{Dashboard.Period}{The dashboard shall default to the current Period and shall let the viewer select any past Period.}
+\fr{Dashboard.Fresh}{Dashboard figures shall reflect every allocation, Release, and Transaction completed before the page was requested.}
+\fr[Stretch]{Dashboard.Usage}{The dashboard shall show requested versus used units per Team and Metered Resource Type when usage has been recorded (\FR{Metered.Usage.Compare}).}

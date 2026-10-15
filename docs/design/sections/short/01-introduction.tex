@@ -1,0 +1,40 @@
+% 01-introduction.tex — OpenBench Software Design Document, short edition (condensed from sections/01-introduction.tex on 2026-10-05).
+\section{Introduction}\label{sec:intro}
+
+\subsection{Purpose and Scope}
+
+This document specifies the design of Release~1 of \SRSproduct{}, the internal marketplace in which a Manager posts one Request for people, Exclusive resources, and Metered capacity, and the system allocates each Request Line under the policy of its Allocation Class and settles it in credits.
+
+The design covers every Release~1 requirement of the SRS. It divides the system into nine back-end modules and a web client (Section~\ref{sec:arch}) and specifies each module down to Java signatures, owned tables, invariants, and failure behavior (Section~\ref{sec:modules}). The six Stretch requirements are designed only as extension points (Section~\ref{sec:evo}).
+
+\subsection{Requirements Baseline and Changes}
+
+The baseline is the \SRSproduct{} Software Requirements Specification, version~\SRSversion{} of 2026-10-05. Identifiers are those of its short edition: 41 Release~1 and 6 Stretch functional requirements in dot notation, twelve use cases, and the CO, UI, SI, CI, PE, SE, QA, UD, AS, and DE identifiers. Version~\SRSversion{} differs from version~0.2, the edition that was graded, by the three requirements changes below.
+
+{\small\renewcommand{\arraystretch}{1.1}
+\begin{tabularx}{\textwidth}{@{}L{2.3cm}YL{4.6cm}@{}}
+\toprule
+\textbf{Change} & \textbf{What changed, and why} & \textbf{Where it lands} \\
+\midrule
+\rc{1} One Loan at a time &
+A Member with a Loan overlapping any day of a Matched line's window is not a Candidate for that line; the Shortlist is ordered by fewest person-days lent in the current Period, ties by name (\req{Profile.Availability}, \req{Matched.Shortlist.Build}). Grader feedback. &
+\code{MatchedAllocator} (Section~\ref{mod:allocation}); the \code{loan} constraint (Section~\ref{sec:data}). \\
+\rc{2} Inspection participation &
+The inspection record of the SRS states that all four team members read and inspected it. Grader feedback. &
+No design effect. \\
+\rc{3} Test database &
+Automated tests run on PostgreSQL~16 in a container started by the test suite (Testcontainers), with the same migrations as production; the in-memory H2 database is dropped (\req{CO-db}, \req{SI-db}). Design decision (\adr{0006}). &
+Sections~\ref{sec:data} and~\ref{sec:cross}. \\
+\bottomrule
+\end{tabularx}
+}
+
+\subsection{Design Principles}
+
+\textbf{Simplicity first.} The team's standing rule is the simplest architecture and program that meets the SRS: one process, one database, direct method calls, no message broker. \textbf{Modularity, low coupling, and high cohesion.} Each of the nine modules hides its entities and tables behind its application services; dependencies point down a fixed layer order with no cycles, and each module owns one cluster of the vocabulary: \module{Allocation} decides all capacity and \module{Ledger} all credit arithmetic, and neither calls the other. \textbf{Separation of concerns.} What state a Request is in (\module{Requests}), whether capacity exists (\module{Allocation}), and what it costs (\module{Ledger}) are answered by different modules. \textbf{Correctness enforced in the database.} Invariants that must survive concurrent users are database constraints, row locks, or grants, not only application checks (\adr{0006}). \textbf{Uniformity of patterns.} Every module has the same four inner layers, every user or job action is one transactional service method, every module is specified with the same template, and every error is a problem response with a stable code.
+
+\subsection{Notation and Conventions}
+
+The figures are UML~2 diagrams drawn with PlantUML from sources kept with this document; color carries no meaning, so every figure reads in grayscale. Three elements go beyond plain boxes and arrows; messages in sequence diagrams are numbered and named after the operations of Section~\ref{sec:modules}. \textbf{Interface lollipop and socket:} in the component diagram the port \code{ReductionGuard} is drawn as a provided interface (a ball, or lollipop) on \module{Allocation} and a required interface (a socket) on \module{Inventory}; the call at run time goes from Inventory to Allocation, but the compile-time dependency goes the other way. \textbf{Dashed arrows labeled read-only:} the dashed arrows from \module{Dashboard} stand for SQL reads through views over other modules' tables, where a solid arrow is a call to a module's application service. \textbf{\code{alt} and \code{opt} frames:} in sequence diagrams an \code{alt} frame holds alternative branches, each with its guard in brackets, and failure branches are always drawn as an \code{alt} branch.
+
+Requirement identifiers are set in bold: functional requirements keep their dot notation, for example \req{Lifecycle.States}, and other identifiers print with the numbers the SRS gives them, for example \req{QA-correct}. Signatures are Java~17; every application-service method runs in one transaction unless marked \emph{(read-only)}. All windows, Price Bands, and Periods are in the company's one time zone.

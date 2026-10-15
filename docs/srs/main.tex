@@ -1,0 +1,34 @@
+% OpenBench — Software Requirements Specification
+% Build: nix develop path:nix -c make -C docs/srs     (see Makefile and D17 in .scratch/srs/decisions.md)
+\documentclass[11pt,letterpaper]{article}
+\input{macros}
+
+\hypersetup{
+  pdftitle={OpenBench Software Requirements Specification},
+  pdfauthor={Jai Nana, Brian Lujan, Fotih Turopov, Yerassyl Shnazbayev},
+  pdfsubject={CSDS 393 Software Engineering},
+}
+
+\begin{document}
+
+\input{sections/00-front-matter}
+
+\tableofcontents
+\clearpage
+
+\input{sections/01-vision-and-scope}
+\input{sections/02-introduction}
+\input{sections/03-overall-description}
+\input{sections/04-system-features}
+\input{sections/05-external-interfaces}
+\input{sections/06-nonfunctional-requirements}
+
+\appendix
+\input{sections/appendix-a-glossary}
+\input{sections/appendix-b-data-dictionary}
+\input{sections/appendix-c-analysis-models}
+\input{sections/appendix-d-use-cases}
+\input{sections/appendix-e-inspection-report}
+\input{sections/appendix-f-traceability}
+
+\end{document}

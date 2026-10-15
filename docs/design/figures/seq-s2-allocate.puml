@@ -1,0 +1,83 @@
+@startuml seq-s2-allocate
+' F12 Scenario S2: the last approval allocates the Request (UC-6). One transaction.
+' allocate re-runs evaluateAll first, so an ineligible Candidate sends the Request to Waiting before
+' any commit; MatchedAllocator.commit repeats the check only as a guard that throws and rolls back.
+skinparam shadowing false
+skinparam defaultFontName Helvetica
+skinparam defaultFontSize 11
+skinparam ArrowColor #223
+skinparam sequenceMessageAlign left
+skinparam responseMessageBelowArrow true
+skinparam sequence {
+  ParticipantBackgroundColor #F4F6FA
+  ParticipantBorderColor #223
+  ActorBackgroundColor White
+  ActorBorderColor #223
+  LifeLineBorderColor #223
+  LifeLineBackgroundColor #DDE3EE
+  GroupBorderColor #223
+  GroupBackgroundColor #DDE3EE
+  DividerBackgroundColor #F4F6FA
+  DividerBorderColor #223
+}
+skinparam database {
+  BackgroundColor #F4F6FA
+  BorderColor #223
+}
+skinparam note {
+  BackgroundColor White
+  BorderColor #223
+}
+hide footbox
+autonumber
+
+actor "Lending\nManager" as LM
+participant "Web\nclient" as Web
+participant RequestLifecycleService as RLS
+participant AllocationLock as Lock
+participant "Allocator\n(Exclusive,\nMetered)" as Alloc
+participant "MatchedAllocator\n(ApprovalDriven)" as MA
+participant AllocationQueries as AQ
+participant LedgerService as Ledger
+participant Notifier
+
+LM -> Web : approve
+Web -> RLS : decideApproval(a,\nAPPROVE, reason,\nactor)
+activate RLS
+note over Lock, Ledger
+  one transaction; lock order: Resource Type rows
+  by ascending id, then accounts
+end note
+RLS -> Lock : lockTypes(types)
+RLS -> MA : decide(a, APPROVE, reason, actor)
+MA --> RLS : ApprovalOutcome, or RuleViolation\nNOT_A_CANDIDATE (re-checked)
+RLS -> MA : outstanding(request)
+alt no Required approval outstanding
+  RLS -> RLS : allocate:\nevaluateAll
+  alt a Candidate is no longer eligible: UNSATISFIABLE(NOT_A_CANDIDATE)
+    RLS -> RLS : toWaiting
+    RLS -> Alloc : cancel(line), each held line
+    RLS -> Ledger : releaseCredits(team, line)
+    RLS -> RLS : record(event)
+    RLS -> Notifier : notify(Manager, replacement needed)
+  else every Required line still satisfiable
+    opt drop unfit, refused, or unaffordable Optional lines
+      RLS -> Alloc : cancel(line): Dropped
+    end
+    RLS -> Alloc : commit(line), each Exclusive and\nMetered line: HELD -> ALLOCATED
+    RLS -> Ledger : commitCharges(request, charges): locks account\nrow; held -> Charge, granted first, then earned
+    RLS -> MA : commit(line), each Matched line:\nforms the Loans (INSERT loan); its\nre-check is only a guard (throws)
+    RLS -> AQ : loansFor(line)
+    AQ --> RLS : List<Loan>
+    loop each Loan
+      RLS -> Ledger : postEarning(lendingTeam, loan, amount)
+    end
+    RLS -> RLS : record(event):\nAllocated
+    RLS -> Notifier : notify(Manager and each Person)
+  end
+else Required approvals still outstanding (Request stays Pending)
+  RLS -> RLS : record(event)
+end
+RLS --> Web : outcome
+deactivate RLS
+@enduml

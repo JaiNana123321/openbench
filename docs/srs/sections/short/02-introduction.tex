@@ -1,0 +1,31 @@
+% Short-edition Section 2, reworded after the 2026-09-21 review.
+\section{Introduction}\label{sec:intro}
+
+\subsection{Purpose}
+
+This Software Requirements Specification defines the functional and non-functional requirements of Release~1 of \SRSproduct. \SRSproduct{} is an internal marketplace in which the Manager of a Team places one Request for people, Exclusive resources, and Metered capacity. Each portion is assigned according to the allocation policy that applies to it, and the outcome is settled in credits. All requirements are committed to Release~1 unless they are tagged Stretch. The specification is intended for the development team, the course staff who grade and inspect it, and the stakeholders of Section~\ref{sec:vision}.
+
+\subsection{Project Scope and Product Features}
+
+Release~1 offers all twelve major features, FE-1 to FE-12, enumerated in Section~\ref{sec:vision}: Resource Types as data and the Inventory; Member profiles; Suggestions; creation and submission of a Request with a locked Quote; the three allocators (Matched, Exclusive, and Metered) behind one interface; the Request lifecycle, including Holds that never outlive the Objection Window; Release with a partial Refund; the Ledger with Grants, Charges, Earnings, Refunds, and Price Bands; the showback dashboard and the Statement; and administration. The Vision and Scope section states why some elements are deferred to Stretch or Future.
+
+\subsection{Document Conventions}
+
+\begin{itemize}
+  \item \textbf{Shall} denotes a mandatory requirement. Priority is \emph{High} (Release~1 cannot be used without it), \emph{Medium} (Release~1 is usable without it but not complete), and \emph{Low} (Stretch).
+  \item Functional requirements all have an identifier that starts with their feature name using dot notation, e.g., \textbf{Draft.Submit.Lock}. Use cases start with UC- and features with FE-. Other prefixes are documented on their first appearance. Identifiers are shared with the full edition of this specification, which holds the complete requirement set, the business rules, and the use cases written out in full.
+  \item Terms such as Request, Hold, Loan, and Objection Window that are capitalized are defined in the glossary, Appendix~\ref{app:glossary}. We used the language a Manager uses in conversation and dropped financial language. Credit means the unit of account and never a direction of entry, and nothing in the system is paid, funded, or billed.
+  \item Values marked \emph{example default} are settings of the Capacity Planner. The listed value is the one that will be shipped and tested, and it can be changed by the Capacity Planner without a code change.
+\end{itemize}
+
+\subsection{References}
+
+\begin{enumerate}
+  \item J.~Nana, B.~Lujan, F.~Turopov, \emph{OpenBench: A Policy-Pluggable Internal Resource Marketplace}, CSDS~393 informal project proposal, 2026.
+  \item CSDS~393, \emph{Rubric for Software Requirements Specification}, 2026.
+  \item Project vocabulary file \texttt{CONTEXT.md}, decisions log, and architecture decision records, project repository, 2026.
+\end{enumerate}
+
+\subsection{Definitions}
+
+Appendix~\ref{app:glossary} lists every defined term and is generated from the project's vocabulary file at build time. A first-time reader needs only a few of them. A \term{Team} has one \term{Manager} and one \term{Account} of credits. A \term{Request} is a set of \term{Request Lines}, and each line belongs to exactly one \term{Allocation Class}: \term{Matched} for people, \term{Exclusive} for things held whole over a window, or \term{Metered} for divisible pools. A Matched line that has been satisfied is a \term{Loan}. A \term{Hold} is a tentative allocation that is not yet charged and lasts no longer than the \term{Objection Window}. The \term{Ledger} records four kinds of \term{Transaction}: \term{Grant}, \term{Charge}, \term{Earning}, and \term{Refund}.

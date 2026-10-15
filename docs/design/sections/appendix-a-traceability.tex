@@ -1,0 +1,114 @@
+% appendix-a-traceability.tex — OpenBench Software Design Document. Written from .scratch/design-doc/brief.md on 2026-10-05.
+% Module assignments follow brief section 3. Numbered identifiers (CO-n, UI-n, ...) are counted in source order of the SRS short edition
+% (03-overall-description.tex, 05-external-interfaces.tex, 06-nonfunctional-requirements.tex).
+\section{Traceability}\label{app:trace}
+
+Each row traces one identifier of the SRS version~\SRSversion{} short edition to the module or modules that satisfy it, the first named owning the requirement and any others contributing to it, and to the sections of this document that design it; functional requirements appear in SRS order, Stretch requirements point at their extension point in Section~\ref{sec:evo}, and the remaining identifiers follow by class. Every Release~1 requirement maps to at least one module.
+
+{\footnotesize\renewcommand{\arraystretch}{1.05}\setlength{\tabcolsep}{4pt}
+\begin{longtable}{@{}L{4.75cm}L{\dimexpr\textwidth-10.05cm-6\tabcolsep\relax}L{3.6cm}L{1.7cm}@{}}
+\caption{Traceability from SRS identifiers to modules and sections.}\label{tab:trace}\\
+\toprule
+\textbf{Identifier} & \textbf{Requirement} & \textbf{Module(s)} & \textbf{Section} \\
+\midrule
+\endfirsthead
+\multicolumn{4}{@{}l}{\itshape Traceability (continued)}\\ \toprule
+\textbf{Identifier} & \textbf{Requirement} & \textbf{Module(s)} & \textbf{Section} \\
+\midrule
+\endhead
+\bottomrule
+\endlastfoot
+\multicolumn{4}{@{}l}{\itshape Functional requirements, Release~1}\\
+\req{Inventory.Type.Define} & Resource Types defined as data, without code & \module{Inventory} & \ref{mod:inventory}, \ref{sec:data} \\
+\req{Inventory.Resource.Add} & Add, edit, retire Resources; reductions guarded & \module{Inventory}, \module{Allocation} & \ref{mod:inventory}, \ref{mod:allocation} \\
+\req{Inventory.View.Holder} & Show who holds a Resource; filter Resources & \module{Allocation}, \module{Inventory} & \ref{mod:allocation}, \ref{mod:inventory}, \ref{sec:api} \\
+\req{Profile.Skills} & One Team per Member; skills from a list & \module{Members} & \ref{mod:members} \\
+\req{Profile.Availability} & Availability ranges; one Loan at a time & \module{Members}, \module{Allocation} & \ref{mod:members}, \ref{mod:allocation}, \ref{sec:data} \\
+\req{Suggest.Create} & Member proposes one line to own Manager & \module{Requests} & \ref{mod:requests} \\
+\req{Suggest.Accept.Existing} & Manager accepts or declines an Open Suggestion & \module{Requests}, \module{Notifications} & \ref{mod:requests}, \ref{mod:notifications} \\
+\req{Draft.Create} & Only a Manager creates and withdraws Requests & \module{Requests} & \ref{mod:requests}, \ref{sec:cross} \\
+\req{Draft.Line.Add} & Line names type, quantity, and future window & \module{Requests} & \ref{mod:requests} \\
+\req{Draft.Line.Required} & Lines marked Required or Optional; split allowed & \module{Requests} & \ref{mod:requests} \\
+\req{Draft.Quote.Line} & Quotes, sums, and shortfall shown while drafting & \module{Requests}, \module{Ledger} & \ref{mod:requests}, \ref{mod:ledger} \\
+\req{Draft.Submit.Lock} & Submission locks every Quote and evaluates lines & \module{Requests} & \ref{mod:requests}, \ref{sec:runtime} \\
+\req{Matched.Shortlist.Build} & Shortlist of eligible Persons, least lent first & \module{Allocation}, \module{Members} & \ref{mod:allocation}, \ref{sec:runtime} \\
+\req{Matched.Approve.Route} & One approval per Candidate to their Manager & \module{Allocation}, \module{Requests}, \module{Notifications} & \ref{mod:allocation}, \ref{sec:runtime} \\
+\req{Matched.Refuse.Replace} & Refusal asks for a replacement; window continues & \module{Requests}, \module{Allocation} & \ref{mod:requests}, \ref{sec:runtime} \\
+\req{Matched.Escalate} & Lapsed approvals go to the Capacity Planner & \module{Requests}, \module{Allocation} & \ref{mod:requests}, \ref{sec:runtime} \\
+\req{Matched.Loan.Form} & Approved Candidates form Loans; Earnings post & \module{Allocation}, \module{Ledger}, \module{Notifications} & \ref{mod:allocation}, \ref{sec:runtime}, \ref{sec:data} \\
+\req{Exclusive.Conflict} & No overlapping Holds or allocations per instance & \module{Allocation} & \ref{mod:allocation}, \ref{sec:runtime}, \ref{sec:data} \\
+\req{Exclusive.Waitlist.Join} & Unmet Required lines join an ordered Waitlist & \module{Allocation}, \module{Requests} & \ref{mod:allocation}, \ref{sec:runtime} \\
+\req{Exclusive.Priority.Bump} & Priority line Bumps standard lines outside cutoff & \module{Allocation} & \ref{mod:allocation}, \ref{sec:runtime} \\
+\req{Exclusive.Bump.Effect} & Full Refund, Waitlist head, and notice on Bump & \module{Allocation}, \module{Requests}, \module{Ledger}, \module{Notifications} & \ref{mod:allocation}, \ref{sec:runtime} \\
+\req{Metered.Line.Form} & Metered line: units over window, all or nothing & \module{Allocation}, \module{Requests}, \module{Ledger} & \ref{mod:allocation}, \ref{mod:requests} \\
+\req{Metered.Pool.Check} & Hourly sums within Pool Capacity and Quota & \module{Allocation} & \ref{mod:allocation}, \ref{sec:runtime}, \ref{sec:data} \\
+\req{Lifecycle.States} & Seven Request states with recorded transitions & \module{Requests} & \ref{mod:requests}, \ref{sec:runtime} \\
+\req{Lifecycle.Evaluate} & Every line evaluated in one transaction & \module{Requests}, \module{Allocation} & \ref{mod:requests}, \ref{sec:runtime} \\
+\req{Lifecycle.Hold.Place} & Pending Request places Holds; held credits count & \module{Requests}, \module{Allocation}, \module{Ledger} & \ref{mod:requests}, \ref{mod:allocation}, \ref{sec:runtime} \\
+\req{Lifecycle.Window.Start} & Objection Window runs once; lapse escalates & \module{Requests}, \module{Jobs} & \ref{mod:requests}, \ref{mod:jobs}, \ref{sec:runtime} \\
+\req{Lifecycle.Allocate} & All Holds commit and credits post together & \module{Requests}, \module{Allocation}, \module{Ledger}, \module{Notifications} & \ref{mod:requests}, \ref{sec:runtime} \\
+\req{Lifecycle.Waiting.Reevaluate} & Freed capacity re-evaluates Waiting Requests & \module{Requests}, \module{Allocation} & \ref{mod:requests}, \ref{sec:runtime} \\
+\req{Release.Line} & Release all or part; offer freed capacity & \module{Requests}, \module{Allocation} & \ref{mod:requests}, \ref{mod:allocation}, \ref{sec:runtime} \\
+\req{Release.Refund} & Refund by the Refund Schedule, never 100\% & \module{Ledger}, \module{Requests} & \ref{mod:ledger}, \ref{sec:runtime} \\
+\req{Release.Loan.Prorate} & Ending a Loan early corrects the Earning & \module{Requests}, \module{Allocation}, \module{Ledger} & \ref{mod:requests}, \ref{mod:ledger} \\
+\req{Ledger.Account} & Team Accounts and per-Period Statements & \module{Ledger} & \ref{mod:ledger}, \ref{sec:data} \\
+\req{Ledger.Transaction.Kinds} & Four kinds of Transaction, all append-only & \module{Ledger} & \ref{mod:ledger}, \ref{sec:data} \\
+\req{Ledger.Grant.Period} & Grants post and expire at Period boundaries & \module{Ledger}, \module{Jobs} & \ref{mod:ledger}, \ref{mod:jobs}, \ref{sec:runtime} \\
+\req{Ledger.Price.Formula} & Quote from Unit Price, bands, and premium & \module{Ledger}, \module{Settings} & \ref{mod:ledger}, \ref{mod:settings} \\
+\req{Ledger.Earning.Post} & An Earning of the Day Rate per person-day & \module{Ledger} & \ref{mod:ledger} \\
+\req{Dashboard.Utilization} & Utilization and idle capacity per type & \module{Dashboard} & \ref{mod:dashboard}, \ref{sec:data} \\
+\req{Dashboard.Credits} & Team credits and person-days, scoped by role & \module{Dashboard} & \ref{mod:dashboard}, \ref{sec:cross} \\
+\req{Admin.Member.Create} & Administrator manages Members, Teams, and roles & \module{Members}, \module{Settings} & \ref{mod:members}, \ref{mod:settings}, \ref{sec:cross} \\
+\req{Planner.Settings} & Capacity Planner sets every policy as data & \module{Settings}, \module{Requests} & \ref{mod:settings}, \ref{mod:requests} \\
+\midrule
+\multicolumn{4}{@{}l}{\itshape Functional requirements, Stretch}\\
+\req{Metered.Tier.Define} & Service tiers with premiums on Metered types & \module{Settings}, \module{Ledger} (tier premium in \code{Pricing}) & \ref{sec:evo}, service tiers \\
+\req{Metered.Tier.Bump} & Higher-tier Metered lines Bump lower tiers & \module{Allocation} (\code{Bumpable} on \code{MeteredAllocator}) & \ref{sec:evo}, service tiers \\
+\req{Metered.Usage.Record} & Resource Owner records units actually consumed & \module{Allocation} (usage beside \code{metered\_allocation}) & \ref{sec:evo} \\
+\req{Metered.Usage.Compare} & Requested versus used units per Team & \module{Dashboard} (one more view) & \ref{sec:evo} \\
+\req{Ledger.Surcharge} & Demand surcharge multiplier on the Unit Price & \module{Ledger} (multiplier in \code{Pricing}), \module{Settings} & \ref{sec:evo}, demand surcharge \\
+\req{Dashboard.Usage} & Dashboard shows requested versus used units & \module{Dashboard} (one more view) & \ref{sec:evo} \\
+\midrule
+\multicolumn{4}{@{}l}{\itshape Constraints, interfaces, and nonfunctional requirements}\\
+\req{CO-1} & Java and Spring Boot; React and Vite & All modules & \ref{sec:arch}, \ref{mod:web} \\
+\req{CO-2} & PostgreSQL~16, also in tests via Testcontainers & All back-end modules & \ref{sec:data}, \ref{sec:cross} \\
+\req{CO-3} & Front end uses only the REST API & \module{Web client} & \ref{sec:api}, \ref{mod:web} \\
+\req{CO-4} & Holds, Charges, and Earnings in one transaction & \module{Ledger}, \module{Requests} & \ref{mod:ledger}, \ref{sec:runtime} \\
+\req{CO-5} & Timed work as in-process scheduled jobs & \module{Jobs} & \ref{mod:jobs}, \ref{sec:runtime} \\
+\req{CO-6} & Hashed passwords; Spring Security enforces roles & \module{Members}, \code{security} package & \ref{sec:api}, \ref{sec:cross} \\
+\req{CO-7} & One allocator per Allocation Class & \module{Allocation} & \ref{mod:allocation}, \ref{sec:evo} \\
+\req{UI-1} & Draft Request and Request detail screens & \module{Web client}, \module{Requests} & \ref{mod:web}, \ref{mod:requests} \\
+\req{UI-2} & Shortlist and Approvals screens with actions & \module{Web client}, \module{Allocation} & \ref{mod:web}, \ref{mod:allocation} \\
+\req{UI-3} & Inventory, Dashboard, Settings, and Administration screens & \module{Web client} & \ref{mod:web} \\
+\req{SI-1} & PostgreSQL via JDBC, migrated at start-up & All back-end modules & \ref{sec:data} \\
+\req{SI-2} & REST/JSON API covers every use case & All back-end modules, \module{Web client} & \ref{sec:api} \\
+\req{CI-1} & HTTPS only; plain HTTP redirects & All modules (deployment) & \ref{sec:arch}, \ref{sec:api} \\
+\req{CI-2} & Notifications delivered in the application only & \module{Notifications} & \ref{mod:notifications}, \ref{sec:cross} \\
+\req{PE-1} & Scale: 500 Members, 10,000 Requests a year & All modules & \ref{sec:arch}, \ref{sec:data} \\
+\req{PE-2} & Any page within 2~s at 95th percentile & All modules & \ref{sec:arch}, \ref{sec:api} \\
+\req{PE-3} & Shortlist of 500 Members within 3~s & \module{Allocation} & \ref{mod:allocation} \\
+\req{PE-4} & Lapses within 5~min, rollover within 15~min & \module{Jobs} & \ref{mod:jobs}, \ref{sec:runtime} \\
+\req{SE-1} & Server enforces roles on every action & All modules, \code{security} package & \ref{sec:cross}, \ref{sec:api} \\
+\req{SE-2} & Hashed passwords, HTTPS, 12-hour idle sessions & \module{Members}, \code{security} package & \ref{sec:api}, \ref{sec:cross} \\
+\req{SE-3} & No personal data beyond the profile fields & \module{Members} & \ref{mod:members}, \ref{sec:data} \\
+\req{SE-4} & Each role sees only its own scope & All modules & \ref{sec:cross} \\
+\req{QA-1} & No double allocation or overrun under concurrency & \module{Allocation} & \ref{mod:allocation}, \ref{sec:runtime}, \ref{sec:data} \\
+\req{QA-2} & All-or-nothing commit of Holds and credits & \module{Requests}, \module{Ledger} & \ref{mod:requests}, \ref{sec:runtime} \\
+\req{QA-3} & Append-only Ledger; state changes recorded & \module{Ledger}, \module{Requests}, \module{Settings} & \ref{sec:cross}, \ref{sec:data} \\
+\req{QA-4} & Business hours; four desktop browsers supported & \module{Web client} & \ref{mod:web}, \ref{sec:arch} \\
+\req{QA-5} & Untrained Manager submits three lines in 5~min & \module{Web client} & \ref{mod:web} \\
+\req{QA-6} & New type needs no code; new class, one allocator & \module{Allocation}, \module{Inventory} & \ref{mod:allocation}, \ref{sec:evo} \\
+\req{QA-7} & Keep records two years; test every requirement & All modules & \ref{sec:data}, \ref{sec:cross} \\
+\midrule
+\multicolumn{4}{@{}l}{\itshape User documentation, assumptions, and dependencies}\\
+\req{UD-1} & One-page in-app guide per role & \module{Web client} & \ref{mod:web} \\
+\req{UD-2} & Guide for installation and first configuration & \module{Members}, \module{Settings} & \ref{sec:cross}, \ref{sec:evo} \\
+\req{UD-3} & Help text for settings and Draft fields & \module{Web client} & \ref{mod:web} \\
+\req{AS-1} & Grants set for every Team before first Period & \module{Settings}, \module{Ledger} & \ref{mod:settings}, \ref{sec:evo} \\
+\req{AS-2} & Resource Owners keep the Inventory current & \module{Inventory} & \ref{mod:inventory} \\
+\req{AS-3} & Managers record Loans honestly; no work check & \module{Allocation} & \ref{mod:allocation}, \ref{sec:evo} \\
+\req{AS-4} & Availability from profiles only; no calendars & \module{Members} & \ref{mod:members}, \ref{sec:evo} \\
+\req{DE-1} & Platform software available on site & All modules & \ref{sec:arch} \\
+\req{DE-2} & Toolchain pinned in the repository's Nix flake & All modules (build) & \ref{sec:arch} \\
+\end{longtable}
+}

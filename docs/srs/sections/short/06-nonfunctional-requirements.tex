@@ -1,0 +1,44 @@
+% Short-edition Section 6. Lead-in paragraphs added by the team on 2026-09-21 and trimmed so the section fits one page. The business rules (6.5 of the full edition) are not in this edition; the requirements in Section 4 state them.
+\section{Other Nonfunctional Requirements}\label{sec:nfr}
+
+\subsection{Performance Requirements}
+
+\pe{scale}{The system shall support 500 Members, 50 Teams, 200 Resources, and 10,000 Requests per year without violating \peref{page} or \peref{shortlist}.}
+
+\pe{page}{Any page shall be served in at most 2~s at the 95th percentile with 50 concurrent users, at the scale of \peref{scale}.}
+
+\pe{shortlist}{Building a Shortlist against 500 Members shall take at most 3~s.}
+
+\pe{jobs}{Objection Window lapse, Hold expiry, and waitlist expiry shall take effect within 5~min of their due time; Period rollover within 15~min of the Period boundary.}
+
+\subsection{Safety Requirements}
+
+None. The system manages records, not physical equipment; an allocation mistake is fixed with a Release or a Bump.
+
+\subsection{Security Requirements}
+
+The system keeps only the personal data it needs, checks roles on the server for every action, and shows each role only its own scope.
+
+\se{roles}{The server shall enforce the signed-in Member's roles on every action, whether it arrives from the user interface or directly through the API.}
+
+\se{password}{Passwords shall be stored only as salted hashes from an adaptive algorithm such as bcrypt; all communication shall be encrypted in transit (\ciref{https}); sessions expire after 12 hours of inactivity and every authentication attempt is logged.}
+
+\se{data}{The system shall store no personal data beyond name, email address, Team, skills, and availability.}
+
+\se{visibility}{A Member shall see only what their roles allow: their own profile and Loans; as Manager, their Team's roster, Requests, Statements, and the Shortlists of their own Requests; as Capacity Planner, every Team's; as Resource Owner, the timelines of their Resources. Another Team's Statement is never visible to a Manager.}
+
+\subsection{Software Quality Attributes}
+
+\qa{correct}{\textbf{Correctness.} Under concurrent submissions the system shall never double-book an Exclusive instance for overlapping windows and never allocate a Metered type beyond its Pool Capacity in any hour; allocation is serialized per Resource Type in the database.}
+
+\qa{atomic}{\textbf{Atomicity.} Holds shall commit and the corresponding Charges and Earnings shall post in one transaction or not at all.}
+
+\qa{audit}{\textbf{Auditability.} Ledger Transactions shall be append-only, and every Request and line state change shall record actor, change, and timestamp.}
+
+\qa{available}{\textbf{Availability and portability.} The system shall be available during business hours with planned maintenance outside them, with no high-availability requirement; the user interface shall work in the current release of Chrome, Firefox, Safari, and Edge, with no mobile layout.}
+
+\qa{usable}{\textbf{Usability.} An untrained Manager shall be able to draft and submit a three-line Request in under 5~min, tested with at least 3 people from outside the team before the final demonstration.}
+
+\qa{extensible}{\textbf{Extensibility.} Adding a Resource Type shall require no code; adding an Allocation Class shall require implementing one allocator interface and no change to the existing allocators, the Request lifecycle, or the Ledger.}
+
+\qa{retention}{\textbf{Data retention and testability.} Requests, state histories, Suggestions, and Transactions shall be kept for at least 2 years, nothing purged in Release~1; every requirement of Section~\ref{sec:features} shall be covered by an automated test that runs against PostgreSQL in a container started by the test suite.}

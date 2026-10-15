@@ -1,0 +1,67 @@
+@startuml seq-s7-rollover
+' F17 Scenario S7: Period rollover (UC-11). Granted credits expire, earned credits stay,
+' and the planned Grants for the new Period are posted. One transaction.
+skinparam shadowing false
+skinparam defaultFontName Helvetica
+skinparam defaultFontSize 11
+skinparam ArrowColor #223
+skinparam sequenceMessageAlign left
+skinparam responseMessageBelowArrow true
+skinparam sequence {
+  ParticipantBackgroundColor #F4F6FA
+  ParticipantBorderColor #223
+  ActorBackgroundColor White
+  ActorBorderColor #223
+  LifeLineBorderColor #223
+  LifeLineBackgroundColor #DDE3EE
+  GroupBorderColor #223
+  GroupBackgroundColor #DDE3EE
+  DividerBackgroundColor #F4F6FA
+  DividerBorderColor #223
+}
+skinparam database {
+  BackgroundColor #F4F6FA
+  BorderColor #223
+}
+skinparam note {
+  BackgroundColor White
+  BorderColor #223
+}
+hide footbox
+autonumber
+
+participant PeriodRolloverJob as Job
+participant LedgerService as Ledger
+participant SettingsService as Settings
+participant Notifier
+database PostgreSQL as DB
+
+note over Job
+  00:05 on the first day
+  of a Period; catchUp()
+  on start-up if missed
+end note
+Job -> Settings : current()
+Settings --> Job : PlannerSettings\n(currentPeriod)
+Job -> Ledger : rollover(ending,\nstarting)
+activate Ledger
+note over Ledger, Settings : one transaction
+Ledger -> Settings : current()\n(planned Grants)
+loop each Team; a Team with a period_close row\nfor the ending Period is skipped
+  Ledger -> DB : SELECT account FOR UPDATE
+  Ledger -> DB : INSERT period_close (expired amount,\nclosing balances)
+  Ledger -> DB : UPDATE account SET granted = 0
+  note over Settings, DB
+    period_close keeps the expired amount for
+    the ending Period's Statement; its key makes
+    a second run a no-op; earned untouched
+  end note
+  opt a positive Grant is planned
+    Ledger -> Ledger : postGrant(team, starting,\nplanned amount, reason, actor)
+    Ledger -> DB : INSERT transaction (GRANT); UPDATE\naccount SET granted = granted + amount
+  end
+  Ledger -> Notifier : notify(Team's Manager, Grant)
+end
+Ledger --> Job : done
+deactivate Ledger
+@enduml

@@ -1,0 +1,29 @@
+\subsection{Draft and Submit a Request}\label{feat:draft}
+
+\subsubsection{Description and Priority}
+A Manager assembles a Request in the Draft state, by hand or by accepting Suggestions, marks each Request Line Required or Optional, sees a Quote per line, and submits. Submission is refused when the Required lines together cost more than the Team's Available Balance. Quotes are locked at submission: the Charge that later posts equals the Quote. This feature realizes \FE{draft} and is exercised by \UC{draft}. \priority{High.}
+
+\subsubsection{Stimulus/Response Sequences}
+\begin{itemize}
+  \item \textbf{Stimulus:} The Manager adds or edits a line. \textbf{Response:} The system shows the line's Quote at current prices and the totals for Required and Optional lines against the Available Balance.
+  \item \textbf{Stimulus:} The Manager submits. \textbf{Response:} If the Required lines are affordable the system locks the Quotes and evaluates the Request (Section~\ref{feat:lifecycle}); otherwise it shows the shortfall and leaves the Request in Draft.
+  \item \textbf{Stimulus:} The Manager withdraws a Request. \textbf{Response:} The system releases any Holds and held credits and marks the Request Withdrawn.
+\end{itemize}
+
+\subsubsection{Functional Requirements}
+\fr{Draft.Create}{The system shall let a Manager create a Request in the Draft state on behalf of their own Team, and only a Manager shall create or submit a Request (\BR{managers-submit}).}
+\fr{Draft.Line.Add}{The system shall let the Manager add a Request Line by choosing a Resource Type, a quantity, and a time window; the line's Allocation Class shall be taken from the Resource Type and shall not be editable.}
+\fr{Draft.Line.Matched}{For a Matched line the Manager shall give either a set of one or more skills and a quantity, or a named Person, in which case the quantity shall be one (\BR{named-person}).}
+\fr{Draft.Line.Exclusive}{For an Exclusive line the Manager shall give the Resource Type, optionally a specific Resource of that type, a quantity of instances (default one), a window, optionally a weekly recurrence (weekday, time of day, first and last week), and optionally the Priority mark.}
+\fr{Draft.Line.Metered}{For a Metered line the Manager shall give the Resource Type, a number of units to hold concurrently, and a window.}
+\fr{Draft.Line.Required}{Every line shall be marked Required or Optional; the default is Required.}
+\fr{Draft.Line.Split}{The system shall let the Manager split a line into two lines of the same Resource Type with smaller quantities or shorter windows, so that a part can be marked Optional. There shall be no per-line partial-acceptance setting (\BR{line-atomic}).}
+\fr{Draft.Line.Validate}{The system shall refuse to save a line whose quantity is below one, whose window does not start after the current time, whose recurrence has no occurrence inside its window, or whose Resource Type is retired.}
+\fr{Draft.Quote.Line}{While drafting, the system shall show each line's Quote computed by \BR{price-formula} at the current settings; Matched lines shall show no Quote because they cost nothing (\BR{matched-free}).}
+\fr{Draft.Quote.Totals}{The system shall show the sum of Quotes of Required lines, the sum for Optional lines, and the Team's Available Balance, and shall highlight the shortfall when the Required sum exceeds the Available Balance.}
+\fr{Draft.Quote.Refresh}{When the Capacity Planner changes a price setting, Quotes of Draft lines shall be recomputed the next time the Draft is shown; Quotes of submitted lines shall not change (\BR{quote-locked}).}
+\fr{Draft.Submit.Afford}{The system shall refuse submission while the sum of Quotes of Required lines exceeds the Team's Available Balance, and shall show the shortfall (\BR{affordability}).}
+\fr{Draft.Submit.Lock}{On submission the system shall lock every line's Quote; the Charge posted for that line shall equal the locked Quote.}
+\fr{Draft.Submit.Evaluate}{On submission the system shall record the submission time (used for waitlist order) and evaluate every line as specified in Section~\ref{feat:lifecycle}.}
+\fr{Draft.Withdraw}{The system shall let the Manager withdraw a Request in the Draft, Pending, or Waiting state; all Holds and held credits release and the Request becomes Withdrawn. An Allocated Request is not withdrawn; its lines are Released (Section~\ref{feat:release}).}
+\fr{Draft.Edit.Waiting}{The system shall let the Manager edit a Waiting Request, which returns it to Draft: its lines leave their waitlists, held credits release, and Quotes are recomputed on resubmission.}

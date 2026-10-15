@@ -1,0 +1,130 @@
+@startuml class-ledger
+' F7 Ledger module: the posting service, the pure Pricing functions, the Account and its
+' append-only Transactions of four kinds, and the Statement. Classes marked <<settings>>
+' belong to the Settings module; Pricing only reads them.
+skinparam shadowing false
+skinparam defaultFontName Helvetica
+skinparam defaultFontSize 11
+skinparam ArrowFontSize 10
+skinparam ArrowColor #223
+skinparam classAttributeIconSize 0
+skinparam nodesep 18
+skinparam ranksep 30
+skinparam class {
+  BackgroundColor #F4F6FA
+  BorderColor #223
+  HeaderBackgroundColor #DDE3EE
+}
+skinparam package {
+  BackgroundColor White
+  BorderColor #223
+}
+skinparam note {
+  BackgroundColor White
+  BorderColor #223
+}
+hide empty members
+
+  interface LedgerService <<interface>> {
+    account(TeamId): AccountView
+    requireAffordable(TeamId, Credits)
+    holdCredits(TeamId, RequestLineId, Credits)
+    releaseCredits(TeamId, RequestLineId)
+    commitCharges(RequestId, List<ChargeSpec>)
+    postEarning(TeamId, LoanId, Credits)
+    refund(TeamId, RequestLineId, Credits)
+    correctEarning(TeamId, LoanId, Credits)
+    postGrant(TeamId, PeriodId, Credits, String, Actor)
+    rollover(PeriodId, PeriodId)
+    statement(TeamId, PeriodId): Statement
+  }
+
+  class Pricing <<utility>> {
+    {static} quote(LineSpec, TypePricing, BigDecimal): Quote
+    {static} refund(Credits, RefundSchedule, Duration): Credits
+  }
+
+  class Account <<entity>> {
+    team: TeamId
+    granted: Credits
+    earned: Credits
+    held: Credits
+    balance(): Credits
+    available(): Credits
+  }
+
+  class Transaction <<entity>> {
+    id: long
+    team: TeamId
+    kind: TransactionKind
+    amount: Credits
+    grantedPart, earnedPart: Credits
+    period: PeriodId
+    line: RequestLineId [0..1]
+    loan: LoanId [0..1]
+    corrects: Transaction [0..1]
+    actor: MemberId
+    postedAt: Instant
+  }
+
+  enum TransactionKind <<enumeration>> {
+    GRANT
+    CHARGE
+    EARNING
+    REFUND
+  }
+
+  class Statement {
+    team: TeamId
+    period: PeriodId
+    grants, charges: Credits
+    earnings, refunds: Credits
+    expired: Credits
+    balance, available: Credits
+  }
+
+  class Quote {
+    amount: Credits
+  }
+
+  class TypePricing <<settings record>> {
+    unitPrice: Credits
+    bands: List<PriceBand>
+    refundSchedule: RefundSchedule
+    bumpCutoff: Duration
+  }
+  class PriceBand <<settings>> {
+    weekdays
+    startTime, endTime: LocalTime
+    multiplier: BigDecimal
+  }
+  class RefundSchedule <<settings>> {
+    steps: (minLeadHours, fraction)*
+  }
+
+LedgerService ..> Account : locks row,\nupdates
+LedgerService ..> Transaction : appends
+LedgerService ..> Statement : builds
+Account "1" *-- "*" Transaction
+Transaction --> TransactionKind
+Transaction "0..1" --> Transaction : corrects
+Statement o-- "*" Transaction
+Pricing ..> Quote : returns
+Pricing ..> TypePricing
+TypePricing *-- "*" PriceBand
+TypePricing *-- "1" RefundSchedule
+
+note left of Transaction
+  Append-only: the database role
+  has INSERT and SELECT only.
+  A Charge or Refund records its
+  granted and earned parts.
+end note
+note right of Pricing
+  Pure: no Spring, no database.
+  quote = sum over hours of
+  quantity x Unit Price x band
+  multiplier (x premium if Priority).
+  refund never returns 100%.
+end note
+@enduml

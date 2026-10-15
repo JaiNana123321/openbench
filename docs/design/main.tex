@@ -1,0 +1,42 @@
+% OpenBench — Software Design Document. Build: nix develop path:nix -c make -C docs/design
+\documentclass[10pt,letterpaper]{article}
+\input{macros}
+\geometry{margin=0.8in}
+\setlength{\reqgap}{2pt}
+\setlength{\parskip}{3pt plus 1pt}
+\usepackage[compact]{titlesec}
+\setlist{nosep}
+
+\hypersetup{
+  pdftitle={OpenBench Software Design Document},
+  pdfauthor={Jai Nana, Brian Lujan, Fotih Turopov, Yerassyl Shnazbayev},
+  pdfsubject={CSDS 393 Software Engineering},
+}
+
+\begin{document}
+
+\input{sections/00-front-matter}
+\newcommand{\sectionbreak}{\clearpage}   % every section starts on a new page; so does every module specification (see \modulespec)
+\setlength{\emergencystretch}{1.5em}
+
+\input{sections/01-introduction}
+\input{sections/02-architecture}
+\input{sections/03-decomposition}
+\section{Module Specifications}\label{sec:modules}
+Each module is specified with the same fields: purpose, responsibilities, provided interface, required interfaces, data owned, invariants, failure behavior, information hiding, and, where a rule is not obvious, a worked example. Signatures are Java; every application-service method runs in one transaction unless marked read-only. The modules are presented bottom-up, in the order of the layers of Section~\ref{sec:arch}.
+\input{sections/04a-modules-foundation}
+\input{sections/04b-modules-core}
+\input{sections/04c-modules-edge}
+\input{sections/05-runtime}
+\input{sections/06-data}
+\input{sections/07-api}
+\input{sections/08-crosscutting}
+\input{sections/09-evolution}
+\input{sections/10-references}
+
+\appendix
+\input{sections/appendix-a-traceability}
+\input{sections/appendix-b-glossary}
+\input{sections/appendix-c-inspection}
+
+\end{document}

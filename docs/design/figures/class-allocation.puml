@@ -1,0 +1,179 @@
+@startuml class-allocation
+' F5 Allocation module (ADR-0007): one Allocator interface with the five operations every
+' Allocation Class needs, three optional capability interfaces, and the three allocators.
+' Dashed arrows with hollow heads: "implements". Dashed open arrows: "reads and writes".
+skinparam shadowing false
+skinparam defaultFontName Helvetica
+skinparam defaultFontSize 11
+skinparam ArrowFontSize 10
+skinparam ArrowColor #223
+skinparam classAttributeIconSize 0
+skinparam nodesep 16
+skinparam ranksep 34
+skinparam class {
+  BackgroundColor #F4F6FA
+  BorderColor #223
+  HeaderBackgroundColor #DDE3EE
+}
+skinparam note {
+  BackgroundColor White
+  BorderColor #223
+}
+hide empty members
+
+interface AllocatorRegistry <<interface>> {
+  forClass(AllocationClass): Allocator
+  capability(AllocationClass, Class<T>): Optional<T>
+}
+
+interface Allocator <<interface>> {
+  allocationClass(): AllocationClass
+  evaluate(LineSnapshot): Evaluation
+  hold(LineSnapshot)
+  commit(LineSnapshot)
+  release(LineSnapshot, ReleasePart)
+  cancel(LineSnapshot)
+}
+
+interface Waitlistable <<interface>> {
+  join(LineSnapshot)
+  leave(LineSnapshot)
+  waitingFor(ResourceTypeId, TimeWindow): List<WaitingLine>
+  expirePastStart(Instant)
+}
+
+interface Bumpable <<interface>> {
+  planBump(LineSnapshot): Optional<BumpPlan>
+  applyBump(BumpPlan)
+}
+
+interface ApprovalDriven <<interface>> {
+  buildShortlist(LineSnapshot): Shortlist
+  select(LineSnapshot, List<MemberId>)
+  decide(ApprovalId, Decision, String, Actor): ApprovalOutcome
+  outstanding(RequestId): List<Approval>
+  escalate(RequestId)
+}
+
+class ExclusiveAllocator
+class MeteredAllocator
+class MatchedAllocator
+
+interface AllocationLock <<interface>> {
+  lockTypes(SortedSet<ResourceTypeId>)
+}
+
+interface AllocationQueries <<interface>> {
+  holders(ResourceId, TimeWindow): List<Holding>
+  loansOf(MemberId): List<Loan>
+  waitlistPosition(RequestLineId): Optional<Integer>
+  peakUnitsInUse(ResourceTypeId, Optional<ResourceId>, Instant): int
+  approvalsAwaiting(MemberId): List<Approval>
+  loansFor(RequestLineId): List<Loan>
+}
+
+class ExclusiveOccurrence <<entity>> {
+  id: long
+  lineId: RequestLineId
+  teamId: TeamId
+  requestId: RequestId
+  resourceId: ResourceId
+  startsAt, endsAt: Instant
+  state: HELD | ALLOCATED | RELEASED
+  \t| BUMPED | EXPIRED
+}
+
+class MeteredAllocation <<entity>> {
+  id: long
+  lineId: RequestLineId
+  teamId: TeamId
+  requestId: RequestId
+  typeId: ResourceTypeId
+  units: int
+  startsAt, endsAt: Instant
+  state: HELD | ALLOCATED
+  \t| RELEASED | EXPIRED
+}
+
+class WaitlistEntry <<entity>> {
+  id: long
+  lineId: RequestLineId
+  typeId: ResourceTypeId
+  startsAt, endsAt: Instant
+  priority: boolean
+  bumped: boolean
+  joinedAt: Instant
+}
+
+class Candidate <<entity>> {
+  id: long
+  lineId: RequestLineId
+  memberId: MemberId
+  position: int
+}
+
+class Approval <<entity>> {
+  id: ApprovalId
+  approver: MemberId
+  state: OUTSTANDING | APPROVED
+  \t| REFUSED | CANCELED
+  decidedBy: MemberId
+  decidedAt: Instant
+  reason: String
+  escalated: boolean
+}
+
+class Loan <<entity>> {
+  id: LoanId
+  lineId: RequestLineId
+  memberId: MemberId
+  lendingTeam, borrowingTeam: TeamId
+  startsOn, endsOn: LocalDate
+  daysLent: int
+  endedEarly: boolean
+}
+
+AllocatorRegistry o--> "3" Allocator : one bean\nper class
+
+Allocator <|.. ExclusiveAllocator
+Allocator <|.. MeteredAllocator
+Allocator <|.. MatchedAllocator
+Waitlistable <|.. ExclusiveAllocator
+Waitlistable <|.. MeteredAllocator
+Bumpable <|.. ExclusiveAllocator
+ApprovalDriven <|.. MatchedAllocator
+
+ExclusiveAllocator ..> ExclusiveOccurrence
+ExclusiveAllocator ..> WaitlistEntry
+MeteredAllocator ..> MeteredAllocation
+MeteredAllocator ..> WaitlistEntry
+MatchedAllocator ..> Candidate
+MatchedAllocator ..> Approval
+MatchedAllocator ..> Loan
+Candidate "1" -- "0..1" Approval
+
+note bottom of ExclusiveOccurrence
+  EXCLUDE USING gist: no two HELD
+  or ALLOCATED rows on one
+  resource_id overlap in time
+end note
+note bottom of Loan
+  EXCLUDE USING gist: no two
+  Loans of one member_id overlap;
+  endLoanEarly shortens ends_on
+end note
+note bottom of AllocationQueries
+  peakUnitsInUse backs the ReductionGuard
+  port declared by Inventory
+end note
+note bottom of AllocationLock
+  SELECT ... FOR UPDATE on
+  resource_type, ascending id
+end note
+Allocator -[hidden]down- Waitlistable
+ApprovalDriven -[hidden]down- Bumpable
+AllocatorRegistry -[hidden]right- AllocationLock
+MeteredAllocation -[hidden]down- WaitlistEntry
+Candidate -[hidden]right- Loan
+Bumpable -[hidden]down- AllocationQueries
+@enduml

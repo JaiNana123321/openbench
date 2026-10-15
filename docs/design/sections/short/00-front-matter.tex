@@ -1,0 +1,38 @@
+% Title page, revision history, how to read, contents, list of figures (short edition; condensed from sections/00-front-matter.tex on 2026-10-05).
+\begin{titlepage}
+  \centering
+  \vspace*{3cm}
+  {\Huge\bfseries Software Design Document\par}
+  \vspace{0.6cm}
+  {\LARGE for\par}
+  \vspace{0.6cm}
+  {\Huge\bfseries \SRSproduct\par}
+  \vspace{0.4cm}
+  {\Large Design of Release 1 against the Software Requirements Specification, version \SRSversion\par}
+  \vspace{1.5cm}
+  {\Large Version \SDDversion, short edition\par}
+  \vspace{0.4cm}
+  {\large \SDDdate\par}
+  \vfill
+  {\large Prepared by\par}
+  {\Large Jai Nana \quad Brian Lujan\par Fotih Turopov \quad Yerassyl Shnazbayev\par}
+  \vspace{0.8cm}
+  {\large CSDS 393 Software Engineering\par Case Western Reserve University\par}
+  \vspace{1cm}
+\end{titlepage}
+
+\section*{Revision History}
+\begin{tabularx}{\textwidth}{@{}L{3.2cm}L{2.2cm}YL{2.6cm}L{1.6cm}@{}}
+\toprule
+\textbf{Name} & \textbf{Date} & \textbf{Reason for changes} & \textbf{Reviewed by} & \textbf{Version} \\
+\midrule
+J.\ Nana & \SDDdate & First complete draft: architecture, module specifications, runtime scenarios, data, API, crosscutting concerns, evolution, traceability. & Team inspection, Appendix~\ref{app:inspection} & 1.0 \\
+J.\ Nana & \SDDdate & Short edition condensed from the full edition for submission; names, signatures, identifiers, and the inspection record unchanged. & Team inspection, Appendix~\ref{app:inspection} & 1.0, short \\
+\bottomrule
+\end{tabularx}
+
+\noindent\textbf{How to read this document.} Section~\ref{sec:intro} states the baseline and the principles; Section~\ref{sec:arch} gives the architecture; Section~\ref{sec:decomp} allocates every responsibility to a module; Section~\ref{sec:modules} specifies each module with one template; Section~\ref{sec:runtime} shows the transactions, the state machine, and the scenarios; Sections~\ref{sec:data} and~\ref{sec:api} give the schema, the API, and the crosscutting concerns; Section~\ref{sec:evo} says how the design evolves; Appendix~\ref{app:trace} traces every requirement of the SRS to a module and a section. Capitalized words such as Request, Hold, and Loan have the meaning given in the glossary, Appendix~\ref{app:glossary}; code identifiers are set in \code{monospace}; module names in \module{bold sans-serif}. A longer edition of this design with the operation tables, worked examples, every scenario, and the full endpoint list is kept in the project repository; identifiers are the same in both.
+
+\tableofcontents
+\listoffigures
+\clearpage

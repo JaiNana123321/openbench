@@ -1,0 +1,33 @@
+\subsection{Ledger and Pricing}\label{feat:ledger}
+
+\subsubsection{Description and Priority}
+The Ledger records every Team's Account and every Transaction; it holds no capacity information, which lives in the Inventory. Exclusive and Metered lines cost credits; Matched lines cost nothing, and lending a Person earns the lending Team a flat Day Rate. Each Team's Account has granted credits, which the Capacity Planner grants each Period and which expire at its end, and earned credits, which carry over indefinitely; this two-part Account is what keeps Managers lending late in a Period. Prices vary by Price Band, a time-of-day and day-of-week multiplier on the Unit Price, which rewards use at low-demand times and is the second concrete mechanism behind the proposal's market claim. Quotes are locked at submission. This feature realizes \FE{ledger} and is exercised by \UC{period} and \UC{dashboard}. \priority{High; the Stretch requirement is Low.}
+
+\subsubsection{Stimulus/Response Sequences}
+\begin{itemize}
+  \item \textbf{Stimulus:} A Period starts. \textbf{Response:} The system posts each Team's Grant, expires last Period's unspent granted credits, and opens a new Statement.
+  \item \textbf{Stimulus:} A Request becomes Allocated. \textbf{Response:} Charges post to the requesting Team at the locked Quotes and Earnings post to each lending Team.
+  \item \textbf{Stimulus:} A Manager opens the Statement. \textbf{Response:} The system shows the Period's Grants, Charges, Earnings, Refunds, what expired, and every Transaction behind them.
+\end{itemize}
+
+\subsubsection{Functional Requirements}
+\fr{Ledger.Account}{Each Team shall have exactly one Account holding three amounts in credits: granted, earned, and held. Balance shall equal granted plus earned; Available Balance shall equal Balance minus held.}
+\fr{Ledger.Transaction.Kinds}{Every Transaction shall be of exactly one of four kinds: Grant, Charge, Earning, or Refund, and shall record the Team, the amount in credits, the Period, the posting timestamp, the actor or system job that caused it, and the Request Line it concerns where there is one (\BR{transactions}).}
+\fr{Ledger.AppendOnly}{Transactions shall never be updated or deleted. A correction shall be a new Transaction that references the one it corrects (\qaref{audit}).}
+\fr{Ledger.Held}{Held credits shall equal the sum of the locked Quotes of the Team's lines currently on Hold, and shall change only when a Hold is placed, commits, or releases.}
+\fr{Ledger.Grant.Period}{At the start of each Period the system shall post to every Team a Grant of the amount the Capacity Planner has set for that Team and Period (\FR{Planner.Settings}).}
+\fr{Ledger.Grant.Adjust}{The Capacity Planner shall be able to post a mid-Period Grant to a Team with a reason, for example to settle an escalation; the amount is added to granted credits and expires with them.}
+\fr{Ledger.Expire}{At the end of a Period the system shall set every Team's granted credits to zero, record the expired amount on the Statement, post the new Grant, and leave earned credits untouched (\BR{grant-expiry}). The rollover shall be effective within fifteen minutes of the Period boundary (\peref{jobs}).}
+\fr{Ledger.SpendOrder}{A Charge shall draw from granted credits first and from earned credits only when granted credits are exhausted, and shall record how much it drew from each (\BR{spend-order}).}
+\fr{Ledger.Charge.Post}{A Charge shall post only when the Request becomes Allocated and shall equal the line's locked Quote (\BR{commit-atomic}, \BR{quote-locked}).}
+\fr{Ledger.Earning.Post}{An Earning shall post to the lending Team when the Loan forms, equal to the Day Rate times the person-days of the Loan, into earned credits (\BR{day-rate}). A person-day is one Monday-to-Friday calendar day inside the Loan's window.}
+\fr{Ledger.NoNegative}{The system shall never post a Charge that would take a Team's Balance below zero, shall offer no borrowing, and shall move no credits between Teams (\BR{no-negative}).}
+\fr{Ledger.Price.Unit}{The Capacity Planner shall set for each Exclusive and Metered Resource Type a Unit Price in credits: per instance-hour for Exclusive types and per unit-hour for Metered types. Matched types have no Unit Price (\BR{matched-free}).}
+\fr{Ledger.Price.Band}{The Capacity Planner shall define for each Exclusive and Metered Resource Type zero or more Price Bands, each a set of weekdays, a start and end time of day, and a multiplier; bands of one type shall not overlap; hours in no band have multiplier 1.0 (\BR{price-bands}).}
+\fr{Ledger.Price.Formula}{The Quote of an Exclusive or Metered line shall be the sum over each hour of each occurrence of quantity times Unit Price times the multiplier of the Price Band containing that hour, multiplied by the priority premium if the line is a Priority line (\BR{price-formula}).}
+\fr{Ledger.Price.Premium}{The priority premium shall be one multiple set by the Capacity Planner and applied to every Priority line (example default 2$\times$; \BR{priority-premium}).}
+\fr{Ledger.Quote.Lock}{A Quote shall be locked at submission and shall not change afterward; a change to any price setting shall affect only lines not yet submitted (\BR{quote-locked}).}
+\fr{Ledger.DayRate}{The Capacity Planner shall set one Day Rate in credits per person-day, identical for every Person regardless of skill (\BR{day-rate}).}
+\fr{Ledger.Statement}{For each Team and Period the system shall produce a Statement showing opening granted and earned credits, every Grant, Charge, Earning, and Refund with its Transaction, the amount expired at Period end, and closing granted and earned credits; a Manager shall see their own Team's Statements and the Capacity Planner every Team's.}
+\fr{Ledger.Period}{The Period shall be a fixed calendar interval set by the Capacity Planner (example default one calendar month); the system shall refuse a change that would shorten the current Period to end in the past (\BR{period}).}
+\fr[Stretch]{Ledger.Surcharge}{The Capacity Planner shall be able to enable a demand surcharge per Resource Type: an additional multiplier on the Unit Price that rises with the fraction of the type's capacity already allocated or held in the requested window at quote time, applied in \FR{Ledger.Price.Formula} and locked with the Quote.}

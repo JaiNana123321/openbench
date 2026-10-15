@@ -1,0 +1,22 @@
+\subsection{Administration}\label{feat:admin}
+
+\subsubsection{Description and Priority}
+An Administrator creates Members and Teams, grants roles, maintains the skill list, and defines Resource Types (Section~\ref{feat:inventory}). The Administrator configures the system and sets no policy. Policy settings, the Grants, prices, and windows that shape behavior, belong to the Capacity Planner and are collected here so that every configurable value in this document has one home. This feature realizes \FE{admin} and is exercised by \UC{define-type} and \UC{period}. \priority{High.}
+
+\subsubsection{Stimulus/Response Sequences}
+\begin{itemize}
+  \item \textbf{Stimulus:} An Administrator creates a Member and assigns a Team and roles. \textbf{Response:} The Member can log in and sees only the functions of their roles.
+  \item \textbf{Stimulus:} The Capacity Planner changes a setting. \textbf{Response:} The system applies it to future Quotes, Grants, or windows, records the change, and never alters a locked Quote.
+\end{itemize}
+
+\subsubsection{Functional Requirements}
+\fr{Admin.Member.Create}{An Administrator shall be able to create a Member with a name, email address, username, initial password, and Team, and to deactivate a Member. A deactivated Member cannot log in, appears on no Shortlist, and keeps their history.}
+\fr{Admin.Role.Assign}{An Administrator shall be able to grant and revoke the roles Manager, Resource Owner, Capacity Planner, and Administrator for any Member. Each Team shall have exactly one Manager at any time; assigning a new Manager replaces the previous one.}
+\fr{Admin.Team.Create}{An Administrator shall be able to create, rename, and retire a Team, and to move a Member between Teams. A retired Team can submit no Request; its Account and history remain readable.}
+\fr{Admin.Skill.List}{An Administrator shall maintain the list of skills from which Members choose; a skill in use on any profile or line may be renamed but not deleted.}
+\fr{Admin.Login}{The system shall authenticate every user by username and password and shall let a Member change their own password. Passwords shall be stored hashed (\seref{password}).}
+\fr{Admin.NoPolicy}{Administrator screens shall contain no price, Grant, Quota, or window setting; those settings shall be available only to the Capacity Planner (\BR{roles}).}
+\fr{Admin.Settings.Log}{Every change to a setting by an Administrator or the Capacity Planner shall be recorded with the actor, the old and new value, and the timestamp.}
+\fr{Planner.Settings}{The Capacity Planner shall be able to set, as data and without deployment: the Period (default one calendar month); each Team's Grant for each coming Period; the Unit Price of each Exclusive and Metered Resource Type; the Price Bands of each such type (example defaults: weekdays 09:00--17:00 $\times$1.5, all other hours $\times$0.5); the Day Rate; the Refund Schedule of each such type (example default 75\%, 25\%, 0\%); the Quota of any Team on any Metered type; the priority premium (default 2$\times$); the bump cutoff of each Exclusive type (default 24 hours); and the length of the Objection Window (default two working days).}
+\fr{Planner.Settings.Effect}{A changed price setting shall affect Quotes not yet locked; a changed Grant shall affect Periods not yet started unless posted as a mid-Period Grant; a changed Objection Window, bump cutoff, or Refund Schedule shall affect events after the change. No change shall alter a posted Transaction.}
+\fr{Planner.Escalations}{The Capacity Planner shall see a list of escalated Requests with the outstanding approvals, the silent Manager, and the time since the Objection Window lapsed, and shall decide each approval from that list (\FR{Matched.Escalate}).}

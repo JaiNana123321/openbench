@@ -1,0 +1,32 @@
+\section{Data Dictionary and Data Model}\label{app:data}
+
+\figref{fig:datamodel} shows the entities the requirements name. The Inventory is the Resource Type and Resource entities with the Holds and allocations on them; the Ledger is the Account and Transaction entities; neither holds the other's information. The full specification carries the complete data dictionary with every attribute's type; the elements below are the ones the requirements depend on most.
+
+\begin{center}
+  \includegraphics[width=\textwidth,height=0.4\textheight,keepaspectratio]{data-model.pdf}
+  \captionof{figure}{Data model. Multiplicities read along each line; a Statement is a per-Period view over Transactions and is not stored.}
+  \label{fig:datamodel}
+\end{center}
+
+{\footnotesize
+\begin{tabularx}{\textwidth}{@{}L{2.4cm}YL{6.2cm}@{}}
+\toprule
+\textbf{Element} & \textbf{Meaning} & \textbf{Composition} \\
+\midrule
+Resource Type & Data that fixes an Allocation Class and attributes. & name; Allocation Class; attribute definitions; Unit Price; Price Bands; bump cutoff; Refund Schedule \\
+Resource & One thing that can be allocated; a Metered Resource is a pool. & name; Resource Type; attribute values; Resource Owner; units (Metered) \\
+Team & The organizational unit that owns an Account and its Requests. & name; Manager (one Member); retired \\
+Member & Any user; belongs to one Team; lendable as a Person. & name; email; username; password hash; Team; skills (from the skill list); availability (date ranges); roles; active \\
+Request & One request of a Team, submitted by its Manager. & Team; state; submitted at; Objection Window end; lines; state history (actor, change, timestamp) \\
+Request Line & One need inside a Request. & Resource Type; quantity; window; recurrence; Required or Optional; Priority line; skills or named Person; locked Quote; allocated instance; state: Open, Awaiting approval, Approved, Held, Waitlisted, Allocated, Dropped, Released, Bumped, Expired \\
+Suggestion & A single proposed line from a Member to their Manager. & Member; Manager; proposed line (same fields as a Request Line); note; state: Open, Accepted, Declined; accepted into (Request Line); decline reason \\
+Candidate & A Person on a Shortlist, and the approval asked of their Manager. & Request Line; Member; person-days lent in the current Period; selected; decision: none, Approved, Refused; decided by; decided at; reason \\
+Hold & A tentative, uncharged allocation. & Request Line; Resource (Exclusive) or units (Metered); placed at; expires at (Objection Window end) \\
+Loan & A Person allocated to another Team for a window. & Request Line; Member; lending Team; borrowing Team; start; end (may be shortened); person-days (derived) \\
+Waitlist entry & A Required line waiting for a Resource Type and window. & Request Line; Resource Type; window; position (derived from Priority, Bump, submission time); joined at \\
+Account & A Team's standing in the Ledger. & granted; earned; held (derived from Holds); Balance and Available Balance (derived) \\
+Transaction & One append-only Ledger entry. & kind (Grant, Charge, Earning, Refund); amount; drawn from granted and earned; Period; posted at; actor; Request Line; corrects \\
+Period & The interval over which Grants are issued and expire. & start; end; Grant per Team; Day Rate in force \\
+\bottomrule
+\end{tabularx}
+}

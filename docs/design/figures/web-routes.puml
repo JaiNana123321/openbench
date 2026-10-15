@@ -1,0 +1,60 @@
+@startuml web-routes
+' Figure: routes of the web client by role and the API groups each calls.
+left to right direction
+skinparam shadowing false
+skinparam defaultFontName Helvetica
+skinparam defaultFontSize 11
+skinparam packageStyle rectangle
+skinparam package {
+  BackgroundColor #F4F6FA
+  BorderColor #223
+}
+skinparam rectangle {
+  BackgroundColor White
+  BorderColor #223
+}
+skinparam component {
+  BackgroundColor #DDE3EE
+  BorderColor #223
+}
+package "Every Member" as M {
+  rectangle "/login\n/profile\n/suggestions\n/guide" as Rm
+}
+package "Manager" as Mg {
+  rectangle "/requests (list, draft editor, detail)\n/shortlist/:lineId\n/approvals\n/statement\n/profile/:memberId" as Rmg
+}
+package "Resource Owner" as RO {
+  rectangle "/inventory/types\n/inventory/resources (timeline)" as Rro
+}
+package "Capacity Planner" as CP {
+  rectangle "/settings\n/escalations\n/dashboard (all Teams)\n/statement" as Rcp
+}
+package "Administrator" as AD {
+  rectangle "/admin/members\n/admin/teams\n/admin/skills\n/admin/types" as Rad
+}
+rectangle "Shared" as SH {
+  rectangle "/dashboard (own scope)\n/notifications" as Rsh
+}
+component "/api/members, /api/admin" as A1
+component "/api/suggestions" as A2
+component "/api/requests, /api/approvals,\n/api/escalations" as A3
+component "/api/inventory" as A4
+component "/api/ledger" as A5
+component "/api/settings" as A6
+component "/api/dashboard" as A7
+component "/api/notifications" as A8
+Rm ..> A1
+Rm ..> A2
+Rmg ..> A3
+Rmg ..> A5
+Rmg ..> A1
+Rro ..> A4
+Rcp ..> A6
+Rcp ..> A3
+Rcp ..> A7
+Rcp ..> A5
+Rad ..> A1
+Rad ..> A4
+Rsh ..> A7
+Rsh ..> A8
+@enduml

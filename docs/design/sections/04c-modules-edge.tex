@@ -1,0 +1,195 @@
+% 04c-modules-edge.tex — OpenBench Software Design Document. Written from .scratch/design-doc/brief.md on 2026-10-05.
+% Top layer of the module specifications: Dashboard, Jobs, Web client.
+
+% =====================================================================================================
+\modulespec{Dashboard}{dashboard}{dashboard}
+
+\field{Purpose}
+Dashboard answers the showback questions: how much of each Resource Type was used and how much stood idle, how many lines wait, and what each Team was granted, charged, and earned. It is the one read-only reporting module the dependency rule allows (Section~\ref{sec:arch}): it reads other modules' tables through SQL views, writes nothing, and limits every answer to the caller's scope.
+
+\field{Responsibilities}
+\begin{itemize}
+\item \req{Dashboard.Utilization}: utilization per Exclusive and Metered type and Period, idle capacity for the Period to date and the next seven days, and waiting lines; this is where the unused capacity of \req{Release.Line} shows as idle.
+\item \req{Dashboard.Credits}: Grants, Charges, Earnings, Refunds, credits expired, Balance, Available Balance, and person-days lent and borrowed per Team and Period, scoped as \req{SE-visibility} requires and current when requested.
+\end{itemize}
+
+\field{Provided interface}
+\begin{lstlisting}[language=Java]
+// dashboard (read-only)
+interface DashboardQueries {
+  Utilization utilization(ResourceTypeId type, PeriodId period);   // allocated hours / available hours; idle = available - allocated
+  Idle idleNextDays(ResourceTypeId type, int days); int waitingCount(ResourceTypeId type);
+  TeamCredits credits(TeamId team, PeriodId period);        // Grants, Charges, Earnings, Refunds, expired, Balance, Available
+  PersonDays personDays(TeamId team, PeriodId period);      // lent and borrowed
+}
+\end{lstlisting}
+
+{\footnotesize\setlength{\tabcolsep}{4pt}\renewcommand{\arraystretch}{1.1}
+\begin{tabularx}{\textwidth}{@{}L{3.6cm}YY@{}}
+\toprule
+\textbf{Caller's role} & \textbf{\code{utilization}, \code{idleNextDays}, \code{waitingCount}} & \textbf{\code{credits}, \code{personDays}} \\
+\midrule
+Manager & every type & own Team only \\
+Capacity Planner & every type & every Team \\
+Resource Owner & types of the Resources they own & none \\
+Member with no other role & none & none (own Loans are on the Profile screen) \\
+\bottomrule
+\end{tabularx}\par}
+Several roles give the union. Scope is applied in the SQL \code{WHERE} clause from the caller's Team and roles, never by filtering results afterward.
+
+\field{Required interfaces}
+Read-only SQL through the views below, the documented exception to reaching other modules only through their services. \module{Members}: \code{MemberService.profile} for the caller's Team; roles come from the authenticated principal.
+
+\field{Data owned}
+No tables. Dashboard's migration defines three plain (not materialized) views. Every time bound is a query parameter from the injected \code{Clock}, never the database's \code{now()}, so tests with a fixed Clock see the same figures.
+\begin{itemize}
+\item \code{v\_type\_hours}, per type and day: allocated and available hours (instance-hours for Exclusive, unit-hours for Metered, 24 a day) from \code{resource} and the Allocated rows of \code{exclusive\_occurrence} and \code{metered\_allocation}. Instances count while in service; Metered uses the current Pool Capacity, since unit changes keep no history.
+\item \code{v\_team\_credits}, per Team and Period: sums per Transaction kind with granted and earned parts, expired, closing Balance, and person-days lent and borrowed, from \code{transaction}, \code{loan}, \code{period}, and \code{period\_close}, plus \code{account} for the current Balance and Available Balance. Expired is read from \code{period\_close}, the row \code{rollover} writes for each Team and closed Period, so dashboard and Statement agree.
+\item \code{v\_waiting}, per waiting line: type and window start, from \code{waitlist\_entry}.
+\end{itemize}
+
+\field{Invariants}
+\begin{itemize}
+\item Dashboard writes nothing. Every method is \code{@Transactional(readOnly = true)}, which the PostgreSQL driver runs as a \code{READ ONLY} transaction, so an accidental write fails in the database; the ArchUnit test also forbids saving repositories here.
+\item Figures include everything committed before the query began: plain views are read at request time and nothing is cached. A Hold is not utilization.
+\end{itemize}
+
+\field{Failure behavior}
+An unknown type or Period raises \code{NotFoundException}, and so does an object outside the caller's scope (404). The one \code{RuleViolation}, \code{CLASS\_MISMATCH}, refuses utilization of a Matched type. PostgreSQL refuses to drop or retype a column a view uses, so another module's migration that would break a view fails at start-up and must redefine it.
+
+\field{Information hiding}
+The Java code sees only the views, never the tables behind them, so a change to another module's tables changes a view definition and no Java; callers see result records, not SQL.
+
+\field{Worked example}
+A Metered type with Pool Capacity 8 has 192 unit-hours available on 15 October 2026. With 4 units allocated from 09:00 to 17:00 (32 unit-hours) and 2 for the whole day (48), utilization is $80 / 192 = 41.7\%$ and idle capacity 112 unit-hours. A 2-unit Hold from 14:00 to 16:00 changes neither figure.
+
+\field{Figures}
+\figref{fig:modules} draws Dashboard's read-only access as dashed arrows.
+
+% =====================================================================================================
+\modulespec{Jobs}{jobs}{jobs}
+
+\field{Purpose}
+Jobs runs the timed work inside the server process: lapsing Objection Windows, removing waiting lines whose window has started, and rolling a Period over. It decides when work is due and calls the module that owns it; it never decides what the work does. It also declares the \code{Clock} bean through which every module reads time.
+
+\field{Responsibilities}
+\begin{itemize}
+\item \req{CO-jobs}: timed work as scheduled jobs in the server process. \req{PE-jobs}: lapse, Hold expiry, and Waitlist expiry within five minutes of due time; rollover within fifteen minutes of the boundary.
+\item \req{Lifecycle.Window.Start}: the lapse, through \code{onWindowLapse}. A Hold never outlives its Objection Window, so Hold expiry is the same event and needs no job of its own.
+\item \req{Ledger.Grant.Period}: the rollover, through \code{LedgerService.rollover}. \req{Exclusive.Waitlist.Join}: a waiting line leaves the Waitlist when its window start passes, through \code{expireWaitingLines}.
+\end{itemize}
+
+\field{Provided interface}
+Jobs has no callers; its interface is its schedule.
+\begin{lstlisting}[language=Java]
+class DueWorkJob { @Scheduled(fixedDelay = 60_000) void run(); }   // lapsedWindows(now) -> onWindowLapse; expireWaitingLines
+class PeriodRolloverJob { @Scheduled(cron = "0 5 0 * * *") void run(); @EventListener(ApplicationReadyEvent) void catchUp(); }
+\end{lstlisting}
+
+{\footnotesize\setlength{\tabcolsep}{4pt}\renewcommand{\arraystretch}{1.1}
+\begin{tabularx}{\textwidth}{@{}L{3.8cm}L{2.9cm}YL{2.2cm}@{}}
+\toprule
+\textbf{Job} & \textbf{Trigger} & \textbf{Action (one transaction per call)} & \textbf{Lag (limit)} \\
+\midrule
+\code{DueWorkJob.run} & 60 s after the last run ended & \code{onWindowLapse} for each Request from \code{lapsedWindows(now)}; then \code{expireWaitingLines(now)} & about 1 min (5) \\
+\code{PeriodRolloverJob.run} & 00:05 daily, company zone & if the current Period starts today, \code{rollover(previous, current)} & 5 min (15) \\
+\code{PeriodRolloverJob.catchUp} & application start & \code{rollover(previous, current)} & at start-up \\
+\bottomrule
+\end{tabularx}\par}
+Both jobs run under a system security context, so \code{@PreAuthorize} admits them and every audit row they cause names the system as actor. The \code{Clock} bean is \code{Clock.system(companyZone)}; tests substitute a movable clock and call \code{run()} directly.
+
+\field{Required interfaces}
+\module{Requests}, through \code{RequestLifecycleService}: \code{lapsedWindows}, \code{onWindowLapse}, and \code{expireWaitingLines}. The read-only \code{lapsedWindows(now)} returns the Requests, Pending or Waiting, whose Objection Window ended at or before \code{now} with an approval still Outstanding and not yet escalated (escalated is a flag on the approval). \code{onWindowLapse} skips a Request with no unescalated Outstanding approval; for a Pending Request it releases the Holds and held credits, moves the Request to Waiting, and escalates, and for a Waiting one it only escalates. \module{Ledger}: \code{LedgerService.rollover}. \module{Settings}: \code{SettingsService.current}, for the current Period and its predecessor.
+
+\field{Data owned}
+None. All state is in the owning modules' tables, so a restart loses nothing: the first run after start-up finds every window that lapsed meanwhile, and \code{catchUp} handles a missed Period boundary.
+
+\field{Invariants}
+\begin{itemize}
+\item Jobs are idempotent: running one twice for the same due item has the effect of running it once. Each call re-checks state in its own transaction, so a Request with no unescalated Outstanding approval is skipped, and \code{rollover} ignores a boundary it has already recorded.
+\item Each Request is its own transaction, so one failure never blocks the others. No job acts before the due time read from the \code{Clock}, and the job's lag never lengthens a window, because \module{Requests} compares the window end with the Clock on every decision.
+\item One instance runs the jobs; a second would need a job lock table (Section~\ref{sec:evo}).
+\end{itemize}
+
+\field{Failure behavior}
+Jobs defines no \code{RuleViolation} codes. When the call for one Request throws, a concurrency failure included, the error is logged with the Request id and the run moves on; the Request still has a lapsed window and an unescalated Outstanding approval, so the next run retries it. A failed rollover is logged as an error and retried by the next start-up's \code{catchUp}, which covers one missed boundary; a longer outage is outside \req{QA-available}.
+
+\field{Information hiding}
+Jobs does not know what a lapse or rollover does, and \module{Requests} and \module{Ledger} do not know a timer calls them: they receive ids and instants. Polling is private to Jobs, so per-item timers or a job lock table would change no other module.
+
+\field{Worked example}
+An Objection Window ends at 09:03:00. The run that starts at 09:02:59 finds nothing; it ends within a second, so the next run starts at 09:04:00, finds \code{window\_ends\_at} $\le$ now, and calls \code{onWindowLapse}. The Request is Pending, so in that one transaction the Holds and held credits are released, the Request moves to Waiting, and its outstanding approvals are escalated to the Capacity Planner, each event recorded at 09:04:00 with the system as actor: one minute after the due time, inside the five-minute bound.
+
+\field{Figures}
+\figref{fig:seq-s4-lapse} (lapse) and \figref{fig:seq-s7-rollover} (rollover).
+
+% =====================================================================================================
+\modulespec{Web client}{web}{web}
+
+\field{Purpose}
+The Web client is the single-page browser application through which every role works. Its only interface to the system is the REST API: it renders what the server computes and sends what the user decides, and it holds no business rule.
+
+\field{Responsibilities}
+\begin{itemize}
+\item \req{UI-draft}, \req{UI-shortlist}, \req{UI-inventory}: the screens the SRS names, with their columns and actions.
+\item \req{QA-usable}: a three-line Request drafted and submitted on one screen in under five minutes. \req{QA-available}: current Chrome, Firefox, Safari, and Edge, desktop layout only.
+\item \req{SI-api}, \req{CO-api}: every action through the same REST API any client could call, with the same role checks. Field help (\req{UD-help}) ships as static text.
+\end{itemize}
+
+\field{Provided interface}
+The client's interface is its routes. Each screen calls the API groups of the modules named (endpoints in Section~\ref{sec:api}); the roles are those the server enforces, which the client uses only to choose menu items.
+
+{\footnotesize\setlength{\tabcolsep}{4pt}\renewcommand{\arraystretch}{1.1}
+\begin{tabularx}{\textwidth}{@{}L{2.2cm}L{3.6cm}YL{3.0cm}@{}}
+\toprule
+\textbf{Screen} & \textbf{Route} & \textbf{API groups} & \textbf{Roles} \\
+\midrule
+Requests & \code{/requests} & \module{Requests} & Manager; Planner reads \\
+Draft Request & \code{/requests/:id} (Draft) & \module{Requests} (Draft view, line edits, split, submit, withdraw, Suggestions), \module{Inventory} (types) & Manager \\
+Request detail & \code{/requests/:id} & \module{Requests} (detail, Release, end Loan early), \module{Allocation} (Waitlist position) & Manager; Planner reads \\
+Suggestions & \code{/suggestions} & \module{Requests} (Suggestions) & Member; Manager decides \\
+Shortlist & \code{/shortlist/:lineId} & \module{Requests} (\code{shortlist}, \code{selectCandidates}) & requesting Manager \\
+Approvals & \code{/approvals} & \module{Allocation} (outstanding), \module{Requests} (\code{decideApproval}) & lending Manager \\
+Inventory & \code{/inventory}, \code{/inventory/resources/:id} & \module{Inventory}, \module{Allocation} (Holds timeline, free for a window) & everyone; Resource Owner edits own \\
+Dashboard & \code{/dashboard} & \module{Dashboard} & by role \\
+Statement & \code{/statement} & \module{Ledger} (Statement; mid-Period Grant) & Manager (own); Planner \\
+Settings & \code{/settings} & \module{Settings}; escalated Requests from \module{Requests} & Capacity Planner \\
+Escalations & \code{/escalations} & \module{Requests} (\code{escalations}, \code{decideApproval}) & Capacity Planner \\
+Administration & \code{/admin/members}, \code{/admin/teams}, \code{/admin/skills}, \code{/admin/types} & \module{Members}, \module{Inventory} (Resource Types) & Administrator \\
+Profile & \code{/profile}, \code{/profile/:memberId} & \module{Members}, \module{Allocation} (Loans) & self; own Manager \\
+Guide & \code{/guide} & none (static, one page per role) & everyone \\
+\bottomrule
+\end{tabularx}\par}
+
+\textbf{Navigation and roles.} \code{/login} posts to Spring Security's form login; the client then fetches the session (Member, Team, roles) once. The menu offers the screens above as the roles allow, and a header on every route shows the signed-in Member, the Team, and the unread notifications. A route the roles do not allow shows a ``not allowed'' page, a convenience only, since the server refuses the call anyway (\req{SE-roles}).
+
+\textbf{State and data fetching.} Server state lives only in the TanStack Query cache, keyed by resource (a Request, its Draft view, the Account); a mutation invalidates the keys it affects, so a submit refreshes the Request, the list, and the Account. Form state stays in its screen; there is no other store. Types are generated from the OpenAPI document by \code{openapi-typescript}, and a back-end test fails when the live document differs from the committed copy. A small fetch wrapper adds the CSRF header, turns \code{problem+json} into a typed error with its \code{code}, and sends a 401 to \code{/login}. The Draft Request screen never prices anything: each edit is saved and the Draft view refetched, and its Quotes, totals, and shortfall are drawn as returned, so the Quote shown is the Quote locked. Unread notifications refresh every 30 seconds.
+
+\textbf{Packaging.} The client lives in \code{web/}. \code{frontend-maven-plugin} installs a pinned Node, runs \code{npm ci} and the Vite build, and writes the output into the jar's static resources, so one \code{mvn package} yields the one image. Spring serves \code{index.html} for every path outside \code{/api}, so deep links work; in development Vite proxies \code{/api} to the back end.
+
+\field{Required interfaces}
+The REST API only (Section~\ref{sec:api}), described by the OpenAPI document at \code{/api/docs}.
+
+\field{Data owned}
+None on the server; in the browser, the in-memory query cache (cleared on sign-out) and the \code{HttpOnly} session cookie. Nothing goes to browser storage.
+
+\field{Invariants}
+\begin{itemize}
+\item The Web client never computes a Quote, a Balance, eligibility, or a state transition; it shows what the API returns, which is already scoped to the signed-in Member.
+\item Every write is an API call carrying the CSRF header; hiding a menu item is never the only guard.
+\end{itemize}
+
+\field{Failure behavior}
+A \code{RuleViolation} (409 or 422) is shown at the field or line concerned, worded from a message table keyed by \code{code}. A 403 shows the ``not allowed'' page, a 401 returns to sign-in, a 503 asks the user to try again. Reads are retried up to three times, writes never automatically.
+
+\field{Information hiding}
+Screens know only the generated API types, never the server's tables or rules. Session, CSRF, and error handling are hidden in the fetch wrapper, and screens share data only through query keys, so one screen can be rewritten without touching another.
+
+\field{Figures}
+\figref{fig:web-routes} shows the routes per role and the API groups each calls.
+
+\begin{figure}[htbp]\centering
+\includegraphics[width=\textwidth,height=0.8\textheight,keepaspectratio]{web-routes.pdf}
+\caption{Routes of the web client grouped by the role that uses them, and the API groups each route calls (dashed arrows). The client holds no business rules: every Quote, Shortlist, and state change comes from the API.}
+\label{fig:web-routes}
+\end{figure}

@@ -1,0 +1,77 @@
+@startuml modules
+' F2 Module (component) view. Solid arrows: "calls the application services of" (dependency),
+' always pointing down the layer order. Ball and socket: the ReductionGuard port, provided
+' (ball) by Allocation and required (socket) by Inventory, which declares it; the one upward
+' hook. Dashed arrows from Dashboard: read-only SQL views over other modules' tables.
+skinparam shadowing false
+skinparam defaultFontName Helvetica
+skinparam defaultFontSize 12
+skinparam ArrowFontSize 10
+skinparam ArrowColor #223
+skinparam nodesep 30
+skinparam ranksep 45
+skinparam component {
+  BackgroundColor #F4F6FA
+  BorderColor #223
+}
+skinparam interface {
+  BackgroundColor White
+  BorderColor #223
+}
+skinparam rectangle {
+  BackgroundColor White
+  BorderColor #223
+  BorderStyle dashed
+  FontStyle normal
+}
+
+component "Web client\n(React SPA)" as Web
+
+rectangle "Spring Boot application (one process)" as App {
+  component "Requests" as Requests
+  component "Dashboard" as Dashboard
+  component "Jobs" as Jobs
+  component "Allocation" as Allocation
+  component "Ledger" as Ledger
+  interface "ReductionGuard" as RG
+  component "Inventory" as Inventory
+  component "Members" as Members
+  component "Settings" as Settings
+  component "Notifications" as Notifications
+}
+
+Web --> App : REST/JSON /api
+
+Jobs --> Requests
+Jobs --> Ledger
+Jobs --> Settings
+
+Requests --> Allocation
+Requests --> Ledger
+Requests --> Inventory
+Requests --> Members
+Requests --> Settings
+Requests --> Notifications
+
+Dashboard --> Members : scope
+Dashboard ..> Allocation : read-only\nSQL views
+Dashboard ..> Ledger : read-only\nSQL views
+Dashboard ..> Inventory : read-only\nSQL views
+Dashboard ..> Settings : read-only\nSQL views
+
+Allocation -down-() RG
+Inventory -up-( RG
+Allocation --> Inventory
+Allocation --> Members
+Allocation --> Settings
+Allocation --> Notifications
+
+Ledger --> Settings
+Ledger --> Members
+Ledger --> Notifications
+
+Inventory --> Members
+Settings --> Inventory
+Settings --> Members
+Notifications --> Members
+@enduml

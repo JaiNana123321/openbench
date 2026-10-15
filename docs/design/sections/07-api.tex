@@ -1,0 +1,180 @@
+% 07-api.tex — OpenBench Software Design Document. Written from .scratch/design-doc/brief.md on 2026-10-05.
+% NOTE: paths are set with \path{} (url.sty, loaded by hyperref) so they break at slashes and keep {id} braces literal.
+\section{REST API}\label{sec:api}
+
+The browser client talks to the server only through one REST/JSON API, and every use case of the SRS can be carried out through it under the same role checks (\req{SI-api}, \req{CO-api}). springdoc generates the OpenAPI document from the controllers, so the running system is the authoritative reference; Table~\ref{tab:api-endpoints} summarizes it for design review.
+
+\subsection{Conventions}
+
+\textbf{Paths.} Every endpoint lives under \path{/api}; any other path returns the single-page application. Each module serves its own nouns, as the group headings of Table~\ref{tab:api-endpoints} show. Where a path needs the data of a higher module, that module's controller serves it, so no controller breaks the dependency rule of Section~\ref{sec:arch}: the holder views under \path{/inventory} and a Member's Loans under \path{/members} are served by \module{Allocation}. In member paths \code{me} stands for the caller's own id. There is no version segment: client and server ship in one jar and cannot disagree; a breaking change for another client would add \path{/api/v2}.
+
+\textbf{Methods and transitions.} GET reads and never changes state; POST creates an object (201 with \code{Location}) or performs one transition; PUT replaces one value; DELETE removes a Draft line or a role. A transition is a POST to a sub-resource named by the verb of the state machine, such as POST \path{/api/requests/{id}/submit}, \path{/withdraw}, and \path{/reopen}, POST \path{/api/requests/{id}/lines/{lineId}/release}, and POST \path{/api/approvals/{id}/decision}; it answers 200 with the object's new state. One URL per transition gives each one its own operation, role check, and audit row, which a generic update of a \code{state} field would blur. Repeating a transition is harmless: a second \code{submit} finds the Request no longer in Draft and gets 409.
+
+\textbf{One path through the server.} A controller method binds and validates the body, builds the caller's \code{Actor} from the session, calls one application-service operation (the free-Resource search alone calls two read-only queries), and maps the result to JSON. It holds no business rule and opens no transaction. \code{@PreAuthorize} sits on the application-service methods, not on the controllers, so the screens and any other API client pass the same checks (\req{CO-api}, \req{SE-roles}).
+
+\textbf{Representation.} JSON in UTF-8 with camelCase names; enumerations as upper-case strings (\code{PENDING}); ids as JSON integers (the typed wrappers such as \code{RequestId} serialize as their number); credits as JSON numbers; instants as ISO-8601 date-times with the offset of the company time zone (\code{2026-10-12T09:00:00-04:00}), accepted with any offset and normalized; Loan days and Period bounds as ISO dates. A time window is \code{\{"start", "end"\}}, half-open as \code{TimeWindow}; a day range is \code{\{"from", "to"\}}, inclusive as \code{DateRange}. Lists marked \emph{paged} take \code{page} (from 0) and \code{size} (default 50, at most 200) and return \code{\{"content", "page", "size", "totalElements"\}}; short lists return a plain array.
+
+\textbf{Errors.} Every error is an RFC~9457 problem detail (\code{application/problem+json}, Spring's \code{ProblemDetail}) with \code{type}, \code{title}, \code{status}, \code{detail} (one sentence the client shows as is), \code{instance} (the request path), and the extension field \code{code}, a stable identifier the client may branch on; a 400 adds \code{errors}, one entry per invalid field. Table~\ref{tab:api-errors} gives the status per error class; Section~\ref{sec:cross} says where each is raised.
+
+\begin{lstlisting}
+HTTP/1.1 422 Unprocessable Content
+Content-Type: application/problem+json
+
+{ "type": "/problems/insufficient-balance", "title": "Available Balance too low", "status": 422,
+  "detail": "The Required lines need 1840 credits; the Available Balance is 1200.",
+  "code": "INSUFFICIENT_BALANCE", "instance": "/api/requests/42/submit" }
+\end{lstlisting}
+
+{\footnotesize\renewcommand{\arraystretch}{1.08}
+\begin{longtable}{@{}L{0.2\textwidth}L{0.47\textwidth}L{\dimexpr0.33\textwidth-4\tabcolsep\relax}@{}}
+\caption{HTTP status per error class.}\label{tab:api-errors}\\
+\toprule
+\textbf{Status} & \textbf{Error class and typical cause} & \textbf{Example \code{code}} \\
+\midrule
+\endfirsthead
+\toprule
+\textbf{Status} & \textbf{Error class and typical cause} & \textbf{Example \code{code}} \\
+\midrule
+\endhead
+\bottomrule
+\endlastfoot
+400 Bad Request & Validation at the controller: malformed JSON, a missing field, a value out of range & \code{VALIDATION\_FAILED} \\
+401 Unauthorized & Unauthenticated: no session, an expired session, wrong credentials at login & \code{UNAUTHENTICATED}, \code{BAD\_CREDENTIALS} \\
+403 Forbidden & A missing role (\code{@PreAuthorize}), a missing or wrong CSRF token, or \code{ForbiddenException} & \code{FORBIDDEN}, \code{CSRF\_REJECTED} \\
+404 Not Found & \code{NotFoundException}, including any object outside the caller's scope & \code{NOT\_FOUND} \\
+409 Conflict & \code{RuleViolation} on a state conflict: the object's state does not allow the action; or an exclusion-constraint violation (SQLSTATE 23P01), logged as a bug & \code{WRONG\_STATE}, \code{ALREADY\_DECIDED}, \code{ALLOCATION\_CONFLICT} \\
+422 Unprocessable Content & \code{RuleViolation} on a business rule & \code{INSUFFICIENT\_BALANCE}, \code{NOT\_A\_CANDIDATE} \\
+503 Service Unavailable & \code{ConcurrencyRetryException}: a lock wait or deadlock failed twice; \code{Retry-After: 1} & \code{CONCURRENCY\_RETRY} \\
+500 Internal Server Error & Anything else; logged with its stack trace, never returned in the body & \code{INTERNAL} \\
+\end{longtable}
+}
+
+\textbf{API documentation.} springdoc serves the OpenAPI~3 document at \path{/api/docs} and a browsable page at \path{/api/docs/ui} to signed-in Members. The build writes the document into the front-end source tree and \code{openapi-typescript} turns it into the client's types (Section~\ref{mod:web}), so a changed endpoint breaks the front-end build instead of a screen.
+
+\subsection{Authentication and Sessions}
+
+Authentication is Spring Security form login with a server-side HTTP session (\req{CO-auth}, \req{SE-password}).
+
+\begin{itemize}
+  \item \textbf{Login and logout.} POST \path{/api/login} takes the form fields \code{username} and \code{password} and answers with JSON instead of a redirect: 200 with the body of GET \path{/api/me}, or a 401 that does not say whether the username exists. The \code{UserDetailsService} that \module{Members} provides (Section~\ref{mod:members}) loads the Member and their roles; a deactivated Member cannot sign in (\req{Admin.Member.Create}). The session id changes at login against session fixation. POST \path{/api/logout} invalidates the session.
+  \item \textbf{Identity.} GET \path{/api/me} returns the Member's id, name, Team, and roles. The client builds its menu from the roles; the server never relies on that menu.
+  \item \textbf{Session cookie.} \code{HttpOnly; Secure; SameSite=Lax}. Sessions live in the memory of the one process and expire after 12 hours without a request. A restart signs everyone out, which is acceptable because restarts happen outside business hours (\req{QA-available}). \code{deactivate}, \code{grantRole}, and \code{revokeRole} expire the Member's sessions through Spring Security's session registry, so changed roles apply from the next sign-in.
+  \item \textbf{CSRF.} Cookie to header: the token travels in the cookie \code{XSRF-TOKEN}, which script may read, and the client copies it into the header \code{X-XSRF-TOKEN} on every POST, PUT, and DELETE, the login included. A missing or wrong token gets 403.
+  \item \textbf{Passwords and transport.} bcrypt through Spring's delegating password encoder, which stores the algorithm with the hash so it can be upgraded without a reset; no password is logged or returned. HTTPS only (\req{CI-https}): TLS ends at nginx or the embedded Tomcat, plain HTTP only redirects, responses carry Strict-Transport-Security, and behind nginx the forwarded headers are trusted so redirects and the \code{Secure} cookie use the external scheme.
+  \item \textbf{Sign-in log.} Every authentication attempt, successful or not, is logged with username, remote address, and outcome (\req{SE-password}).
+\end{itemize}
+
+\textbf{Why a session cookie and not a JSON Web Token.} The client comes from the same origin as the API, so the browser sends the cookie by itself: no credential is stored in script and no cross-origin setup is needed. There is one process, so sessions need no shared store, and a self-contained token's benefit, validation across many servers, buys nothing. Revocation is simpler: an invalidated session is refused on the next request, while a token stays valid until it expires unless a deny list is kept, which is a session store again. An \code{HttpOnly} cookie cannot be read by script, so a cross-site scripting bug cannot carry it off. The costs are the CSRF protection above and, for a second instance, sticky sessions or a shared session store (Section~\ref{sec:evo}).
+
+\subsection{Endpoints}
+
+Table~\ref{tab:api-endpoints} lists every endpoint by the module that serves it. Each group heading names the interface of its operations and the use cases it serves, so every use case maps to endpoints (\req{SI-api}). Paths are relative to \path{/api}. Roles are granted authorities, and every signed-in Member holds \code{MEMBER}; a scope in the notes (own Team, own Resource, self) is enforced inside the query (Section~\ref{sec:cross}). Operations only other modules call, such as \code{holdCredits}, \code{isAvailable}, \code{onWindowLapse}, and \code{rollover}, have no endpoint.
+
+{\footnotesize\setlength{\tabcolsep}{4pt}\renewcommand{\arraystretch}{1.05}
+\begin{longtable}{@{}L{0.075\textwidth}L{0.265\textwidth}L{0.145\textwidth}L{0.195\textwidth}L{\dimexpr0.32\textwidth-8\tabcolsep\relax}@{}}
+\caption{Endpoints by module. Paths are relative to \texttt{/api}.}\label{tab:api-endpoints}\\
+\toprule
+\textbf{Method} & \textbf{Path} & \textbf{Roles} & \textbf{Operation} & \textbf{Notes} \\
+\midrule
+\endfirsthead
+\toprule
+\textbf{Method} & \textbf{Path} & \textbf{Roles} & \textbf{Operation} & \textbf{Notes} \\
+\midrule
+\endhead
+\midrule\multicolumn{5}{@{}r@{}}{\itshape continued on the next page}\\
+\endfoot
+\bottomrule
+\endlastfoot
+\multicolumn{5}{@{}l}{\textbf{Session} (Spring Security; every use case)}\\
+POST & \path{/login} & anonymous & form login & 200 or 401 \\
+POST & \path{/logout} & \code{MEMBER} & logout & 204 \\
+GET & \path{/me} & \code{MEMBER} & \code{MemberService.\allowbreak profile} & id, name, Team, roles \\
+\midrule
+\multicolumn{5}{@{}l}{\textbf{Members and administration} (\module{Members}: \code{MemberService} unless named)}\\
+GET & \path{/teams} & \code{MEMBER} & \code{teams} & active Teams \\
+GET & \path{/teams/{id}/members} & \code{MANAGER}, \code{PLANNER}, \code{ADMIN} & \code{roster} & Manager: own Team; paged \\
+POST & \path{/admin/members} & \code{ADMIN} & \code{createMember} & Team required \\
+POST & \path{/admin/members/{id}/deactivate} & \code{ADMIN} & \code{deactivate} & ends the Member's sessions \\
+POST & \path{/admin/members/{id}/move} & \code{ADMIN} & \code{moveToTeam} & body \code{teamId} \\
+POST & \path{/admin/roles} & \code{ADMIN} & \code{grantRole} & a new Manager replaces the old \\
+DELETE & \path{/admin/roles/{memberId}/{role}} & \code{ADMIN} & \code{revokeRole} & 422 if a Team loses its Manager \\
+POST & \path{/admin/teams} & \code{ADMIN} & \code{createTeam} &  \\
+PUT & \path{/admin/teams/{id}} & \code{ADMIN} & \code{renameTeam} & body \code{name} \\
+POST & \path{/admin/teams/{id}/retire} & \code{ADMIN} & \code{retireTeam} & 422 while Members remain \\
+GET & \path{/skills} & \code{MEMBER} & \code{skills} & the skill list \\
+POST & \path{/admin/skills} & \code{ADMIN} & \code{addSkill} &  \\
+POST & \path{/admin/skills/{id}/retire} & \code{ADMIN} & \code{retireSkill} &  \\
+GET & \path{/members/{id}/profile} & \code{MEMBER} & \code{profile} & self, own Manager, \code{PLANNER}, \code{ADMIN} \\
+PUT & \path{/members/me/skills} & \code{MEMBER} & \code{updateSkills} & self \\
+PUT & \path{/members/{id}/availability} & \code{MEMBER} & \code{updateAvailability} & self, or the Member's Manager \\
+GET & \path{/members/{id}/loans} & \code{MEMBER} & \code{AllocationQueries.\allowbreak loansOf} & by \module{Allocation}; scope as profile \\
+\midrule
+\multicolumn{5}{@{}l}{\textbf{Inventory} (\module{Inventory}: \code{ResourceTypeService}, \code{ResourceService}, \code{InventoryQueries}; UC-1, UC-2)}\\
+GET & \path{/inventory/types} & \code{MEMBER} & \code{types} & flag \code{includeRetired} \\
+GET & \path{/inventory/types/{id}} & \code{MEMBER} & \code{type}, \code{poolCapacity} & with Pool Capacity \\
+POST & \path{/inventory/types} & \code{ADMIN} & \code{define} & no code change \\
+PUT & \path{/inventory/types/{id}} & \code{ADMIN} & \code{change} & class fixed once a Resource exists \\
+POST & \path{/inventory/types/{id}/retire} & \code{ADMIN} & \code{ResourceTypeService.\allowbreak retire} & refused for Person \\
+GET & \path{/inventory/resources} & \code{MEMBER} & \code{search} & by type and attributes; paged \\
+GET & \path{/inventory/resources/free} & \code{MEMBER} & \code{search}, then \code{AllocationQueries.\allowbreak holders} & by \module{Allocation}; \code{type}, \code{from}, \code{to} \\
+POST & \path{/inventory/resources} & \code{RESOURCE\_\allowbreak OWNER} & \code{add} & caller becomes the owner \\
+PUT & \path{/inventory/resources/{id}} & \code{RESOURCE\_\allowbreak OWNER} & \code{edit} & own Resource \\
+PUT & \path{/inventory/resources/{id}/units} & \code{RESOURCE\_\allowbreak OWNER} & \code{setUnits} & 422 names the earliest failing hour \\
+POST & \path{/inventory/resources/{id}/retire} & \code{RESOURCE\_\allowbreak OWNER} & \code{ResourceService.\allowbreak retire} & same guard with units 0 \\
+GET & \path{/inventory/resources/{id}/holders} & \code{MEMBER} & \code{AllocationQueries.\allowbreak holders} & by \module{Allocation}; Team and Request per scope \\
+\midrule
+\multicolumn{5}{@{}l}{\textbf{Settings} (\module{Settings}: \code{SettingsService}; UC-11)}\\
+GET & \path{/settings} & \code{PLANNER} & \code{current} & every setting, typed \\
+PUT & \path{/settings/{key}} & \code{PLANNER} & \code{update} & logged; keys below \\
+GET & \path{/settings/periods} & \code{MEMBER} & \code{periods} & for the Period selector \\
+\midrule
+\multicolumn{5}{@{}l}{\textbf{Requests} (\module{Requests}: \code{RequestService} for Drafts, \code{RequestLifecycleService} for transitions; UC-4, UC-5, UC-8 to UC-10)}\\
+GET & \path{/requests} & \code{MANAGER}, \code{PLANNER} & \code{list} & own Team, all for \code{PLANNER}; paged \\
+POST & \path{/requests} & \code{MANAGER} & \code{create} & for the caller's Team \\
+GET & \path{/requests/{id}} & \code{MANAGER}, \code{PLANNER} & \code{detail} & lines, Holds, Waitlist positions, history \\
+GET & \path{/requests/{id}/draft} & \code{MANAGER} & \code{view} & Quotes, sums, Available Balance \\
+POST & \path{/requests/{id}/lines} & \code{MANAGER} & \code{addLine} & window in the future \\
+PUT & \path{/requests/{id}/lines/{lineId}} & \code{MANAGER} & \code{editLine} & Draft only \\
+DELETE & \path{/requests/{id}/lines/{lineId}} & \code{MANAGER} & \code{removeLine} & Draft only \\
+POST & \path{/requests/{id}/lines/{lineId}/split} & \code{MANAGER} & \code{splitLine} & new line is Optional \\
+PUT & \path{/requests/{id}/lines/{lineId}/required} & \code{MANAGER} & \code{setRequired} & Required or Optional \\
+PUT & \path{/requests/{id}/lines/{lineId}/priority} & \code{MANAGER} & \code{setPriority} & Exclusive lines only \\
+POST & \path{/requests/{id}/submit} & \code{MANAGER} & \code{submit} & locks Quotes; may Bump (UC-8) \\
+POST & \path{/requests/{id}/withdraw} & \code{MANAGER} & \code{withdraw} & from Draft, Pending, Waiting \\
+POST & \path{/requests/{id}/reopen} & \code{MANAGER} & \code{reopenForEdit} & Waiting to Draft \\
+GET & \path{/requests/{id}/lines/{lineId}/shortlist} & \code{MANAGER}, \code{PLANNER} & \code{shortlist} via \code{ApprovalDriven.\allowbreak buildShortlist} & Shortlist order (\req{PE-shortlist}) \\
+POST & \path{/requests/{id}/lines/{lineId}/candidates} & \code{MANAGER} & \code{selectCandidates} & exactly the line's quantity \\
+POST & \path{/requests/{id}/lines/{lineId}/release} & \code{MANAGER} & \code{releaseLine} & whole, or window, occurrences, units \\
+POST & \path{/loans/{id}/end} & \code{MANAGER} & \code{endLoanEarly} & borrowing Manager; \code{newEnd} \\
+\midrule
+\multicolumn{5}{@{}l}{\textbf{Suggestions} (\module{Requests}: \code{SuggestionService}; UC-3)}\\
+POST & \path{/suggestions} & \code{MEMBER} & \code{create} & to the caller's own Manager \\
+GET & \path{/suggestions/mine} & \code{MEMBER} & \code{mine} & paged \\
+GET & \path{/suggestions/team} & \code{MANAGER} & \code{forManager} & own Team, Open first; paged \\
+POST & \path{/suggestions/{id}/accept} & \code{MANAGER} & \code{acceptIntoNewLine}, \code{acceptIntoLine} & \code{requestId} or \code{lineId} \\
+POST & \path{/suggestions/{id}/decline} & \code{MANAGER} & \code{decline} & optional \code{reason} \\
+\midrule
+\multicolumn{5}{@{}l}{\textbf{Approvals and escalations} (\module{Requests}: \code{RequestLifecycleService} unless named; UC-6, UC-7)}\\
+GET & \path{/approvals} & \code{MANAGER}, \code{PLANNER} & \code{AllocationQueries.\allowbreak approvalsAwaiting} & addressed to the caller, with time left \\
+POST & \path{/approvals/{id}/decision} & \code{MANAGER}, \code{PLANNER} & \code{decideApproval} & \code{PLANNER} once escalated \\
+GET & \path{/escalations} & \code{PLANNER} & \code{escalations} & with outstanding approvals \\
+\midrule
+\multicolumn{5}{@{}l}{\textbf{Ledger} (\module{Ledger}: \code{LedgerService}; UC-11, UC-12)}\\
+GET & \path{/ledger/account} & \code{MANAGER}, \code{PLANNER} & \code{account} & own Team; \code{PLANNER} any \\
+GET & \path{/ledger/statements/{teamId}/{periodId}} & \code{MANAGER}, \code{PLANNER} & \code{statement} & own Team; \code{PLANNER} any \\
+POST & \path{/ledger/grants} & \code{PLANNER} & \code{postGrant} & mid-Period, with a reason \\
+\midrule
+\multicolumn{5}{@{}l}{\textbf{Dashboard} (\module{Dashboard}: \code{DashboardQueries}; UC-12)}\\
+GET & \path{/dashboard/utilization} & \code{MANAGER}, \code{RESOURCE\_\allowbreak OWNER}, \code{PLANNER} & \code{utilization} & Resource Owner: own types \\
+GET & \path{/dashboard/idle} & as above & \code{idleNextDays} & \code{days}, default 7 \\
+GET & \path{/dashboard/waiting} & as above & \code{waitingCount} & lines waiting per type \\
+GET & \path{/dashboard/credits} & \code{MANAGER}, \code{PLANNER} & \code{credits} & own Team; \code{PLANNER} any \\
+GET & \path{/dashboard/person-days} & \code{MANAGER}, \code{PLANNER} & \code{personDays} & lent and borrowed; same scope \\
+\midrule
+\multicolumn{5}{@{}l}{\textbf{Notifications} (\module{Notifications}: \code{NotificationQueries}; every use case)}\\
+GET & \path{/notifications} & \code{MEMBER} & \code{unread} & own, newest first; paged \\
+POST & \path{/notifications/{id}/read} & \code{MEMBER} & \code{markRead} & own \\
+\end{longtable}
+}
+
+{\sloppy The key of PUT \path{/api/settings/{key}} names one setting and the body carries its new value: \path{day_rate}, \path{priority_premium}, \path{objection_window_working_days}, \path{period_months}, \path{grant.{teamId}.{periodId}}, \path{quota.{teamId}.{typeId}}, \path{unit_price.{typeId}}, \path{bump_cutoff.{typeId}}, \path{price_bands.{typeId}}, or \path{refund_steps.{typeId}}. Each call is one \code{SettingChange} and one change-log row, and affects only Quotes not yet locked and events after the change (\req{Planner.Settings}). UC-10, filling a freed slot from the Waitlist, has no endpoint of its own: it runs inside \code{releaseLine}, \code{withdraw}, \code{decideApproval}, and the jobs, wherever capacity frees.\par}

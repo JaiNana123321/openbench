@@ -1,0 +1,178 @@
+% macros.tex — preamble and macros for the OpenBench Software Design Document (copied from docs/srs/macros.tex on 2026-10-05 and extended).
+%
+% Requirement identifiers
+%   \fr{Inventory.Type.Create}{The system shall ...}   functional requirement, dot-notation ID, label fr:<ID>
+%   \fr[Stretch]{Metered.Tier.Define}{...}             optional tag printed after the ID
+%   \FR{Inventory.Type.Create}                          hyperlinked reference to a functional requirement
+%   \br{key}{text}  /  \BR{key}                         business rule BR-n and its reference
+%   \fe{key}{text}  /  \FE{key}                         major feature FE-n and its reference
+%   Other numbered classes follow the same pattern: \bo \scc \li \ri \co \ud \asm \dep \ui \si \ci \pe \se \qa
+%   and their references \boref \sccref \liref ... (see \newidclass below).
+% Use cases (full use case table)
+%   \begin{usecase}{key}{Name} \ucfield{Actors}{...} ... \end{usecase}   and \UC{key}
+
+\usepackage[letterpaper,margin=1in]{geometry}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage{microtype}
+\usepackage{parskip}
+\usepackage{enumitem}
+\usepackage{booktabs}
+\usepackage{longtable}[=v4.13]   % v4.24 (TeX Live 2025) raises "Infinite glue shrinkage" on every multi-page table; v4.13 does not
+\usepackage{array}
+\usepackage{tabularx}
+\usepackage{multirow}
+\usepackage{makecell}
+\usepackage{multicol}
+\usepackage{pdflscape}   % landscape pages for the wide figures (state diagram, data model)
+\usepackage{xcolor}
+\usepackage{graphicx}
+\usepackage{caption}
+\usepackage{fancyhdr}
+\usepackage{lastpage}
+\usepackage{needspace}
+\usepackage{etoolbox}
+\usepackage[colorlinks=true,linkcolor=blue!50!black,urlcolor=blue!50!black,citecolor=blue!50!black]{hyperref}
+
+% ---- Document metadata -------------------------------------------------------
+\newcommand{\SRSversion}{0.3}
+\newcommand{\SDDversion}{1.0}
+\newcommand{\SDDdate}{2026-10-05}
+\newcommand{\SRSdate}{2026-10-05}      % date of this version
+\newcommand{\SRScreated}{2026-09-19}   % date of version 0.1 (use case creation date)
+\newcommand{\SRSproduct}{OpenBench}
+
+% ---- Layout ------------------------------------------------------------------
+\setcounter{secnumdepth}{3}
+\setcounter{tocdepth}{2}
+\setlist{itemsep=1pt,topsep=2pt,parsep=0pt}
+\setlist[enumerate]{leftmargin=*}
+\setlist[itemize]{leftmargin=*}
+\captionsetup{font=small,labelfont=bf}
+\graphicspath{{build/figures/}}
+\newcolumntype{L}[1]{>{\raggedright\arraybackslash}p{#1}}
+\newcolumntype{Y}{>{\raggedright\arraybackslash}X}
+
+\pagestyle{fancy}
+\fancyhf{}
+\lhead{\small \SRSproduct{} Software Design Document}
+\rhead{\small Version \SDDversion}
+\cfoot{\small Page \thepage\ of \pageref*{LastPage}}
+\renewcommand{\headrulewidth}{0.4pt}
+\fancypagestyle{plain}{\fancyhf{}\cfoot{\small Page \thepage\ of \pageref*{LastPage}}\renewcommand{\headrulewidth}{0pt}}
+
+% Vertical gap after each numbered item (\fr, \br, \glossterm ...); the short edition sets it smaller.
+\newlength{\reqgap}\setlength{\reqgap}{3pt}
+
+% ---- Generic numbered identifier classes --------------------------------------
+% \newidclass{co}{CO} defines \co{key}{text} (prints "CO-n  text", labels co:key)
+% and \coref{key} (hyperlinked "CO-n").
+\newcommand{\newidclass}[2]{%
+  \newcounter{#1}%
+  \expandafter\newcommand\csname #1\endcsname[2]{%
+    \par\noindent\refstepcounter{#1}\label{#1:##1}%
+    \hangindent=5em\hangafter=1%
+    \makebox[5em][l]{\textbf{#2-\arabic{#1}}}##2\par\vspace{\reqgap}}%
+  \expandafter\newcommand\csname #1ref\endcsname[1]{\hyperref[#1:##1]{#2-\ref*{#1:##1}}}%
+}
+\newidclass{bo}{BO}    % business objective
+\newidclass{scc}{SC}   % success criterion
+\newidclass{fe}{FE}    % major feature
+\newidclass{li}{LI}    % limitation / exclusion
+\newidclass{ri}{RI}    % business risk
+\newidclass{co}{CO}    % design and implementation constraint
+\newidclass{ud}{UD}    % user documentation
+\newidclass{asm}{AS}   % assumption
+\newidclass{dep}{DE}   % dependency
+\newidclass{ui}{UI}    % user interface
+\newidclass{si}{SI}    % software interface
+\newidclass{ci}{CI}    % communications interface
+\newidclass{pe}{PE}    % performance requirement
+\newidclass{se}{SE}    % security requirement
+\newidclass{qa}{QA}    % quality attribute
+\newidclass{br}{BR}    % business rule
+\newcommand{\FE}{\feref}
+\newcommand{\BR}{\brref}
+
+% ---- Functional requirements (dot-notation IDs) --------------------------------
+\newcommand{\fr}[3][]{%
+  \par\noindent\phantomsection\label{fr:#2}%
+  \hangindent=2em\hangafter=1%
+  \textbf{#2}%
+  \if\relax\detokenize{#1}\relax\else\ \textcolor{black!60}{[#1]}\fi
+  \quad #3\par\vspace{\reqgap}}
+\newcommand{\FR}[1]{\hyperref[fr:#1]{#1}}
+
+% ---- Use cases (full use case table) -------------------------------------------
+\newcounter{uc}
+\newenvironment{usecase}[2]{%
+  \refstepcounter{uc}\label{uc:#1}%
+  \needspace{10\baselineskip}%
+  \subsection*{UC-\theuc: #2}%
+  \addcontentsline{toc}{subsection}{UC-\theuc: #2}%
+  \begin{longtable}{@{}>{\bfseries\raggedright\arraybackslash}p{0.2\textwidth}>{\raggedright\arraybackslash}p{0.76\textwidth}@{}}
+  \toprule
+  Use Case ID & UC-\theuc \\
+  Use Case Name & #2 \\
+  \endfirsthead
+  \multicolumn{2}{@{}l}{\small\itshape UC-\theuc\ #2 (continued)}\\ \toprule
+  \endhead
+  \midrule \multicolumn{2}{@{}r}{\small\itshape continues on next page}\\
+  \endfoot
+  \bottomrule
+  \endlastfoot
+}{\end{longtable}}
+\newcommand{\ucfield}[2]{#1 & #2 \\}
+\newcommand{\ucflow}[2]{\textbf{#1\ #2}\par}
+\newcommand{\UC}[1]{\hyperref[uc:#1]{UC-\ref*{uc:#1}}}
+
+% ---- Glossary entries (emitted by tools/gen_glossary.py) ----------------------
+\newcommand{\glossterm}[3]{%
+  \par\noindent\hangindent=1.5em\hangafter=1%
+  \textbf{#1}\quad #2%
+  \if\relax\detokenize{#3}\relax\else\ {\small\textit{Avoid:} #3.}\fi\par\vspace{\reqgap}}
+
+% Condensed use case (short SRS): a two-column table whose number comes from the label \ucrow set in the summary table.
+% The title is the table's first row; rows are \ucfield{Label}{text} as in the full template.
+% \ucrow{key}{Name}{Actor}{Trigger and outcome}: one row of the use case summary table (short edition); defines uc:key.
+\newcommand{\ucrow}[4]{\refstepcounter{uc}\label{uc:#1}UC-\theuc & #2 & #3 & #4 \\}
+\newcommand{\glossgroup}[1]{\par\medskip\needspace{5\baselineskip}\noindent\textbf{#1}\par\nobreak\smallskip}
+
+% ---- Small helpers -------------------------------------------------------------
+\newcommand{\priority}[1]{\textbf{Priority:} #1}
+\newcommand{\brgroup}[1]{\par\medskip\noindent\textbf{#1}\par\nobreak\smallskip}   % heading for a group of business rules
+\newcommand{\term}[1]{\emph{#1}}                 % first use of a glossary term in a section
+\newcommand{\stretchtag}{\textcolor{black!60}{[Stretch]}}
+\newcommand{\figref}[1]{Figure~\ref{#1}}
+
+
+% ---- Design document additions ------------------------------------------------
+\usepackage{listings}
+\usepackage{pdflscape}
+\lstset{basicstyle=\ttfamily\footnotesize,breaklines=true,breakatwhitespace=true,columns=fullflexible,keepspaces=true,
+  frame=single,framerule=0.3pt,rulecolor=\color{black!40},backgroundcolor=\color{black!3},xleftmargin=4pt,xrightmargin=4pt,
+  commentstyle=\color{black!60}\itshape,keywordstyle=\bfseries,showstringspaces=false,tabsize=2,aboveskip=4pt,belowskip=4pt}
+\newcommand{\code}[1]{\texttt{#1}}
+% SRS requirement identifier. Keyed non-functional identifiers (QA-correct, CO-tx, ...) print as the numbers the SRS
+% prints (QA-1, CO-4, ...); numbers come from the order of the identifier macros in the SRS short-edition sources.
+\newcommand{\reqmap}[2]{\expandafter\def\csname req@#1\endcsname{#2}}
+\newcommand{\req}[1]{\textbf{\small\ifcsname req@#1\endcsname\csname req@#1\endcsname\else #1\fi}}
+\reqmap{CO-stack}{CO-1}\reqmap{CO-db}{CO-2}\reqmap{CO-api}{CO-3}\reqmap{CO-tx}{CO-4}\reqmap{CO-jobs}{CO-5}\reqmap{CO-auth}{CO-6}\reqmap{CO-plugin}{CO-7}
+\reqmap{UI-draft}{UI-1}\reqmap{UI-shortlist}{UI-2}\reqmap{UI-inventory}{UI-3}
+\reqmap{SI-db}{SI-1}\reqmap{SI-api}{SI-2}
+\reqmap{CI-https}{CI-1}\reqmap{CI-inapp}{CI-2}
+\reqmap{PE-scale}{PE-1}\reqmap{PE-page}{PE-2}\reqmap{PE-shortlist}{PE-3}\reqmap{PE-jobs}{PE-4}
+\reqmap{SE-roles}{SE-1}\reqmap{SE-password}{SE-2}\reqmap{SE-data}{SE-3}\reqmap{SE-visibility}{SE-4}
+\reqmap{QA-correct}{QA-1}\reqmap{QA-atomic}{QA-2}\reqmap{QA-audit}{QA-3}\reqmap{QA-available}{QA-4}\reqmap{QA-usable}{QA-5}\reqmap{QA-extensible}{QA-6}\reqmap{QA-retention}{QA-7}
+\reqmap{UD-guide}{UD-1}\reqmap{UD-admin}{UD-2}\reqmap{UD-help}{UD-3}
+\reqmap{AS-planner}{AS-1}\reqmap{AS-inventory}{AS-2}\reqmap{AS-honest}{AS-3}\reqmap{AS-calendar}{AS-4}
+\reqmap{DE-platform}{DE-1}\reqmap{DE-tooling}{DE-2}
+\reqmap{LI-integrations}{LI-3}\reqmap{RI-scope}{RI-5}\reqmap{LI-company}{LI-1}\reqmap{LI-no-money}{LI-2}\reqmap{LI-consent}{LI-4}
+\newcommand{\module}[1]{\textsf{\bfseries #1}}                  % module name
+\newcommand{\adr}[1]{\hyperref[adr:#1]{ADR-#1}}                 % reference to an architecture decision record listed in Section 2
+\newif\iffirstmodule\firstmoduletrue
+\newcommand{\modulespec}[3]{\iffirstmodule\global\firstmodulefalse\else\clearpage\fi\subsection{#1 \normalfont\normalsize(\code{#2})}\label{mod:#3}}
+\newcommand{\field}[1]{\par\medskip\noindent\textbf{#1.}\ }
+\newcommand{\rid}[1]{\textbf{R#1}}                              % responsibility id
+\newcommand{\rc}[1]{\textbf{RC-#1}}                             % requirements change id
+\setcounter{tocdepth}{2}

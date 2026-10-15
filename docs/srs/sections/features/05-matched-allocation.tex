@@ -1,0 +1,34 @@
+\subsection{Matched Allocation}\label{feat:matched}
+
+\subsubsection{Description and Priority}
+A Matched line asks for people. It is either a skill set plus a quantity or a named Person. For a skill set the system builds a Shortlist of Candidates who hold every listed skill, are available for the whole window, and have no Loan overlapping it (a Person is in at most one Loan at a time), ordered by fewest person-days lent in the current Period, and the requesting Manager picks; there is no automatic assignment. Each selected Candidate needs one approval from their own Manager. If the Objection Window lapses with approvals outstanding, the Request escalates to the Capacity Planner. A satisfied Matched line is a Loan; it costs the borrowing Team nothing and earns the lending Team the Day Rate. This feature realizes \FE{matched} and is exercised by \UC{shortlist}, \UC{approve}, and \UC{escalate}. \priority{High.}
+
+\subsubsection{Stimulus/Response Sequences}
+\begin{itemize}
+  \item \textbf{Stimulus:} A Request with a skill-based Matched line enters Pending. \textbf{Response:} The system builds the Shortlist and asks the requesting Manager to select Candidates.
+  \item \textbf{Stimulus:} The requesting Manager selects Candidates. \textbf{Response:} The system sends one approval request per Candidate to that Candidate's Manager and notifies each Candidate.
+  \item \textbf{Stimulus:} A lending Manager approves or refuses. \textbf{Response:} On approval the line counts as satisfied for that Candidate; on refusal the requesting Manager is asked to pick a replacement and every Hold on the Request releases.
+  \item \textbf{Stimulus:} The Objection Window lapses with an approval outstanding. \textbf{Response:} The system escalates the outstanding approvals to the Capacity Planner.
+\end{itemize}
+
+\subsubsection{Functional Requirements}
+\fr{Matched.Line.Skill}{A skill-based Matched line shall be satisfied only by Candidates who hold every skill listed on the line and are available for the whole window (\BR{shortlist}).}
+\fr{Matched.Line.Named}{A Matched line naming a Person shall have quantity one; the system shall check only that the Person is available for the whole window and has no Loan overlapping any day of it, and shall then request approval from that Person's Manager (\BR{named-person}).}
+\fr{Matched.Line.OtherTeam}{Candidates shall be drawn only from Teams other than the requesting Team; work inside a Team is not a Loan (\BR{own-team}).}
+\fr{Matched.Shortlist.Build}{When a Request enters Pending, the system shall build a Shortlist for each skill-based Matched line containing every Member who satisfies \FR{Matched.Line.Skill} and \FR{Matched.Line.OtherTeam} and has no Loan overlapping any day of the line's window; a Member with such a Loan shall not be a Candidate for the line (\BR{shortlist}).}
+\fr{Matched.Shortlist.Order}{The Shortlist shall be ordered by the Candidate's person-days lent in the current Period, fewest first, counting the person-days (\FR{Ledger.Earning.Post}) of every formed Loan of the Candidate that fall inside the Period, a Loan ended early only up to its new last day; Candidates with equal counts shall be ordered by name.}
+\fr{Matched.Shortlist.Show}{The Shortlist shall show each Candidate's name, Team, skills, and person-days lent in the current Period, and shall never show a Candidate's other Requests or Statements.}
+\fr{Matched.Shortlist.Rebuild}{While a Matched line is unsatisfied, the system shall rebuild its Shortlist whenever a Member's skills, availability, Team, or Loans change, and shall notify the requesting Manager when a Candidate becomes available for a line that had too few.}
+\fr{Matched.Select}{The requesting Manager shall select exactly the line's quantity of Candidates from the Shortlist. The system shall never select a Candidate automatically.}
+\fr{Matched.Select.Short}{If a Shortlist holds fewer Candidates than the line's quantity, the line shall be unsatisfied: a Required line places the Request in Waiting (Section~\ref{feat:lifecycle}); an Optional line is dropped when the Request is allocated.}
+\fr{Matched.Approve.Route}{For each selected Candidate the system shall send one approval request to the Manager of the Candidate's Team, stating the requesting Team, the window, and the Earning the lending Team will receive.}
+\fr{Matched.Approve.Decide}{The lending Manager shall approve or refuse each approval request individually, with an optional reason. The decision shall be recorded with actor and timestamp.}
+\fr{Matched.Approve.Own}{The system shall not send an approval request to, or accept an approval from, the requesting Manager for a Member of their own Team (\BR{own-team}).}
+\fr{Matched.Refuse.Replace}{When an approval is refused, the system shall ask the requesting Manager to select a replacement from the Shortlist. The Objection Window shall not restart (\BR{objection-window}).}
+\fr{Matched.Refuse.None}{When an approval is refused and the Shortlist holds no further Candidate, or the line named a Person, the line cannot be satisfied: a Required line places the Request in Refused; an Optional line is dropped.}
+\fr{Matched.Escalate}{When the Objection Window lapses with an approval outstanding, the system shall present the outstanding approvals to the Capacity Planner, who shall approve or refuse each on the silent Manager's behalf; the silent Manager shall be notified of the outcome.}
+\fr{Matched.Escalate.Later}{After the Objection Window has lapsed, every further approval request on that Request shall go directly to the Capacity Planner.}
+\fr{Matched.Person.Notify}{The system shall notify a Candidate when they are selected and a Person when their Loan forms. The Person shall have no action to take and cannot decline (\BR{person-notified}).}
+\fr{Matched.Loan.Form}{When the Request becomes Allocated, each approved Candidate on a Matched line shall become a Loan for the line's window, and an Earning of the Day Rate times the person-days of the Loan shall post to the lending Team (\BR{day-rate}).}
+\fr{Matched.Loan.Optional}{An Optional Matched line whose approvals arrive after the Request is Allocated shall form its Loan and post its Earning at that time.}
+\fr{Matched.Loan.Visible}{A Loan shall appear on the Person's profile, on both Managers' Team views, and on the borrowing Team's Request.}

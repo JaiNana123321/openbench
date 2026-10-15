@@ -1,0 +1,32 @@
+@startuml request-states
+' Figure: Request state machine (D4, D9, D11, D12). Guards are spelled out in Section 4.8.
+' Withdraw is drawn once from Draft; it is also allowed from Pending and Waiting. Allocated, Withdrawn, Refused are final.
+skinparam shadowing false
+skinparam defaultFontName Helvetica
+skinparam defaultFontSize 13
+skinparam ArrowFontSize 11
+skinparam nodesep 10
+skinparam ranksep 18
+skinparam state {
+  BackgroundColor #F4F6FA
+  BorderColor #223
+  FontStyle bold
+}
+hide empty description
+[*] --> Draft : Manager creates
+Draft --> Draft : edit lines,\naccept Suggestions
+Draft --> Submitted : submit (Required\nlines affordable)
+Submitted --> Allocated : no approval needed,\nall Required satisfiable
+Submitted --> Pending : approvals needed;\nHolds placed, Window starts
+Submitted --> Waiting : a Required line\nunsatisfiable; waitlisted
+Pending --> Allocated : last approval; Holds\ncommit, Charges post
+Pending --> Waiting : refusal or Window\nlapses; Holds release
+Pending --> Refused : refused, no\nCandidate left
+Waiting --> Pending : replacement picked\n(Window still running)
+Waiting --> Allocated : all Required\nsatisfiable at once
+Waiting --> Draft : edit
+Waiting --> Refused : escalated approval\nrefused, no Candidate left
+Allocated --> Waiting : Required line\nBumped (full Refund)
+Allocated --> Allocated : Release (Refund)
+Draft --> Withdrawn : withdraw (also from\nPending and Waiting)
+@enduml

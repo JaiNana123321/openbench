@@ -1,0 +1,55 @@
+@startuml use-cases
+' Figure: use case diagram (Appendix C). Numbers match Appendix D. nodesep is small to keep 12 rows on one portrait page.
+left to right direction
+skinparam shadowing false
+skinparam nodesep 6
+skinparam ranksep 40
+skinparam defaultFontName Helvetica
+skinparam defaultFontSize 12
+skinparam ArrowFontSize 10
+skinparam usecase {
+  BackgroundColor #F4F6FA
+  BorderColor #223
+}
+skinparam actor {
+  BackgroundColor White
+  BorderColor #223
+}
+actor Administrator as Admin
+actor "Resource Owner" as RO
+actor Member
+actor Manager
+actor "Capacity Planner" as CP
+actor "Clock\n(scheduled job)" as Clock
+rectangle OpenBench {
+  usecase "UC-1 Define a\nResource Type" as UC1
+  usecase "UC-2 Maintain\nInventory" as UC2
+  usecase "UC-3 Make a\nSuggestion" as UC3
+  usecase "UC-4 Draft and\nsubmit a Request" as UC4
+  usecase "UC-5 Select Candidates\nfrom a Shortlist" as UC5
+  usecase "UC-6 Approve or\nrefuse a Loan" as UC6
+  usecase "UC-7 Resolve an\nescalated Request" as UC7
+  usecase "UC-8 Bump a standard line\nwith a Priority line" as UC8
+  usecase "UC-9 Release an\nallocated line" as UC9
+  usecase "UC-10 Fill a freed slot\nfrom the Waitlist" as UC10
+  usecase "UC-11 Set Grants and\nprices for a Period" as UC11
+  usecase "UC-12 View the dashboard\nand Statement" as UC12
+}
+Admin --> UC1
+RO --> UC2
+RO --> UC12
+Member --> UC3
+Manager --> UC4
+Manager --> UC5
+Manager --> UC6
+Manager --> UC8
+Manager --> UC9
+Manager --> UC12
+CP --> UC7
+CP --> UC11
+CP --> UC12
+Clock --> UC7
+Clock --> UC10
+UC8 ..> UC10 : <<include>>
+UC9 ..> UC10 : <<include>>
+@enduml

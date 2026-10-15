@@ -1,0 +1,55 @@
+% 07-api.tex (short edition) : OpenBench Software Design Document. Condensed from sections/07-api.tex on 2026-10-05.
+% Sections 7 (REST API) and 8 (Crosscutting Concerns) of the full edition merge into this one section, which carries both
+% labels (sec:api, sec:cross) and continues in sections/short/08-crosscutting.tex.
+% NOTE: paths are set with \path{} (url.sty, loaded by hyperref) so they break at slashes and keep {id} braces literal.
+\section{Interfaces and Crosscutting Concerns}\label{sec:api}\label{sec:cross}
+
+The browser client talks to the server only through one REST/JSON API, and every use case of the SRS can be carried out through it under the same role checks (\req{SI-api}, \req{CO-api}).
+
+\subsection{API Conventions}
+
+\textbf{Paths.} Every endpoint lives under \path{/api}; any other path returns the single-page application. Where a path needs the data of a higher module, that module's controller serves it, so no controller breaks the dependency rule of Section~\ref{sec:arch}: the holder views under \path{/inventory} and a Member's Loans under \path{/members} are served by \module{Allocation}.
+
+\textbf{Methods and transitions.} GET reads and never changes state; POST creates an object (201 with \code{Location}) or performs one transition; PUT replaces one value; DELETE removes a Draft line or a role. A transition is a POST to a sub-resource named by the verb of the state machine, such as POST \path{/api/requests/{id}/submit}, \path{/withdraw}, and \path{/reopen}, POST \path{/api/requests/{id}/lines/{lineId}/release}, and POST \path{/api/approvals/{id}/decision}; it answers 200 with the object's new state.
+
+\textbf{One path through the server.} A controller method binds and validates the body, builds the caller's \code{Actor} from the session, calls one application-service operation (the free-Resource search alone calls two read-only queries), and maps the result to JSON. \code{@PreAuthorize} sits on the application-service methods, not on the controllers, so the screens and any other API client pass the same checks (\req{CO-api}, \req{SE-roles}).
+
+\textbf{Representation.} JSON in UTF-8 with camelCase names; enumerations as upper-case strings (\code{PENDING}); ids as JSON integers (the typed wrappers such as \code{RequestId} serialize as their number); credits as JSON numbers; instants as ISO-8601 date-times with the offset of the company time zone (\code{2026-10-12T09:00:00-04:00}), accepted with any offset and normalized; Loan days and Period bounds as ISO dates. A time window is \code{\{"start", "end"\}}, half-open as \code{TimeWindow}; a day range is \code{\{"from", "to"\}}, inclusive as \code{DateRange}.
+
+\textbf{Errors.} Every error is an RFC~9457 problem detail (\code{application/problem+json}, Spring's \code{ProblemDetail}) with \code{type}, \code{title}, \code{status}, \code{detail} (one sentence the client shows as is), \code{instance} (the request path), and the extension field \code{code}, a stable identifier the client may branch on; a 400 adds \code{errors}, one entry per invalid field. Table~\ref{tab:api-errors} gives the status per error class.
+
+{\footnotesize\renewcommand{\arraystretch}{1.08}
+\begin{longtable}{@{}L{0.2\textwidth}L{0.47\textwidth}L{\dimexpr0.33\textwidth-4\tabcolsep\relax}@{}}
+\caption{HTTP status per error class.}\label{tab:api-errors}\\
+\toprule
+\textbf{Status} & \textbf{Error class and typical cause} & \textbf{Example \code{code}} \\
+\midrule
+\endfirsthead
+\toprule
+\textbf{Status} & \textbf{Error class and typical cause} & \textbf{Example \code{code}} \\
+\midrule
+\endhead
+\bottomrule
+\endlastfoot
+400 Bad Request & Validation at the controller: malformed JSON, a missing field, a value out of range & \code{VALIDATION\_FAILED} \\
+401 Unauthorized & Unauthenticated: no session, an expired session, wrong credentials at login & \code{UNAUTHENTICATED}, \code{BAD\_CREDENTIALS} \\
+403 Forbidden & A missing role (\code{@PreAuthorize}), a missing or wrong CSRF token, or \code{ForbiddenException} & \code{FORBIDDEN}, \code{CSRF\_REJECTED} \\
+404 Not Found & \code{NotFoundException}, including any object outside the caller's scope & \code{NOT\_FOUND} \\
+409 Conflict & \code{RuleViolation} on a state conflict: the object's state does not allow the action; or an exclusion-constraint violation (SQLSTATE 23P01), logged as a bug & \code{WRONG\_STATE}, \code{ALREADY\_DECIDED}, \code{ALLOCATION\_CONFLICT} \\
+422 Unprocessable Content & \code{RuleViolation} on a business rule & \code{INSUFFICIENT\_BALANCE}, \code{NOT\_A\_CANDIDATE} \\
+503 Service Unavailable & \code{ConcurrencyRetryException}: a lock wait or deadlock failed twice; \code{Retry-After: 1} & \code{CONCURRENCY\_RETRY} \\
+500 Internal Server Error & Anything else; logged with its stack trace, never returned in the body & \code{INTERNAL} \\
+\end{longtable}
+}
+
+\textbf{API documentation.} springdoc serves the OpenAPI~3 document at \path{/api/docs} and a browsable page at \path{/api/docs/ui} to signed-in Members.
+
+\subsection{Authentication and Sessions}
+
+Authentication is Spring Security form login with a server-side HTTP session (\req{CO-auth}, \req{SE-password}). \textbf{Login and logout.} POST \path{/api/login} takes the form fields \code{username} and \code{password} and answers with JSON instead of a redirect: 200 with the body of GET \path{/api/me}, or a 401 that does not say whether the username exists. \textbf{Identity.} GET \path{/api/me} returns the Member's id, name, Team, and roles. \textbf{Session cookie.} \code{HttpOnly; Secure; SameSite=Lax}. Sessions live in the memory of the one process and expire after 12 hours without a request. \textbf{CSRF.} Cookie to header: the token travels in the cookie \code{XSRF-TOKEN}, which script may read, and the client copies it into the header \code{X-XSRF-TOKEN} on every POST, PUT, and DELETE, the login included. \textbf{Passwords and transport.} bcrypt through Spring's delegating password encoder, which stores the algorithm with the hash so it can be upgraded without a reset; no password is logged or returned. HTTPS only (\req{CI-https}): TLS ends at nginx or the embedded Tomcat, plain HTTP only redirects, responses carry Strict-Transport-Security, and behind nginx the forwarded headers are trusted so redirects and the \code{Secure} cookie use the external scheme. \textbf{Sign-in log.} Every authentication attempt, successful or not, is logged with username, remote address, and outcome (\req{SE-password}).
+
+\subsection{Endpoints by Module}
+
+Each module serves its own group of endpoints, so every use case maps to endpoints (\req{SI-api}): the session (\path{/login}, \path{/logout}, \path{/me}); \module{Members} (\path{/teams}, \path{/admin}, \path{/skills}, \path{/members}, with a Member's Loans served by \module{Allocation}); \module{Inventory} (\path{/inventory}, with the holder timeline and the free-for-a-window search served by \module{Allocation}); \module{Settings} (\path{/settings}); \module{Requests} (\path{/requests} and \path{/loans} for Drafts and every transition, \path{/suggestions}, \path{/approvals}, \path{/escalations}); \module{Ledger} (\path{/ledger}); \module{Dashboard} (\path{/dashboard}); and \module{Notifications} (\path{/notifications}). Roles are granted authorities, and every signed-in Member holds \code{MEMBER}; the longer edition lists every endpoint with its method, roles, and operation. Operations only other modules call, such as \code{holdCredits}, \code{isAvailable}, \code{onWindowLapse}, and \code{rollover}, have no endpoint.
+
+{\sloppy The key of PUT \path{/api/settings/{key}} names one setting and the body carries its new value: \path{day_rate}, \path{priority_premium}, \path{objection_window_working_days}, \path{period_months}, \path{grant.{teamId}.{periodId}}, \path{quota.{teamId}.{typeId}}, \path{unit_price.{typeId}}, \path{bump_cutoff.{typeId}}, \path{price_bands.{typeId}}, or \path{refund_steps.{typeId}}. UC-10, filling a freed slot from the Waitlist, has no endpoint of its own: it runs inside \code{releaseLine}, \code{withdraw}, \code{decideApproval}, and the jobs, wherever capacity frees.\par}
