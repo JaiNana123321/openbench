@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { json, mockApi, noContent, problem, setCookie } from '../test/mockApi';
-import { ApiError, api } from './client';
+import { ApiError, api, fieldError } from './client';
 
 async function failureOf(call: Promise<unknown>): Promise<ApiError> {
   try {
@@ -50,6 +50,8 @@ describe('api client', () => {
 
     expect(asMap).toMatchObject({ code: 'VALIDATION_FAILED', errors: { name: 'must not be blank' } });
     expect(asList).toMatchObject({ code: 'VALIDATION_FAILED', errors: { name: 'must not be blank' } });
+    expect(fieldError(asList, 'name')).toBe('must not be blank');
+    expect(fieldError(asList, 'units')).toBeUndefined();
   });
 
   it('copies the XSRF-TOKEN cookie into the X-XSRF-TOKEN header on writes only', async () => {

@@ -6,7 +6,7 @@ interface FieldProps {
   children: ReactNode;
   /** Help shown under the control. */
   hint?: ReactNode;
-  /** The message for this field, such as `error.errors.name` of a 400 ApiError. */
+  /** The message for this field, such as `fieldError(save.error, 'name')` of a rejected write. */
   error?: string;
 }
 

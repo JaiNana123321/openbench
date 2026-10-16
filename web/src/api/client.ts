@@ -50,6 +50,11 @@ export function isApiError(error: unknown): error is ApiError {
   return error instanceof ApiError;
 }
 
+/** The server's message for one field of a rejected write, if any: `fieldError(save.error, 'units')`. */
+export function fieldError(error: unknown, field: string): string | undefined {
+  return isApiError(error) ? error.errors[field] : undefined;
+}
+
 export const api = {
   get: <T>(path: string, query?: QueryParams) => request<T>('GET', path, { query }),
   post: <T = void>(path: string, body?: unknown) => request<T>('POST', path, jsonBody(body)),
