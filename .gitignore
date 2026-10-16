@@ -6,6 +6,7 @@ result-*
 # Build output
 target/
 node_modules/
+web/dist/
 
 # Local working notes (issue tracker, briefs, handoffs); see docs/agents/issue-tracker.md
 .scratch/
