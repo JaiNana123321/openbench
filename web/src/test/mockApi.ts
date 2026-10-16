@@ -109,7 +109,7 @@ export function setCookie(name: string, value: string): void {
  * The reply of GET /api/me: the Member when signed in, 401 when signed out. Like the server,
  * it sets the XSRF-TOKEN cookie either way.
  */
-export function session(me: Me | null, csrfToken = 'csrf-token-1'): MockReply {
+export function session(me: Me | null, csrfToken = 'csrf-token-1'): () => Response {
   return () => {
     setCookie('XSRF-TOKEN', csrfToken);
     return me ? json(me) : problem(401, 'UNAUTHENTICATED', 'Sign in to continue.');
