@@ -65,7 +65,7 @@ Imports go downward only: `features` may use `shell`, `auth`, `ui`, and `api`; `
 - Use `api.get/post/put/delete` from `src/api/client.ts`, never `fetch`. Paths are full (`/api/requests/42/submit`). The client sends the session cookie, copies the `XSRF-TOKEN` cookie into `X-XSRF-TOKEN` on every write, and throws an `ApiError` for any failed response: `status`, `code` (such as `INSUFFICIENT_BALANCE`), `title`, `detail` (show it as is), `errors` (per field, on 400), and `properties` (anything else, such as `earliestHour`). A server that cannot be reached gives status 0, code `NETWORK_ERROR`.
 - Add the JSON types to `src/api/types.ts` under a heading for the API group. Use the shared types there: `Id`, `Credits`, `Instant`, `TimeWindow`, `DayRange`, `Page<T>`.
 - Keep a feature's query keys and hooks in `src/features/<name>/queries.ts`. Keys are arrays that start with the API group's noun: `['requests']`, `['requests', id]`, `['requests', id, 'draft']`. A mutation invalidates the keys it changes in its `onSuccess`, so a submit refreshes the Request, the list, and the Account.
-- Server state lives only in the query cache. Form state stays in its screen. Reads retry up to three times when the server is unreachable or answers 5xx; writes never retry. A 401 from any call returns the Member to `/login`.
+- Make every call through `useQuery` or `useMutation`. Server state lives only in the query cache; form state stays in its screen. Reads retry up to three times when the server is unreachable or answers 5xx; writes never retry. A 401 from any query or mutation returns the Member to `/login`.
 - The signed-in Member is `useCurrentMember()` on any page; it never needs loading.
 
 ## Show things
