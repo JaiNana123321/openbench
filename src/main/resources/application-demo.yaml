@@ -1,0 +1,6 @@
+# Profile `demo`: adds the demo world's seed data (src/main/resources/db/demo) on top of the schema.
+# The seeds are versioned V1000 and up; out-of-order lets later schema migrations still apply after them.
+spring:
+  flyway:
+    locations: classpath:db/migration,classpath:db/demo
+    out-of-order: true
