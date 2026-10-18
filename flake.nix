@@ -7,8 +7,8 @@
     devShells = forAllSystems (pkgs: {
       default = pkgs.mkShell {
         packages = [
-          # Back end: Spring Boot 3 on Java 17, built with Maven.
-          pkgs.jdk17
+          # Back end: Spring Boot 3 on Java 25 LTS, built with Maven.
+          pkgs.jdk25
           pkgs.maven
 
           # Client in web/: React + Vite + TypeScript, run with npm during development.

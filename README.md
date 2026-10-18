@@ -6,7 +6,7 @@ The specification (SRS, design document, ADRs) is in [`docs/`](docs/README.md); 
 
 ## Prerequisites
 
-- Either Nix with direnv (`direnv allow` loads JDK 17, Maven, Node 24, and psql 16 from `flake.nix`), or JDK 17 and Maven 3.9.
+- Either Nix with direnv (`direnv allow` loads JDK 25, Maven, Node 24, and psql 16 from `flake.nix`), or JDK 25 and Maven 3.9.
 - Docker. The tests start PostgreSQL 16 with Testcontainers, and the application starts it from `compose.yaml`.
 
 ## Run the tests
