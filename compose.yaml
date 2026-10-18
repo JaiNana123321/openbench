@@ -1,0 +1,14 @@
+# Local development database. `mvn spring-boot:run` starts it through spring-boot-docker-compose and
+# connects as the schema owner. The host port is chosen by Docker; `docker compose port postgres 5432`
+# shows it. The init script creates the application role openbench_app.
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: openbench
+      POSTGRES_USER: openbench
+      POSTGRES_PASSWORD: openbench
+    ports:
+      - "5432"
+    volumes:
+      - ./docker/postgres-init:/docker-entrypoint-initdb.d:ro
