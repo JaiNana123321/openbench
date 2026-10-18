@@ -63,7 +63,7 @@ public abstract class PostgresTest {
      * Sends a matching {@code XSRF-TOKEN} cookie and {@code X-XSRF-TOKEN} header, as the web client
      * does on every POST, PUT, and DELETE. Use this, never spring-security-test's {@code csrf()}:
      * that one swaps the CSRF filter's token store in the shared application context, after which
-     * no response sets the cookie (ArchitectureTest forbids it).
+     * no response sets the cookie (TestConventionsTest forbids it).
      */
     protected static RequestPostProcessor xsrf() {
         return request -> {
