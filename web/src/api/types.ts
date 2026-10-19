@@ -70,3 +70,67 @@ export interface Me {
   team: TeamRef;
   roles: Role[];
 }
+
+// ---------------------------------------------------------------- Inventory
+
+/** The policy a Resource Type declares, deciding how Request Lines for it are allocated. */
+export type AllocationClass = 'MATCHED' | 'EXCLUSIVE' | 'METERED';
+
+/** What values an attribute takes; a LIST attribute takes one of its `allowedValues`. */
+export type AttributeKind = 'TEXT' | 'NUMBER' | 'DATE' | 'LIST';
+
+/** An attribute of a Resource Type. `allowedValues` is set for LIST and null for every other kind. */
+export interface Attribute {
+  id: Id;
+  name: string;
+  kind: AttributeKind;
+  allowedValues: string[] | null;
+}
+
+/** GET /api/inventory/types and /types/{id}. `poolCapacity` is set for Metered types only. */
+export interface ResourceType {
+  id: Id;
+  name: string;
+  allocationClass: AllocationClass;
+  attributes: Attribute[];
+  retired: boolean;
+  poolCapacity: number | null;
+}
+
+/**
+ * The body of POST /api/inventory/types and PUT /types/{id}: the whole definition. An attribute
+ * without `id` is new; an existing attribute left out is removed.
+ */
+export interface ResourceTypeDefinition {
+  name: string;
+  allocationClass: AllocationClass;
+  attributes: (Omit<Attribute, 'id'> & { id?: Id })[];
+}
+
+/** GET /api/inventory/resources (paged) and /resources/{id}. `attributes` maps names to values. */
+export interface Resource {
+  id: Id;
+  typeId: Id;
+  typeName: string;
+  name: string;
+  ownerId: Id;
+  ownerName: string;
+  units: number;
+  attributes: Record<string, string>;
+  retired: boolean;
+}
+
+/** The body of POST /api/inventory/resources. `units` is required for a Metered type only. */
+export interface NewResource {
+  typeId: Id;
+  name: string;
+  units?: number;
+  attributes: Record<string, string>;
+}
+
+/** The body of PUT /api/inventory/resources/{id}: an attribute left out or blank loses its value. */
+export interface ResourceEdit {
+  name: string;
+  attributes: Record<string, string>;
+  ownerId?: Id;
+}

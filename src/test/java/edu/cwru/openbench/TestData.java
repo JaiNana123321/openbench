@@ -65,4 +65,33 @@ public final class TestData {
         return jdbc.queryForObject(
                 "INSERT INTO period (starts_on, ends_on) VALUES (?, ?) RETURNING id", Long.class, day, day);
     }
+
+    // ---------------------------------------------------------------- Inventory
+
+    /** A Resource Type of class {@code MATCHED}, {@code EXCLUSIVE}, or {@code METERED}, without attributes. */
+    public long resourceType(String name, String allocationClass) {
+        return jdbc.queryForObject("INSERT INTO resource_type (name, allocation_class) VALUES (?, ?) RETURNING id",
+                Long.class, name, allocationClass);
+    }
+
+    /** An attribute of kind TEXT, NUMBER, or DATE, or LIST with the given allowed values. */
+    public long attribute(long typeId, String name, String kind, String... allowedValues) {
+        return jdbc.queryForObject("""
+                INSERT INTO resource_type_attribute (type_id, name, kind, allowed_values)
+                VALUES (?, ?, ?, ?::text[]) RETURNING id""",
+                Long.class, typeId, name, kind,
+                kind.equals("LIST") ? "{" + String.join(",", allowedValues) + "}" : null);
+    }
+
+    /** A Resource of the type with these units (1 for an Exclusive type), owned by the Member. */
+    public long resource(long typeId, String name, long ownerId, int units) {
+        return jdbc.queryForObject("""
+                INSERT INTO resource (type_id, name, owner_member_id, units) VALUES (?, ?, ?, ?) RETURNING id""",
+                Long.class, typeId, name, ownerId, units);
+    }
+
+    public void attributeValue(long resourceId, long attributeId, String value) {
+        jdbc.update("INSERT INTO resource_attribute_value (resource_id, attribute_id, value) VALUES (?, ?, ?)",
+                resourceId, attributeId, value);
+    }
 }
