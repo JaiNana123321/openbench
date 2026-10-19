@@ -68,4 +68,10 @@ public class MemberService {
         List<Long> ids = role == Role.MEMBER ? members.findActiveIds() : roles.findActiveMemberIdsWithRole(role);
         return ids.stream().map(MemberId::new).toList();
     }
+
+    /** (Unscoped) A Team, retired or not, for another module's rule. */
+    public TeamSummary team(TeamId id) {
+        return teams.findById(id.value()).map(Team::toSummary)
+                .orElseThrow(() -> new NotFoundException("Team " + id.value() + " does not exist."));
+    }
 }
