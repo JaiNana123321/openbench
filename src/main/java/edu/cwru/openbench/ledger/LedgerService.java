@@ -19,6 +19,7 @@ import edu.cwru.openbench.settings.SettingsService;
 import java.math.BigDecimal;
 import java.time.Clock;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.EnumMap;
 import java.util.HashMap;
 import java.util.List;
@@ -75,8 +76,8 @@ public class LedgerService {
     /** (Unscoped) The Team's Account; all zero before its first Transaction. */
     public AccountView account(TeamId team) {
         return accounts.figuresOf(team.value())
-                .map(figures -> AccountView.of(team,
-                        new Credits(figures.getGranted()), new Credits(figures.getEarned()), new Credits(figures.getHeld())))
+                .map(figures -> AccountView.of(team, new Credits(figures.getGranted()),
+                        new Credits(figures.getEarned()), new Credits(figures.getHeld())))
                 .orElseGet(() -> AccountView.of(team, Credits.ZERO, Credits.ZERO, Credits.ZERO));
     }
 
@@ -149,8 +150,9 @@ public class LedgerService {
      */
     @Transactional
     public void commitCharges(RequestId request, List<ChargeSpec> charges) {
-        Map<TeamId, List<ChargeSpec>> byTeam = charges.stream().collect(Collectors.groupingBy(
-                ChargeSpec::team, () -> new TreeMap<>((a, b) -> Long.compare(a.value(), b.value())), Collectors.toList()));
+        // Accounts are locked in ascending Team id; a Request's lines normally share one Team.
+        Map<TeamId, List<ChargeSpec>> byTeam = charges.stream().collect(Collectors.groupingBy(ChargeSpec::team,
+                () -> new TreeMap<>(Comparator.comparingLong(TeamId::value)), Collectors.toList()));
         PeriodId period = byTeam.isEmpty() ? null : settings.currentPeriod().id();
         Long actor = signedInMemberId();
         byTeam.forEach((team, lines) -> {
@@ -262,10 +264,15 @@ public class LedgerService {
 
         Map<Long, String> names = new HashMap<>();
         List<TransactionView> lines = inPeriod.stream().map(transaction -> view(transaction, names)).toList();
+        Statement.Totals kinds = new Statement.Totals(
+                total(totals, TransactionKind.GRANT),
+                total(totals, TransactionKind.CHARGE),
+                total(totals, TransactionKind.EARNING),
+                total(totals, TransactionKind.REFUND),
+                new Credits(expired));
         return new Statement(summary, target,
                 new Statement.Figures(new Credits(openingGranted), new Credits(openingEarned)),
-                new Statement.Totals(total(totals, TransactionKind.GRANT), total(totals, TransactionKind.CHARGE),
-                        total(totals, TransactionKind.EARNING), total(totals, TransactionKind.REFUND), new Credits(expired)),
+                kinds,
                 new Statement.Figures(new Credits(closingGranted), new Credits(closingEarned)),
                 account(team),
                 lines);

@@ -63,13 +63,16 @@ class Transaction {
         this.postedAt = postedAt;
     }
 
-    static Transaction grant(Long teamId, BigDecimal amount, Long periodId, String reason, Long actorId, Instant postedAt) {
-        return new Transaction(teamId, TransactionKind.GRANT, amount, BigDecimal.ZERO, periodId, null, reason, actorId, postedAt);
+    static Transaction grant(Long teamId, BigDecimal amount, Long periodId, String reason, Long actorId,
+            Instant postedAt) {
+        return new Transaction(teamId, TransactionKind.GRANT, amount, BigDecimal.ZERO, periodId, null, reason,
+                actorId, postedAt);
     }
 
     static Transaction charge(Long teamId, BigDecimal grantedPart, BigDecimal earnedPart, Long periodId, Long lineId,
             Long actorId, Instant postedAt) {
-        return new Transaction(teamId, TransactionKind.CHARGE, grantedPart, earnedPart, periodId, lineId, null, actorId, postedAt);
+        return new Transaction(teamId, TransactionKind.CHARGE, grantedPart, earnedPart, periodId, lineId, null,
+                actorId, postedAt);
     }
 
     Long id() {

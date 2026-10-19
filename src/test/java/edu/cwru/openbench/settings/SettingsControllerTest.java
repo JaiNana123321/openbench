@@ -76,6 +76,9 @@ class SettingsControllerTest extends PostgresTest {
         mvc.perform(get("/api/settings/periods").with(signedInAs(member)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[?(@.id == %d)].startsOn", period).value(day.toString()))
-                .andExpect(jsonPath("$[?(@.id == %d)].endsOn", period).value(day.toString()));
+                .andExpect(jsonPath("$[?(@.id == %d)].endsOn", period).value(day.toString()))
+                // previous is the id of the Period before, or null for the first.
+                .andExpect(jsonPath("$[0].previous").isEmpty())
+                .andExpect(jsonPath("$[1].previous").isNumber());
     }
 }
