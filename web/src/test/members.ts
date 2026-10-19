@@ -34,3 +34,11 @@ export const dave: Me = {
   team: { id: 3, name: 'Operations' },
   roles: ['RESOURCE_OWNER', 'MEMBER'],
 };
+
+export const erin: Me = {
+  id: 8,
+  name: 'Erin Walsh',
+  username: 'erin',
+  team: { id: 3, name: 'Operations' },
+  roles: ['PLANNER', 'MEMBER'],
+};

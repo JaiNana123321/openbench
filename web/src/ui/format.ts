@@ -1,4 +1,4 @@
-import type { Credits, Instant, TimeWindow } from '../api/types';
+import type { Credits, DayRange, Instant, LocalDate, TimeWindow } from '../api/types';
 
 // Display helpers. They format what the server computed; they never compute a Quote or a Balance.
 // Times always show in the company time zone, whatever the browser's zone is.
@@ -106,6 +106,29 @@ function formatOffset(minutes: number): string {
 
 function pad(value: number): string {
   return String(value).padStart(2, '0');
+}
+
+const dayFormat = new Intl.DateTimeFormat('en-US', {
+  timeZone: 'UTC',
+  month: 'short',
+  day: 'numeric',
+  year: 'numeric',
+});
+
+/** A day as the API sends it, "2026-10-01", shown as "Oct 1, 2026". A day has no time zone. */
+export function formatDay(day: LocalDate): string {
+  return dayFormat.format(new Date(`${day}T00:00:00Z`));
+}
+
+/** An inclusive range of days: "Oct 1, 2026 to Oct 31, 2026". */
+export function formatDayRange(range: DayRange): string {
+  return `${formatDay(range.from)} to ${formatDay(range.to)}`;
+}
+
+/** Today in the company time zone, as the API writes days: "2026-10-23". For default selections only. */
+export function todayInCompanyZone(): LocalDate {
+  const part = partsOf(numericParts, new Date());
+  return `${part.year}-${part.month}-${part.day}`;
 }
 
 function partsOf(format: Intl.DateTimeFormat, date: Date): Record<string, string> {
