@@ -4,6 +4,7 @@ import { adminFeature } from './features/admin';
 import { homeFeature } from './features/home';
 import { inventoryFeature } from './features/inventory';
 import { ledgerFeature } from './features/ledger';
+import { requestsFeature } from './features/requests';
 import { AppShell } from './shell/AppShell';
 import { RouteErrorPage } from './shell/ErrorPage';
 import type { Feature } from './shell/feature';
@@ -15,7 +16,7 @@ import { RequireRole } from './shell/RequireRole';
  * The route registry: every feature of the client, in menu order. To add a screen, add a folder
  * under src/features/ that exports a Feature, and list it here.
  */
-export const features: Feature[] = [homeFeature, inventoryFeature, ledgerFeature, adminFeature];
+export const features: Feature[] = [homeFeature, inventoryFeature, ledgerFeature, adminFeature, requestsFeature];
 
 /** /login is open to all; every other page needs a signed-in Member and sits inside the shell. */
 export function buildRoutes(features: readonly Feature[]): RouteObject[] {
