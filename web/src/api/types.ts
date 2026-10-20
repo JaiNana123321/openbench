@@ -195,3 +195,92 @@ export interface Statement {
   account: Account;
   transactions: LedgerTransaction[];
 }
+
+// ---------------------------------------------------------------- Requests
+
+export type RequestState = 'DRAFT' | 'SUBMITTED' | 'PENDING' | 'WAITING' | 'ALLOCATED' | 'WITHDRAWN' | 'REFUSED';
+
+export type RequestLineState =
+  | 'DRAFT'
+  | 'EVALUATED'
+  | 'HELD'
+  | 'ALLOCATED'
+  | 'WAITING'
+  | 'RELEASED'
+  | 'PARTLY_RELEASED'
+  | 'BUMPED'
+  | 'AWAITING_APPROVAL'
+  | 'APPROVED'
+  | 'LOANED'
+  | 'REFUSED'
+  | 'DROPPED'
+  | 'CANCELED';
+
+/** POST /api/requests, and the `request` of a Draft view: a Request without its lines. */
+export interface RequestRecord {
+  id: Id;
+  team: TeamRef;
+  state: RequestState;
+  createdAt: Instant;
+  submittedAt: Instant | null;
+}
+
+/**
+ * A Request Line. `quantity` counts instances of an Exclusive type and units of a Metered type.
+ * `quote` is null when the type has no prices; a Draft's Quotes are current, a submitted line's locked.
+ */
+export interface RequestLine {
+  id: Id;
+  requestId: Id;
+  typeId: Id;
+  typeName: string;
+  allocationClass: AllocationClass;
+  quantity: number;
+  window: TimeWindow;
+  namedResource: Id | null;
+  namedResourceName: string | null;
+  required: boolean;
+  state: RequestLineState;
+  quote: Credits | null;
+}
+
+/** The body of POST /api/requests/{id}/lines. `namedResourceId` is for an Exclusive line only. */
+export interface NewLine {
+  typeId: Id;
+  quantity: number;
+  start: Instant;
+  end: Instant;
+  namedResourceId?: Id;
+}
+
+/** The body of PUT /api/requests/{id}/lines/{lineId}: the line's ask, replaced whole; the type stays. */
+export interface LineEdit {
+  quantity: number;
+  start: Instant;
+  end: Instant;
+  namedResourceId?: Id;
+}
+
+/**
+ * GET /api/requests/{id}/draft: the lines with their Quotes and the server's totals. `shortfall` is
+ * the Required sum above the Available Balance, 0 when it fits.
+ */
+export interface DraftView {
+  request: RequestRecord;
+  lines: RequestLine[];
+  requiredSum: Credits;
+  optionalSum: Credits;
+  availableBalance: Credits;
+  shortfall: Credits;
+}
+
+/** One row of GET /api/requests (paged). */
+export interface RequestSummary {
+  id: Id;
+  team: TeamRef;
+  state: RequestState;
+  createdAt: Instant;
+  submittedAt: Instant | null;
+  lineCount: number;
+  requiredSum: Credits;
+}
