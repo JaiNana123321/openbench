@@ -2,8 +2,11 @@ package edu.cwru.openbench.allocation;
 
 import edu.cwru.openbench.common.TimeWindow;
 import java.time.Duration;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
+import java.util.Locale;
 
 /**
  * Window arithmetic, pure (design Section 4.5, "Pure parts"). Windows are half-open
@@ -13,6 +16,8 @@ import java.time.ZoneId;
 final class Windows {
 
     private static final long SECONDS_PER_HOUR = 3600;
+
+    private static final DateTimeFormatter MESSAGE_TIME = DateTimeFormatter.ofPattern("EEE d MMM uuuu, HH:mm", Locale.US);
 
     private Windows() {}
 
@@ -36,6 +41,16 @@ final class Windows {
                 && window.start().getNano() == 0
                 && window.end().getEpochSecond() % SECONDS_PER_HOUR == 0
                 && window.end().getNano() == 0;
+    }
+
+    /** An instant for a message, such as "Tue 27 Oct 2026, 14:00", in the zone. */
+    static String describe(Instant instant, ZoneId zone) {
+        return MESSAGE_TIME.format(instant.atZone(zone));
+    }
+
+    /** A window for a message, such as "Tue 27 Oct 2026, 14:00 to Tue 27 Oct 2026, 16:00". */
+    static String describe(TimeWindow window, ZoneId zone) {
+        return describe(window.start(), zone) + " to " + describe(window.end(), zone);
     }
 
     /** The days {@code first} to {@code last}, both included, from midnight to midnight in the zone. */
