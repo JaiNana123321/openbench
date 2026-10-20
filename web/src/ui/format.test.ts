@@ -1,10 +1,13 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   formatCredits,
+  formatDay,
+  formatDayRange,
   formatEnum,
   formatInstant,
   formatWindow,
   toInstant,
+  todayInCompanyZone,
   toPickerValue,
 } from './format';
 
@@ -51,5 +54,25 @@ describe('toInstant', () => {
   it('round-trips with toPickerValue', () => {
     expect(toPickerValue('2026-10-27T18:00:00Z')).toBe('2026-10-27T14:00');
     expect(toPickerValue(toInstant('2026-11-03T09:00'))).toBe('2026-11-03T09:00');
+  });
+});
+
+describe('formatDay and formatDayRange', () => {
+  it('show days as they are, in no time zone', () => {
+    expect(formatDay('2026-10-01')).toBe('Oct 1, 2026');
+    expect(formatDayRange({ from: '2026-10-01', to: '2026-10-31' })).toBe('Oct 1, 2026 to Oct 31, 2026');
+  });
+});
+
+describe('todayInCompanyZone', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('gives the date in New York, not in UTC', () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    // 02:00 UTC on Oct 24 is still Oct 23 in New York.
+    vi.setSystemTime(new Date('2026-10-24T02:00:00Z'));
+    expect(todayInCompanyZone()).toBe('2026-10-23');
   });
 });

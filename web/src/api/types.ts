@@ -134,3 +134,64 @@ export interface ResourceEdit {
   attributes: Record<string, string>;
   ownerId?: Id;
 }
+
+// ---------------------------------------------------------------- Settings and Ledger
+
+/** GET /api/settings/periods: a Period, inclusive at both ends; `previous` is the one before it. */
+export interface Period {
+  id: Id;
+  startsOn: LocalDate;
+  endsOn: LocalDate;
+  previous: Id | null;
+}
+
+/** GET /api/ledger/account: a Team's Account. Balance is granted plus earned; available subtracts held. */
+export interface Account {
+  team: Id;
+  granted: Credits;
+  earned: Credits;
+  held: Credits;
+  balance: Credits;
+  available: Credits;
+}
+
+export type TransactionKind = 'GRANT' | 'CHARGE' | 'EARNING' | 'REFUND';
+
+/** One Transaction on a Statement. A null `actor` is the system; `line` and `reason` may be null. */
+export interface LedgerTransaction {
+  id: Id;
+  kind: TransactionKind;
+  amount: Credits;
+  grantedPart: Credits;
+  earnedPart: Credits;
+  postedAt: Instant;
+  line: Id | null;
+  actor: Id | null;
+  actorName: string | null;
+  reason: string | null;
+}
+
+/** Granted and earned credits at an edge of a Period. */
+export interface CreditFigures {
+  granted: Credits;
+  earned: Credits;
+}
+
+/** GET /api/ledger/statements/{teamId}/{periodId}: a Team's Statement for a Period. */
+export interface Statement {
+  team: TeamRef;
+  period: Period;
+  opening: CreditFigures;
+  totals: {
+    grants: Credits;
+    charges: Credits;
+    earnings: Credits;
+    refunds: Credits;
+    /** Granted credits that expired when the Period closed; zero while it is open. */
+    expired: Credits;
+  };
+  closing: CreditFigures;
+  /** The Account as it stands now, whatever the Period. */
+  account: Account;
+  transactions: LedgerTransaction[];
+}

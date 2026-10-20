@@ -18,3 +18,4 @@ export {
   toInstant,
   toPickerValue,
 } from './format';
+export { formatDay, formatDayRange, todayInCompanyZone } from './format';
