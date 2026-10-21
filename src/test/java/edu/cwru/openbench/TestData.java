@@ -1,7 +1,10 @@
 package edu.cwru.openbench;
 
 import edu.cwru.openbench.common.Role;
+import java.time.Instant;
 import java.time.LocalDate;
+import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
 import java.util.concurrent.atomic.AtomicLong;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.crypto.factory.PasswordEncoderFactories;
@@ -121,5 +124,39 @@ public final class TestData {
                 INSERT INTO request_line (request_id, type_id, allocation_class, starts_at, ends_at)
                 VALUES (?, ?, 'EXCLUSIVE', '2200-01-01T09:00:00Z', '2200-01-01T10:00:00Z') RETURNING id""",
                 Long.class, request, type);
+    }
+
+    // ---------------------------------------------------------------- Allocation
+
+    /** A Request of the Team in state SUBMITTED, submitted at the instant. */
+    public long submittedRequest(long teamId, Instant submittedAt) {
+        return jdbc.queryForObject("""
+                INSERT INTO request (team_id, state, submitted_at) VALUES (?, 'SUBMITTED', ?) RETURNING id""",
+                Long.class, teamId, utc(submittedAt));
+    }
+
+    /** An Exclusive line of the Request for {@code quantity} instances of the type over the window. */
+    public long exclusiveLine(long requestId, long typeId, int quantity, Instant startsAt, Instant endsAt) {
+        return jdbc.queryForObject("""
+                INSERT INTO request_line (request_id, type_id, allocation_class, quantity, starts_at, ends_at, state)
+                VALUES (?, ?, 'EXCLUSIVE', ?, ?, ?, 'EVALUATED') RETURNING id""",
+                Long.class, requestId, typeId, quantity, utc(startsAt), utc(endsAt));
+    }
+
+    /** A Metered line of the Request for {@code units} of the type over the window. */
+    public long meteredLine(long requestId, long typeId, int units, Instant startsAt, Instant endsAt) {
+        return jdbc.queryForObject("""
+                INSERT INTO request_line (request_id, type_id, allocation_class, units, starts_at, ends_at, state)
+                VALUES (?, ?, 'METERED', ?, ?, ?, 'EVALUATED') RETURNING id""",
+                Long.class, requestId, typeId, units, utc(startsAt), utc(endsAt));
+    }
+
+    /** The Team may hold at most {@code maxUnits} of the Metered type concurrently. */
+    public void quota(long teamId, long typeId, int maxUnits) {
+        jdbc.update("INSERT INTO quota (team_id, type_id, max_units) VALUES (?, ?, ?)", teamId, typeId, maxUnits);
+    }
+
+    private static OffsetDateTime utc(Instant instant) {
+        return instant.atOffset(ZoneOffset.UTC);
     }
 }
