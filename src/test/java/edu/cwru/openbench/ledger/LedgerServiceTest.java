@@ -32,6 +32,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.dao.PessimisticLockingFailureException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.core.userdetails.UserDetails;
@@ -324,6 +325,41 @@ class LedgerServiceTest extends PostgresTest {
         }
         assertThat(ledger.account(teamId).held()).isEqualTo(Credits.of("60.00"));
         assertThat(heldOf(second)).isNull();
+    }
+
+    @Test
+    @DisplayName("A timeout on the JPA account lock arrives as PessimisticLockingFailureException, which the submit retries")
+    void reportsAnAccountLockTimeoutAsAPessimisticLockingFailure() throws Exception {
+        grant("100.00");
+        RequestLineId line = line();
+        CountDownLatch locked = new CountDownLatch(1);
+        CountDownLatch done = new CountDownLatch(1);
+        ExecutorService threads = Executors.newSingleThreadExecutor();
+        try {
+            // Another transaction keeps the account row locked until this test is done.
+            Future<?> holder = threads.submit(() -> transactionTemplate.executeWithoutResult(status -> {
+                jdbc.queryForList("SELECT team_id FROM account WHERE team_id = ? FOR UPDATE", Long.class, team);
+                locked.countDown();
+                try {
+                    done.await(30, TimeUnit.SECONDS);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
+            }));
+            assertThat(locked.await(10, TimeUnit.SECONDS)).isTrue();
+
+            assertThatThrownBy(() -> transactionTemplate.executeWithoutResult(status -> {
+                jdbc.queryForList("SELECT set_config('lock_timeout', '200ms', true)", String.class);
+                ledger.holdCredits(teamId, line, Credits.of("10.00"));
+            })).isInstanceOf(PessimisticLockingFailureException.class);
+
+            done.countDown();
+            holder.get(10, TimeUnit.SECONDS);
+        } finally {
+            done.countDown();
+            threads.shutdownNow();
+        }
+        assertThat(heldOf(line)).isNull();
     }
 
     private void grant(String amount) {

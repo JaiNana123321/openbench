@@ -19,6 +19,14 @@ export const ben: Me = {
   roles: ['MEMBER'],
 };
 
+export const bob: Me = {
+  id: 3,
+  name: 'Bob Patel',
+  username: 'bob',
+  team: { id: 2, name: 'Research' },
+  roles: ['MANAGER', 'MEMBER'],
+};
+
 export const carol: Me = {
   id: 6,
   name: 'Carol Davis',

@@ -2,7 +2,6 @@ package edu.cwru.openbench.requests;
 
 import edu.cwru.openbench.common.Actor;
 import edu.cwru.openbench.common.Credits;
-import edu.cwru.openbench.common.ForbiddenException;
 import edu.cwru.openbench.common.NotFoundException;
 import edu.cwru.openbench.common.RequestId;
 import edu.cwru.openbench.common.RequestLineId;
@@ -15,6 +14,8 @@ import edu.cwru.openbench.inventory.ResourceType;
 import edu.cwru.openbench.ledger.LedgerService;
 import java.time.Clock;
 import java.time.Instant;
+import java.util.Collection;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -33,9 +34,10 @@ import org.springframework.transaction.annotation.Transactional;
  * Draft view with every line's Quote, the sums, the Available Balance, and the shortfall. Demo 1
  * leaves out the Priority mark and Matched lines.
  *
- * <p>Scope: a Manager sees only their own Team's Requests and a Capacity Planner every Team's;
- * anything else is not found. Only the Manager of the owning Team edits; a Planner who can see a
- * Request but is not its Manager is forbidden. Edits need the Request in Draft ({@code WRONG_STATE}).
+ * <p>Scope ({@link RequestAccess}): a Manager sees only their own Team's Requests and a Capacity
+ * Planner every Team's; anything else is not found. Only the Manager of the owning Team edits; a
+ * Planner who can see a Request but is not its Manager is forbidden. Edits need the Request in Draft
+ * ({@code WRONG_STATE}).
  */
 @Service
 @Transactional(readOnly = true)
@@ -46,16 +48,18 @@ public class RequestService {
     private final RequestRepository requests;
     private final RequestLineRepository lines;
     private final RequestEventRepository events;
+    private final RequestAccess access;
     private final LineRules rules;
     private final RequestViews views;
     private final LedgerService ledger;
     private final Clock clock;
 
     RequestService(RequestRepository requests, RequestLineRepository lines, RequestEventRepository events,
-            LineRules rules, RequestViews views, LedgerService ledger, Clock clock) {
+            RequestAccess access, LineRules rules, RequestViews views, LedgerService ledger, Clock clock) {
         this.requests = requests;
         this.lines = lines;
         this.events = events;
+        this.access = access;
         this.rules = rules;
         this.views = views;
         this.ledger = ledger;
@@ -77,7 +81,7 @@ public class RequestService {
     @PreAuthorize("hasAuthority('MANAGER')")
     @Transactional
     public RequestLine addLine(Actor actor, RequestId id, NewLine line) {
-        RequestRow request = editableDraft(actor, id);
+        RequestRow request = access.editableDraft(actor, id);
         ResourceType type = rules.check(line.typeId(), line.quantity(), line.start(), line.end(), line.namedResourceId());
         RequestLineRow row = lines.save(new RequestLineRow(request.id(), type.id().value(), type.allocationClass(),
                 line.quantity(), line.start(), line.end(), idOrNull(line.namedResourceId()), true,
@@ -89,7 +93,7 @@ public class RequestService {
     @PreAuthorize("hasAuthority('MANAGER')")
     @Transactional
     public RequestLine editLine(Actor actor, RequestId id, RequestLineId lineId, LineEdit edit) {
-        RequestRow request = editableDraft(actor, id);
+        RequestRow request = access.editableDraft(actor, id);
         RequestLineRow row = lineOf(request, lineId);
         rules.check(new ResourceTypeId(row.typeId()), edit.quantity(), edit.start(), edit.end(), edit.namedResourceId());
         row.change(edit.quantity(), edit.start(), edit.end(), idOrNull(edit.namedResourceId()));
@@ -99,7 +103,7 @@ public class RequestService {
     @PreAuthorize("hasAuthority('MANAGER')")
     @Transactional
     public void removeLine(Actor actor, RequestId id, RequestLineId lineId) {
-        RequestRow request = editableDraft(actor, id);
+        RequestRow request = access.editableDraft(actor, id);
         lines.delete(lineOf(request, lineId));
     }
 
@@ -111,7 +115,7 @@ public class RequestService {
     @PreAuthorize("hasAuthority('MANAGER')")
     @Transactional
     public RequestLine splitLine(Actor actor, RequestId id, RequestLineId lineId, int quantityForNewLine) {
-        RequestRow request = editableDraft(actor, id);
+        RequestRow request = access.editableDraft(actor, id);
         RequestLineRow row = lineOf(request, lineId);
         if (quantityForNewLine < 1 || quantityForNewLine >= row.amount()) {
             throw new RuleViolation("LINE_NOT_ATOMIC", row.amount() == 1
@@ -126,7 +130,7 @@ public class RequestService {
     @PreAuthorize("hasAuthority('MANAGER')")
     @Transactional
     public RequestLine setRequired(Actor actor, RequestId id, RequestLineId lineId, boolean required) {
-        RequestRow request = editableDraft(actor, id);
+        RequestRow request = access.editableDraft(actor, id);
         RequestLineRow row = lineOf(request, lineId);
         row.setRequired(required);
         return views.session().line(request, row);
@@ -139,7 +143,7 @@ public class RequestService {
      */
     @PreAuthorize("hasAnyAuthority('MANAGER', 'PLANNER')")
     public DraftView view(Actor actor, RequestId id) {
-        RequestRow request = visible(actor, id);
+        RequestRow request = access.visible(actor, id);
         RequestViews.Session session = views.session();
         List<RequestLine> shown = session.lines(request, lines.findByRequestIdOrderById(request.id()));
         Credits required = RequestViews.sum(shown, true);
@@ -147,6 +151,25 @@ public class RequestService {
         Credits available = ledger.account(new TeamId(request.teamId())).available();
         Credits shortfall = required.compareTo(available) > 0 ? required.minus(available) : Credits.ZERO;
         return new DraftView(session.request(request), shown, required, optional, available, shortfall);
+    }
+
+    /**
+     * GET /api/requests/lines?ids=...: the lines with these ids that the caller may see, by id, so a
+     * Statement can link each Charge to its Request. Ids out of scope or unknown are left out.
+     */
+    @PreAuthorize("hasAnyAuthority('MANAGER', 'PLANNER')")
+    public List<RequestLine> lines(Actor actor, Collection<RequestLineId> ids) {
+        List<RequestLineRow> rows = lines.findAllById(ids.stream().map(RequestLineId::value).toList());
+        Map<Long, RequestRow> owners = requests.findAllById(rows.stream().map(RequestLineRow::requestId).toList())
+                .stream()
+                .filter(request -> RequestAccess.mayView(actor, request.teamId()))
+                .collect(Collectors.toMap(RequestRow::id, request -> request));
+        RequestViews.Session session = views.session();
+        return rows.stream()
+                .filter(row -> owners.containsKey(row.requestId()))
+                .sorted(Comparator.comparing(RequestLineRow::id))
+                .map(row -> session.line(owners.get(row.requestId()), row))
+                .toList();
     }
 
     /**
@@ -183,40 +206,11 @@ public class RequestService {
         return new PageImpl<>(summaries, rows.getPageable(), rows.getTotalElements());
     }
 
-    /** The Request if the caller may see it: their own Team's as a Manager, any as a Planner. */
-    private RequestRow visible(Actor actor, RequestId id) {
-        return requests.findById(id.value())
-                .filter(row -> isOwnTeamsManager(actor, row) || actor.has(Role.PLANNER))
-                .orElseThrow(() -> notFound(id));
-    }
-
-    /** The Request, locked, if the caller is its Team's Manager and it is a Draft. */
-    private RequestRow editableDraft(Actor actor, RequestId id) {
-        visible(actor, id);
-        RequestRow request = requests.lockById(id.value()).orElseThrow(() -> notFound(id));
-        if (!isOwnTeamsManager(actor, request)) {
-            throw new ForbiddenException("Only the Manager of the Request's Team may change it.");
-        }
-        if (!request.isDraft()) {
-            throw new RuleViolation("WRONG_STATE", "Request " + id.value() + " is "
-                    + request.state().name().toLowerCase() + "; only a Draft can be edited.");
-        }
-        return request;
-    }
-
     private RequestLineRow lineOf(RequestRow request, RequestLineId id) {
         return lines.findById(id.value())
                 .filter(line -> line.requestId().equals(request.id()))
                 .orElseThrow(() -> new NotFoundException("Line " + id.value() + " is not a line of Request "
                         + request.id() + "."));
-    }
-
-    private static boolean isOwnTeamsManager(Actor actor, RequestRow request) {
-        return actor.has(Role.MANAGER) && actor.teamId().value() == request.teamId();
-    }
-
-    private static NotFoundException notFound(RequestId id) {
-        return new NotFoundException("Request " + id.value() + " does not exist.");
     }
 
     private static Long idOrNull(ResourceId id) {

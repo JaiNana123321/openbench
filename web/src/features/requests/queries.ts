@@ -6,6 +6,7 @@ import type {
   LineEdit,
   NewLine,
   Page,
+  RequestDetail,
   RequestLine,
   RequestRecord,
   RequestSummary,
@@ -14,8 +15,9 @@ import type {
 } from '../../api/types';
 
 // The Requests API (design Section 7, "Requests"). Keys start with 'requests': ['requests', 'list', ...]
-// for the list and ['requests', id, 'draft'] for a Draft view, so a line edit refreshes both. The
-// types and Resources for the add-line form use the Inventory keys and share its cache.
+// for the list, ['requests', id] for the detail, and ['requests', id, 'draft'] for a Draft view, so a
+// line edit refreshes all three. Submit and withdraw also refresh ['ledger'], the Account and Statement.
+// The types and Resources for the add-line form use the Inventory keys and share its cache.
 
 export const requestKeys = {
   all: ['requests'] as const,
@@ -112,6 +114,41 @@ export function useSetRequired(requestId: Id) {
   return useMutation({
     mutationFn: ({ lineId, required }: { lineId: Id; required: boolean }) =>
       api.put<RequestLine>(`/api/requests/${requestId}/lines/${lineId}/required`, { required }),
+    onSuccess: invalidate,
+  });
+}
+
+/** A Request's state, its lines with their states, Resources, reasons, and waitlist positions, and its history. */
+export function useRequestDetail(id: Id) {
+  return useQuery({
+    queryKey: requestKeys.request(id),
+    queryFn: () => api.get<RequestDetail>(`/api/requests/${id}`),
+  });
+}
+
+/** A submit or withdraw changes the Request, the list, and the Account and Statement. */
+function useInvalidateTransition() {
+  const queryClient = useQueryClient();
+  return () =>
+    Promise.all([
+      queryClient.invalidateQueries({ queryKey: requestKeys.all }),
+      queryClient.invalidateQueries({ queryKey: ['ledger'] }),
+    ]);
+}
+
+/** Submits a Draft; it comes back Allocated or Waiting. A refusal such as INSUFFICIENT_BALANCE is the mutation's error. */
+export function useSubmitRequest(requestId: Id) {
+  const invalidate = useInvalidateTransition();
+  return useMutation({
+    mutationFn: () => api.post<RequestRecord>(`/api/requests/${requestId}/submit`),
+    onSuccess: invalidate,
+  });
+}
+
+export function useWithdrawRequest(requestId: Id) {
+  const invalidate = useInvalidateTransition();
+  return useMutation({
+    mutationFn: () => api.post<RequestRecord>(`/api/requests/${requestId}/withdraw`),
     onSuccess: invalidate,
   });
 }

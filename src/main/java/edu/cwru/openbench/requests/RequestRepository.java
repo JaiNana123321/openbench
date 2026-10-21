@@ -18,6 +18,13 @@ interface RequestRepository extends JpaRepository<RequestRow, Long> {
     @Query("select r from RequestRow r where r.id = :id")
     Optional<RequestRow> lockById(Long id);
 
+    /**
+     * The Request's Team without loading the entity, for the scope check before {@link #lockById}:
+     * the locked row is then read fresh, never a copy read before the lock.
+     */
+    @Query("select r.teamId from RequestRow r where r.id = :id")
+    Optional<Long> findTeamIdById(Long id);
+
     Page<RequestRow> findByTeamId(Long teamId, Pageable page);
 
     Page<RequestRow> findByTeamIdAndState(Long teamId, RequestState state, Pageable page);

@@ -1,16 +1,17 @@
 import { fireEvent, screen, within } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
-import type { DraftView } from '../../api/types';
-import { alice, erin } from '../../test/members';
+import type { DraftView, RequestDetail } from '../../api/types';
+import { alice, bob, erin } from '../../test/members';
 import { json, mockApi, noContent, problem, session } from '../../test/mockApi';
 import { renderApp } from '../../test/renderApp';
 import { roomA, types } from '../inventory/fixtures';
-import { aliceDraft, gpuLine, roomLine } from './fixtures';
+import { aliceAllocated, aliceDraft, bobWaiting, gpuLine, roomLine } from './fixtures';
 
 function serve(draft: DraftView = aliceDraft, me = alice, routes = {}) {
   return mockApi({
     'GET /api/me': session(me),
     'GET /api/requests/:id/draft': json(draft),
+    'GET /api/requests/:id': json(aliceAllocated),
     'GET /api/inventory/types': json(types),
     'GET /api/inventory/resources': json({ content: [roomA], page: 0, size: 200, totalElements: 1 }),
     'POST /api/requests/:id/lines': json(roomLine, 201),
@@ -144,20 +145,136 @@ describe('RequestPage, the Draft editor', () => {
   });
 
   it('shows a Request that is not a Draft read only', async () => {
-    serve({ ...aliceDraft, request: { ...aliceDraft.request, state: 'ALLOCATED' } });
+    serve({ ...aliceDraft, request: aliceAllocated.request });
     renderApp('/requests/42');
 
     expect(await screen.findByRole('table', { name: 'Lines' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Add line' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Submit' })).not.toBeInTheDocument();
     expect(screen.queryByRole('checkbox')).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /^Remove/ })).not.toBeInTheDocument();
   });
 
-  it('shows a Capacity Planner another Team’s Draft read only', async () => {
-    serve(aliceDraft, erin);
+  it('shows a Capacity Planner another Team’s Draft read only, without Withdraw', async () => {
+    const draftDetail: RequestDetail = {
+      request: aliceDraft.request,
+      lines: aliceDraft.lines.map((line) => ({
+        line,
+        assignedResources: [],
+        reason: null,
+        reasonMessage: null,
+        waitlistPosition: null,
+      })),
+      history: [aliceAllocated.history[0]],
+    };
+    serve(aliceDraft, erin, { 'GET /api/requests/:id': json(draftDetail) });
     renderApp('/requests/42');
 
     expect(await screen.findByRole('table', { name: 'Lines' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Add line' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Submit' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Withdraw' })).not.toBeInTheDocument();
+  });
+});
+
+describe('RequestPage, Submit', () => {
+  it('submits the Draft and then shows the Allocated Request’s detail', async () => {
+    let submitted = false;
+    const server = serve(aliceDraft, alice, {
+      'GET /api/requests/:id/draft': () => json(submitted ? { ...aliceDraft, request: aliceAllocated.request } : aliceDraft),
+      'POST /api/requests/:id/submit': () => {
+        submitted = true;
+        return json(aliceAllocated.request);
+      },
+    });
+    const { user } = renderApp('/requests/42');
+
+    const totals = await screen.findByRole('complementary', { name: 'Totals' });
+    await user.click(within(totals).getByRole('button', { name: 'Submit' }));
+
+    expect(await screen.findByRole('heading', { name: 'History' })).toBeInTheDocument();
+    expect(server.callsTo('POST /api/requests/:id/submit').map((call) => call.path)).toEqual([
+      '/api/requests/42/submit',
+    ]);
+    const rows = within(screen.getByRole('table', { name: 'Lines' })).getAllByRole('row').slice(1);
+    expect(rows[0]).toHaveTextContent('Allocated');
+    expect(rows[0]).toHaveTextContent('Room A');
+    expect(rows[1]).toHaveTextContent('1,120.00');
+    expect(screen.queryByRole('button', { name: 'Submit' })).not.toBeInTheDocument();
+  });
+
+  it('shows a refusal and the shortfall the server reports, and stays in the editor', async () => {
+    serve({ ...aliceDraft, availableBalance: 1000, shortfall: 150 }, alice, {
+      'POST /api/requests/:id/submit': problem(
+        422,
+        'INSUFFICIENT_BALANCE',
+        'This needs 1150.00 credits; the Available Balance is 1000.00.',
+        { shortfall: 150, required: 1150, available: 1000 },
+      ),
+    });
+    const { user } = renderApp('/requests/42');
+
+    const totals = await screen.findByRole('complementary', { name: 'Totals' });
+    await user.click(within(totals).getByRole('button', { name: 'Submit' }));
+
+    expect(await screen.findByText('Refused: short by 150.00 credits')).toBeInTheDocument();
+    expect(screen.getByText('This needs 1150.00 credits; the Available Balance is 1000.00.')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Add line' })).toBeInTheDocument();
+  });
+});
+
+describe('RequestPage, the Request detail', () => {
+  it('shows each line’s state, reason, and waitlist position, and the history', async () => {
+    serve({ ...aliceDraft, request: bobWaiting.request }, bob, { 'GET /api/requests/:id': json(bobWaiting) });
+    renderApp('/requests/43');
+
+    const rows = within(await screen.findByRole('table', { name: 'Lines' })).getAllByRole('row').slice(1);
+    expect(screen.getByText('Waiting', { selector: '.page-header .badge' })).toBeInTheDocument();
+    expect(rows[0]).toHaveTextContent('Waiting');
+    expect(rows[0]).toHaveTextContent('Asked for Room A');
+    expect(rows[0]).toHaveTextContent('No free instance');
+    expect(rows[0]).toHaveTextContent('Room A is taken for part of the window.');
+    expect(rows[0]).toHaveTextContent('Position 1');
+    expect(rows[1]).toHaveTextContent('10 units');
+    expect(rows[1]).toHaveTextContent('300.00');
+    expect(rows[1]).toHaveTextContent('Quota exceeded');
+    expect(rows[1]).toHaveTextContent('Position 2');
+
+    const history = within(screen.getByRole('list', { name: 'History' })).getAllByRole('listitem');
+    expect(history).toHaveLength(5);
+    expect(history[0]).toHaveTextContent('Bob Patel: Request created as Draft');
+    expect(history[1]).toHaveTextContent('Request Draft to Submitted');
+    expect(history[2]).toHaveTextContent('Line 1 Draft to Waiting');
+    expect(history[2]).toHaveTextContent('NO_FREE_INSTANCE: Room A is taken');
+    expect(history[4]).toHaveTextContent('Request Submitted to Waiting');
+  });
+
+  it('lets the Team’s Manager withdraw a Waiting Request', async () => {
+    let withdrawn = false;
+    const server = serve({ ...aliceDraft, request: bobWaiting.request }, bob, {
+      'GET /api/requests/:id': () =>
+        json(withdrawn ? { ...bobWaiting, request: { ...bobWaiting.request, state: 'WITHDRAWN' } } : bobWaiting),
+      'POST /api/requests/:id/withdraw': () => {
+        withdrawn = true;
+        return json({ ...bobWaiting.request, state: 'WITHDRAWN' });
+      },
+    });
+    const { user } = renderApp('/requests/43');
+
+    await user.click(await screen.findByRole('button', { name: 'Withdraw' }));
+
+    expect(await screen.findByText('Withdrawn', { selector: '.page-header .badge' })).toBeInTheDocument();
+    expect(server.callsTo('POST /api/requests/:id/withdraw').map((call) => call.path)).toEqual([
+      '/api/requests/43/withdraw',
+    ]);
+    expect(screen.queryByRole('button', { name: 'Withdraw' })).not.toBeInTheDocument();
+  });
+
+  it('offers no Withdraw on an Allocated Request', async () => {
+    serve({ ...aliceDraft, request: aliceAllocated.request });
+    renderApp('/requests/42');
+
+    expect(await screen.findByRole('heading', { name: 'History' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Withdraw' })).not.toBeInTheDocument();
   });
 });

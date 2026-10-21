@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { api } from '../../api/client';
-import type { Id, Period, Statement, TeamRef } from '../../api/types';
+import type { Id, Period, RequestLine, Statement, TeamRef } from '../../api/types';
 
 // Query keys start with the API group's noun: ['settings', 'periods'], ['teams'],
 // ['ledger', 'statements', teamId, periodId].
@@ -19,6 +19,19 @@ export function useTeams(enabled: boolean) {
     queryKey: ['teams'],
     queryFn: () => api.get<TeamRef[]>('/api/teams'),
     enabled,
+  });
+}
+
+/**
+ * The Request Lines behind a Statement's Transactions, so each Charge links to its Request:
+ * GET /api/requests/lines. Lines the caller may not see are left out.
+ */
+export function useChargedLines(ids: readonly Id[]) {
+  const sorted = [...new Set(ids)].sort((a, b) => a - b);
+  return useQuery({
+    queryKey: ['requests', 'lines', sorted],
+    queryFn: () => api.get<RequestLine[]>('/api/requests/lines', { ids: sorted.join(',') }),
+    enabled: sorted.length > 0,
   });
 }
 

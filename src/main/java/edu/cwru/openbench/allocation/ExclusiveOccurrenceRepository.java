@@ -10,6 +10,12 @@ interface ExclusiveOccurrenceRepository extends JpaRepository<ExclusiveOccurrenc
 
     List<ExclusiveOccurrenceRow> findByLineIdAndStateIn(Long lineId, Collection<RowState> states);
 
+    /** The instances the line's rows in these states are on, by id. */
+    @Query("""
+            select distinct o.resourceId from ExclusiveOccurrenceRow o
+            where o.lineId = :lineId and o.state in :states order by o.resourceId""")
+    List<Long> resourcesOfLine(Long lineId, Collection<RowState> states);
+
     /** Of these instances, those with a live occurrence overlapping the half-open window. */
     @Query("""
             select distinct o.resourceId from ExclusiveOccurrenceRow o

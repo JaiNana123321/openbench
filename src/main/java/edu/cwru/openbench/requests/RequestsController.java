@@ -1,6 +1,7 @@
 package edu.cwru.openbench.requests;
 
 import edu.cwru.openbench.common.Actor;
+import edu.cwru.openbench.common.ConcurrencyRetry;
 import edu.cwru.openbench.common.PageResponse;
 import edu.cwru.openbench.common.RequestId;
 import edu.cwru.openbench.common.RequestLineId;
@@ -9,7 +10,9 @@ import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Size;
 import java.net.URI;
+import java.util.List;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -22,17 +25,41 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * The Requests endpoints for Drafts (design Table "Endpoints by module"). The Request detail and the
- * submit and withdraw transitions come in a later increment.
+ * The Requests endpoints (design Table "Endpoints by module"): Drafts, the Request detail, and the
+ * submit and withdraw transitions. A transition answers 200 with the Request in its new state; it
+ * runs once more after a deadlock or lock timeout, and a second failure answers 503.
  */
 @RestController
 @RequestMapping("/api/requests")
 class RequestsController {
 
     private final RequestService requests;
+    private final RequestLifecycleService lifecycle;
 
-    RequestsController(RequestService requests) {
+    RequestsController(RequestService requests, RequestLifecycleService lifecycle) {
         this.requests = requests;
+        this.lifecycle = lifecycle;
+    }
+
+    @GetMapping("/{id}")
+    RequestDetail detail(Actor actor, @PathVariable RequestId id) {
+        return lifecycle.detail(actor, id);
+    }
+
+    @PostMapping("/{id}/submit")
+    Request submit(Actor actor, @PathVariable RequestId id) {
+        return ConcurrencyRetry.once(() -> lifecycle.submit(actor, id));
+    }
+
+    @PostMapping("/{id}/withdraw")
+    Request withdraw(Actor actor, @PathVariable RequestId id) {
+        return ConcurrencyRetry.once(() -> lifecycle.withdraw(actor, id));
+    }
+
+    /** The lines with these ids that the caller may see, for the Statement's links to Requests. */
+    @GetMapping("/lines")
+    List<RequestLine> lines(Actor actor, @RequestParam @Size(max = 500) List<RequestLineId> ids) {
+        return requests.lines(actor, ids);
     }
 
     @GetMapping

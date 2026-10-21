@@ -137,6 +137,15 @@ class RequestLineRow {
         this.required = required;
     }
 
+    /** Locks the Quote at submission; null for a type without pricing settings. */
+    void lockQuote(BigDecimal quote) {
+        this.lockedQuote = quote;
+    }
+
+    void setState(RequestLineState state) {
+        this.state = state;
+    }
+
     /**
      * Gives {@code amountForNewLine} of this line to a new Optional line of the same type, window, and
      * named Resource, and keeps the rest. The caller checks that both parts are at least 1.

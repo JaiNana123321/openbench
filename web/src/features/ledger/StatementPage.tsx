@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import type { Id, LedgerTransaction, Period, Statement } from '../../api/types';
+import { Link } from 'react-router';
+import type { Id, LedgerTransaction, Period, RequestLine, Statement } from '../../api/types';
 import { useCurrentMember } from '../../auth/currentMember';
 import { ErrorPage } from '../../shell/ErrorPage';
 import {
@@ -15,7 +16,7 @@ import {
   todayInCompanyZone,
   type Column,
 } from '../../ui';
-import { usePeriods, useStatement, useTeams } from './queries';
+import { useChargedLines, usePeriods, useStatement, useTeams } from './queries';
 
 /**
  * The Statement screen: a Team's Account and every Transaction of a Period. A Manager sees their
@@ -79,6 +80,8 @@ export function StatementPage() {
 
 function StatementBody({ statement }: { statement: Statement }) {
   const { account, opening, totals, closing } = statement;
+  const charged = useChargedLines(statement.transactions.flatMap((row) => (row.line === null ? [] : [row.line])));
+  const requestOf = new Map((charged.data ?? []).map((line) => [line.id, line]));
   return (
     <>
       <section className="section panel" aria-labelledby="account-title">
@@ -131,7 +134,7 @@ function StatementBody({ statement }: { statement: Statement }) {
         </h2>
         <Table
           label="Transactions"
-          columns={TRANSACTION_COLUMNS}
+          columns={transactionColumns(requestOf)}
           rows={statement.transactions}
           rowKey={(transaction) => transaction.id}
           empty={<EmptyState title="No Transactions in this Period." />}
@@ -141,16 +144,30 @@ function StatementBody({ statement }: { statement: Statement }) {
   );
 }
 
-const TRANSACTION_COLUMNS: Column<LedgerTransaction>[] = [
-  { header: 'Time', cell: (row) => formatInstant(row.postedAt) },
-  { header: 'Kind', cell: (row) => formatEnum(row.kind) },
-  { header: 'Amount', cell: (row) => formatCredits(row.amount), numeric: true },
-  { header: 'Granted part', cell: (row) => formatCredits(row.grantedPart), numeric: true },
-  { header: 'Earned part', cell: (row) => formatCredits(row.earnedPart), numeric: true },
-  { header: 'Request line', cell: (row) => (row.line === null ? '—' : `Line ${row.line}`) },
-  { header: 'By', cell: (row) => row.actorName ?? 'System' },
-  { header: 'Reason', cell: (row) => row.reason ?? '' },
-];
+/** The columns; a Transaction of a Request Line links to its Request once the line is looked up. */
+function transactionColumns(requestOf: ReadonlyMap<Id, RequestLine>): Column<LedgerTransaction>[] {
+  return [
+    { header: 'Time', cell: (row) => formatInstant(row.postedAt) },
+    { header: 'Kind', cell: (row) => formatEnum(row.kind) },
+    { header: 'Amount', cell: (row) => formatCredits(row.amount), numeric: true },
+    { header: 'Granted part', cell: (row) => formatCredits(row.grantedPart), numeric: true },
+    { header: 'Earned part', cell: (row) => formatCredits(row.earnedPart), numeric: true },
+    { header: 'Request line', cell: (row) => requestLineCell(row, requestOf) },
+    { header: 'By', cell: (row) => row.actorName ?? 'System' },
+    { header: 'Reason', cell: (row) => row.reason ?? '' },
+  ];
+}
+
+function requestLineCell(row: LedgerTransaction, requestOf: ReadonlyMap<Id, RequestLine>) {
+  if (row.line === null) return '—';
+  const line = requestOf.get(row.line);
+  if (!line) return `Line ${row.line}`;
+  return (
+    <>
+      <Link to={`/requests/${line.requestId}`}>Request #{line.requestId}</Link>, {line.typeName}
+    </>
+  );
+}
 
 function periodText(period: Period): string {
   return formatDayRange({ from: period.startsOn, to: period.endsOn });

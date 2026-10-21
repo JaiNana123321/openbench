@@ -1,5 +1,6 @@
 package edu.cwru.openbench.requests;
 
+import edu.cwru.openbench.common.RuleViolation;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
@@ -69,5 +70,24 @@ class RequestRow {
 
     boolean isDraft() {
         return state == RequestState.DRAFT;
+    }
+
+    /** Draft to Submitted: the submission time, which orders the waitlist, is set. */
+    void submit(Instant at) {
+        moveTo(RequestState.SUBMITTED);
+        this.submittedAt = at;
+    }
+
+    /**
+     * Changes the state along a transition of design Table "Request transitions".
+     *
+     * @throws RuleViolation {@code WRONG_STATE} if no transition leads there from the current state
+     */
+    void moveTo(RequestState next) {
+        if (!state.canBecome(next)) {
+            throw new RuleViolation("WRONG_STATE", "Request " + id + " is " + state.name().toLowerCase()
+                    + "; it cannot become " + next.name().toLowerCase() + ".");
+        }
+        this.state = next;
     }
 }
