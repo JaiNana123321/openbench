@@ -16,10 +16,12 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Positive;
 import java.sql.SQLException;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
 import org.springframework.context.annotation.Import;
+import org.springframework.dao.CannotAcquireLockException;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.ResultActions;
@@ -81,6 +83,17 @@ class ProblemDetailsTest extends PostgresTest {
     @Test
     void mapsAConcurrencyRetryTo503WithRetryAfter() throws Exception {
         perform(get("/api/test/concurrency"))
+                .andExpect(status().isServiceUnavailable())
+                .andExpect(header().string("Retry-After", "1"))
+                .andExpect(jsonPath("$.code").value("CONCURRENCY_RETRY"));
+    }
+
+    @Test
+    void retriesALockFailureOnceAndAnswers503AfterTheSecond() throws Exception {
+        perform(get("/api/test/locked/1"))
+                .andExpect(status().isOk())
+                .andExpect(content().string("2"));
+        perform(get("/api/test/locked/2"))
                 .andExpect(status().isServiceUnavailable())
                 .andExpect(header().string("Retry-After", "1"))
                 .andExpect(jsonPath("$.code").value("CONCURRENCY_RETRY"));
@@ -153,6 +166,18 @@ class ProblemDetailsTest extends PostgresTest {
         @GetMapping("/api/test/concurrency")
         void concurrency() {
             throw new ConcurrencyRetryException("Deadlock twice", null);
+        }
+
+        /** A stub transition that fails on a lock timeout the first {@code failures} times; answers the calls made. */
+        @GetMapping("/api/test/locked/{failures}")
+        int locked(@PathVariable int failures) {
+            AtomicInteger calls = new AtomicInteger();
+            return ConcurrencyRetry.once(() -> {
+                if (calls.incrementAndGet() <= failures) {
+                    throw new CannotAcquireLockException("canceling statement due to lock timeout");
+                }
+                return calls.get();
+            });
         }
 
         @GetMapping("/api/test/bug")
