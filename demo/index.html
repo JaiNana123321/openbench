@@ -1,0 +1,939 @@
+<title>OpenBench Demo 1</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,750&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: a presenter deck of six views, one per rubric criterion, under a sticky tab bar; arrow keys step through them. */
+:root {
+  --bg: #f4f6f8;
+  --surface: #ffffff;
+  --ink: #17212c;
+  --muted: #5b6876;
+  --line: #d9e0e7;
+  --accent: #1f5f8b;
+  --accent-soft: #e3eef6;
+  --done: #2f7d4f;
+  --done-soft: #e2f1e7;
+  --partial: #a3650c;
+  --partial-soft: #fbefdc;
+  --todo: #7a8592;
+  --todo-soft: #eceff2;
+  --code-bg: #eef2f5;
+  --font-display: "Bricolage Grotesque", "Segoe UI", system-ui, sans-serif;
+  --font-body: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #11171d; --surface: #18212a; --ink: #e6ecf1; --muted: #9aa7b4; --line: #2a3642;
+    --accent: #6fb3e0; --accent-soft: #1b3346;
+    --done: #6cc28f; --done-soft: #183526; --partial: #e2a54a; --partial-soft: #3a2a12;
+    --todo: #8c97a3; --todo-soft: #222c36; --code-bg: #1f2a34;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #11171d; --surface: #18212a; --ink: #e6ecf1; --muted: #9aa7b4; --line: #2a3642;
+  --accent: #6fb3e0; --accent-soft: #1b3346;
+  --done: #6cc28f; --done-soft: #183526; --partial: #e2a54a; --partial-soft: #3a2a12;
+  --todo: #8c97a3; --todo-soft: #222c36; --code-bg: #1f2a34;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+body {
+  background: var(--bg); color: var(--ink);
+  font-family: var(--font-body); font-size: 16px; line-height: 1.55;
+}
+body::before {
+  content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px);
+  z-index: 10; background: var(--surface);
+}
+h1, h2, h3 { font-family: var(--font-display); line-height: 1.15; text-wrap: balance; margin: 0; }
+h1 { font-size: clamp(2rem, 5vw, 3.2rem); font-weight: 750; letter-spacing: -0.01em; }
+h2 { font-size: clamp(1.5rem, 3.4vw, 2.2rem); font-weight: 750; }
+h3 { font-size: 1.15rem; font-weight: 600; }
+p { margin: 0; }
+code, .mono { font-family: var(--font-mono); font-size: 0.88em; }
+code { background: var(--code-bg); padding: 0.1em 0.35em; border-radius: 4px; }
+a { color: var(--accent); }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.gutter { padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+.wrap { max-width: 1120px; margin: 0 auto; }
+
+/* Tab bar */
+.bar {
+  position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5;
+  background: var(--surface); border-bottom: 1px solid var(--line);
+}
+.bar .wrap { display: flex; align-items: center; gap: 12px; padding-block: 10px; flex-wrap: wrap; }
+.brand { font-family: var(--font-display); font-weight: 750; font-size: 1.05rem; margin-right: auto; }
+.brand span { color: var(--muted); font-weight: 600; }
+.tabs { display: flex; gap: 4px; flex-wrap: wrap; }
+.tab {
+  font: 500 0.88rem var(--font-body); color: var(--muted);
+  background: none; border: 1px solid transparent; border-radius: 6px;
+  padding: 5px 10px; cursor: pointer;
+}
+.tab:hover { color: var(--ink); border-color: var(--line); }
+.tab[aria-selected="true"] { color: var(--accent); background: var(--accent-soft); }
+.tab b { font-family: var(--font-mono); font-weight: 500; margin-right: 6px; }
+.tools { display: flex; gap: 6px; }
+.tools button {
+  font: 500 0.82rem var(--font-body); color: var(--ink); background: var(--surface);
+  border: 1px solid var(--line); border-radius: 6px; padding: 5px 10px; cursor: pointer;
+}
+.tools button:hover { border-color: var(--accent); }
+
+/* Views */
+main { padding-block: 32px 64px; }
+.view { display: grid; gap: 28px; }
+.eyebrow {
+  font: 600 0.78rem var(--font-body); text-transform: uppercase; letter-spacing: 0.08em; color: var(--accent);
+  display: flex; gap: 10px; flex-wrap: wrap; align-items: baseline;
+}
+.eyebrow .weight { color: var(--muted); font-family: var(--font-mono); text-transform: none; letter-spacing: 0; }
+.lede { font-size: 1.12rem; color: var(--muted); max-width: 68ch; }
+.head { display: grid; gap: 10px; }
+
+.grid { display: grid; gap: 16px; }
+.cols-2 { grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); }
+.cols-3 { grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); }
+.cols-feat { grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); align-items: start; }
+.cols-4 { grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); }
+.grid > * { min-width: 0; }
+
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 18px 20px; display: grid; gap: 10px; align-content: start; }
+.panel ul, .panel ol { margin: 0; padding-left: 1.2em; display: grid; gap: 4px; }
+
+.stat { display: grid; gap: 2px; }
+.stat .n { font-family: var(--font-display); font-size: 2.1rem; font-weight: 750; font-variant-numeric: tabular-nums; line-height: 1.1; }
+.stat .l { color: var(--muted); font-size: 0.9rem; }
+
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { font: 500 0.82rem var(--font-mono); border: 1px solid var(--line); border-radius: 999px; padding: 2px 10px; background: var(--surface); }
+
+.notes {
+  border-left: 3px solid var(--accent); background: var(--accent-soft);
+  padding: 12px 16px; border-radius: 0 8px 8px 0; display: grid; gap: 6px;
+}
+.notes .k { font: 600 0.75rem var(--font-body); text-transform: uppercase; letter-spacing: 0.08em; color: var(--accent); }
+.notes ul { margin: 0; padding-left: 1.2em; display: grid; gap: 3px; }
+body.hide-notes .notes { display: none; }
+
+.scroll { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; font-size: 0.92rem; }
+th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { font-weight: 600; color: var(--muted); font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.05em; }
+td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+
+pre {
+  margin: 0; background: var(--code-bg); border-radius: 8px; padding: 12px 14px;
+  font: 0.85rem/1.5 var(--font-mono); overflow-x: auto; white-space: pre;
+}
+
+/* Agenda */
+.panel .agenda { display: grid; gap: 0; counter-reset: a; padding: 0; margin: 0; }
+.agenda li { list-style: none; display: grid; grid-template-columns: 2.2em 1fr auto; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--line); align-items: baseline; }
+.agenda li::before { counter-increment: a; content: counter(a); font: 500 0.9rem var(--font-mono); color: var(--accent); }
+.agenda .w { font: 500 0.85rem var(--font-mono); color: var(--muted); }
+.agenda button { all: unset; cursor: pointer; font-weight: 600; }
+.agenda button:hover, .agenda button:focus-visible { color: var(--accent); text-decoration: underline; }
+
+/* Demo script */
+.steps { display: grid; gap: 14px; counter-reset: s; }
+.step { display: grid; grid-template-columns: 44px 1fr; gap: 14px; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 16px 18px; }
+.step::before { counter-increment: s; content: counter(s); font: 750 1.5rem var(--font-display); color: var(--accent); }
+.step > div { display: grid; gap: 8px; min-width: 0; }
+.who { font: 500 0.8rem var(--font-mono); color: var(--muted); }
+.expect { margin: 0; display: grid; grid-template-columns: max-content 1fr; gap: 2px 14px; font-size: 0.92rem; background: var(--code-bg); border-radius: 8px; padding: 10px 12px; }
+.expect dt { font-weight: 600; }
+.expect dd { margin: 0; font-variant-numeric: tabular-nums; min-width: 0; }
+.req { font: 500 0.75rem var(--font-mono); color: var(--accent); }
+
+/* Coverage */
+.meter { display: flex; height: 14px; border-radius: 7px; overflow: hidden; background: var(--todo-soft); }
+.meter span { display: block; height: 100%; }
+.legend { display: flex; flex-wrap: wrap; gap: 14px; font-size: 0.88rem; color: var(--muted); }
+.legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 6px; vertical-align: -1px; }
+.pill { font: 600 0.72rem var(--font-body); text-transform: uppercase; letter-spacing: 0.05em; padding: 2px 8px; border-radius: 999px; white-space: nowrap; }
+.pill.done { background: var(--done-soft); color: var(--done); }
+.pill.partial { background: var(--partial-soft); color: var(--partial); }
+.pill.todo { background: var(--todo-soft); color: var(--todo); }
+.feature { display: grid; gap: 6px; }
+.feature h3 { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; }
+.feature h3 small { font: 500 0.8rem var(--font-mono); color: var(--muted); }
+.panel .reqs { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.reqs li { display: grid; grid-template-columns: 1fr auto; gap: 2px 10px; font-size: 0.88rem; align-items: start; }
+.reqs .id { font-family: var(--font-mono); font-size: 0.82rem; overflow-wrap: anywhere; }
+.reqs .why { grid-column: 1 / -1; color: var(--muted); font-size: 0.82rem; }
+.filters { display: flex; gap: 6px; flex-wrap: wrap; }
+.filters button { font: 500 0.82rem var(--font-body); border: 1px solid var(--line); background: var(--surface); color: var(--ink); border-radius: 999px; padding: 4px 12px; cursor: pointer; }
+.filters button[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
+
+.mods { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px; }
+.mod { border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; display: grid; gap: 2px; background: var(--surface); }
+.mod b { font-family: var(--font-mono); font-weight: 500; font-size: 0.88rem; }
+.mod span { font-size: 0.8rem; color: var(--muted); }
+.mod.built { border-color: var(--done); }
+.mod.stub { border-style: dashed; }
+
+/* Git timeline */
+.branches { display: grid; gap: 12px; }
+.branch { display: grid; grid-template-columns: 170px 1fr; gap: 14px; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px 18px; }
+.branch > * { min-width: 0; }
+.branch .name { display: grid; gap: 4px; align-content: start; }
+.branch .name b { font-family: var(--font-mono); font-weight: 500; font-size: 0.86rem; overflow-wrap: anywhere; }
+.branch .name span { color: var(--muted); font-size: 0.82rem; }
+.commits { list-style: none; margin: 0; padding: 0 0 0 16px; border-left: 2px solid var(--accent); display: grid; gap: 4px; }
+.commits li { display: grid; grid-template-columns: 64px 52px 1fr; gap: 10px; font-size: 0.88rem; position: relative; }
+.commits li::before { content: ""; position: absolute; left: -22px; top: 0.55em; width: 10px; height: 10px; border-radius: 50%; background: var(--surface); border: 2px solid var(--accent); }
+.commits li.merge::before { background: var(--accent); }
+.commits .h { font-family: var(--font-mono); color: var(--accent); font-size: 0.82rem; }
+.commits .d { font-family: var(--font-mono); color: var(--muted); font-size: 0.82rem; }
+.commits li > span:last-child { min-width: 0; }
+
+/* Bar chart for commits per day */
+.days { display: grid; grid-template-columns: repeat(7, 1fr); gap: 8px; align-items: end; height: 150px; }
+.day { display: grid; grid-template-rows: 1fr auto auto; gap: 4px; height: 100%; text-align: center; }
+.day .b { align-self: end; background: var(--accent); border-radius: 4px 4px 0 0; }
+.day .v { font: 500 0.8rem var(--font-mono); font-variant-numeric: tabular-nums; }
+.day .x { font-size: 0.75rem; color: var(--muted); }
+
+/* Test layers */
+.layer { display: grid; grid-template-columns: 200px 1fr; gap: 14px; padding: 12px 0; border-bottom: 1px solid var(--line); }
+.layer > * { min-width: 0; }
+.layer b { font-weight: 600; }
+.layer .tool { font: 500 0.8rem var(--font-mono); color: var(--muted); display: block; }
+.names { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.names li { font: 0.84rem/1.45 var(--font-mono); background: var(--code-bg); border-radius: 6px; padding: 6px 10px; }
+.names li .tick { color: var(--done); margin-right: 6px; }
+
+/* Roadmap */
+.inc { display: grid; gap: 10px; }
+.inc .tag { font: 600 0.75rem var(--font-body); letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+.risk { display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; font-size: 0.92rem; }
+.risk dt { font-weight: 600; }
+.risk dd { margin: 0 0 8px; color: var(--muted); grid-column: 1 / -1; }
+
+.foot { color: var(--muted); font-size: 0.82rem; display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; border-top: 1px solid var(--line); padding-top: 14px; }
+.pager { display: flex; gap: 8px; }
+.pager button { font: 500 0.85rem var(--font-body); border: 1px solid var(--line); background: var(--surface); color: var(--ink); border-radius: 6px; padding: 6px 12px; cursor: pointer; }
+.pager button:disabled { opacity: 0.4; cursor: default; }
+
+@media (max-width: 400px) { .cols-feat { grid-template-columns: 1fr; } }
+@media (max-width: 640px) {
+  .branch, .layer { grid-template-columns: 1fr; }
+  .step { grid-template-columns: 1fr; }
+  .commits li { grid-template-columns: 60px 1fr; }
+  .commits .d { display: none; }
+  .brand span { display: none; }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .view:not([hidden]) { animation: rise 0.25s ease-out; }
+  @keyframes rise { from { transform: translateY(6px); } to { transform: none; } }
+}
+</style>
+
+<header class="bar gutter">
+  <div class="wrap">
+    <div class="brand">OpenBench <span>· Demo 1 · CSDS 393</span></div>
+    <nav class="tabs" role="tablist" aria-label="Demo sections" id="tabs"></nav>
+    <div class="tools">
+      <button type="button" id="notesBtn" aria-pressed="true" title="Show or hide the talking points (N)">Notes on</button>
+    </div>
+  </div>
+</header>
+
+<main class="gutter">
+<div class="wrap">
+
+<!-- 1. Overview -->
+<section class="view" id="overview" data-title="Overview" role="tabpanel">
+  <div class="head">
+    <div class="eyebrow">Demo 1 · Initial project build · 23 October 2026</div>
+    <h1>OpenBench</h1>
+    <p class="lede">An internal resource marketplace. A Team's Manager posts one Request for people, Exclusive resources such as rooms, and Metered capacity such as GPU hours. The system allocates each line under the policy of its Allocation Class and settles it in credits.</p>
+  </div>
+
+  <div class="grid cols-4">
+    <div class="panel stat"><span class="n">15 / 41</span><span class="l">Release 1 requirements complete, 7 more partly built</span></div>
+    <div class="panel stat"><span class="n">7</span><span class="l">feature branches merged into <code>main</code></span></div>
+    <div class="panel stat"><span class="n">326</span><span class="l">automated tests: 258 JUnit, 68 Vitest</span></div>
+    <div class="panel stat"><span class="n">11.5k</span><span class="l">lines of application code: 7,712 Java, 3,809 TypeScript</span></div>
+  </div>
+
+  <div class="grid cols-2">
+    <div class="panel">
+      <h3>Agenda</h3>
+      <ol class="agenda" id="agenda"></ol>
+    </div>
+    <div class="panel">
+      <h3>Team</h3>
+      <ul>
+        <li>Jai Nana</li>
+        <li>Brian Lujan</li>
+        <li>Fotih Turopov</li>
+        <li>Yerassyl Shnazbayev</li>
+      </ul>
+      <h3>Stack</h3>
+      <div class="chips">
+        <span class="chip">Java 25</span><span class="chip">Spring Boot 3.5</span><span class="chip">PostgreSQL 16</span>
+        <span class="chip">Flyway</span><span class="chip">React 19</span><span class="chip">TypeScript 5.9</span>
+        <span class="chip">Vite 7</span><span class="chip">TanStack Query</span><span class="chip">JUnit 5</span>
+        <span class="chip">Testcontainers</span><span class="chip">ArchUnit</span><span class="chip">Vitest</span>
+        <span class="chip">Git + GitHub</span><span class="chip">Nix</span>
+      </div>
+      <p class="lede" style="font-size:0.92rem">A modular monolith (ADR-0005): one Spring Boot application, one PostgreSQL database, and a React client served by the same process. Allocation correctness is enforced in the database (ADR-0006).</p>
+    </div>
+  </div>
+
+  <div class="notes">
+    <span class="k">Talking points</span>
+    <ul>
+      <li>One sentence on the problem: teams compete for people, rooms, and GPU hours; OpenBench lets a Manager ask for all three at once and pay in credits.</li>
+      <li>Say what Demo 1 covers: the whole path for Exclusive and Metered resources, from Inventory to a Draft, Submit, allocation or the Waitlist, and the credit Statement.</li>
+      <li>Say what it leaves out: Matched allocation (lending people), which is the next increment.</li>
+    </ul>
+  </div>
+</section>
+
+<!-- 2. Live demo -->
+<section class="view" id="demo" data-title="Live demo" role="tabpanel" hidden>
+  <div class="head">
+    <div class="eyebrow">Functionality implemented <span class="weight">40%</span></div>
+    <h2>Live demo script</h2>
+    <p class="lede">Every step runs against the real application and database. The expected figures come from the demo seed data and match the end-to-end test <code>SubmitEndToEndTest</code>, so the numbers on screen should be exactly these.</p>
+  </div>
+
+  <div class="grid cols-2">
+    <div class="panel">
+      <h3>Before the demo</h3>
+      <pre>mvn spring-boot:run -Dspring-boot.run.profiles=demo
+# open http://localhost:8080</pre>
+      <p>Docker must be running: Spring Boot starts PostgreSQL 16 from <code>compose.yaml</code>, Flyway migrates it, and the <code>demo</code> profile loads the seed. To start again from a clean database, run <code>docker compose down</code> first.</p>
+    </div>
+    <div class="panel">
+      <h3>Demo logins</h3>
+      <p>Sign in at <code>http://localhost:8080/login</code>. Every account's password is <code>demo</code>. The script uses the four marked ●.</p>
+      <div class="scroll">
+        <table>
+          <thead><tr><th>Username</th><th>Password</th><th>Name</th><th>Team</th><th>Role</th><th class="num">Team's Oct Grant</th></tr></thead>
+          <tbody>
+            <tr><td class="mono">● alice</td><td class="mono">demo</td><td>Alice Chen</td><td>Platform</td><td>Manager</td><td class="num">5,000</td></tr>
+            <tr><td class="mono">ben</td><td class="mono">demo</td><td>Ben Ortiz</td><td>Platform</td><td>Member</td><td class="num">5,000</td></tr>
+            <tr><td class="mono">● bob</td><td class="mono">demo</td><td>Bob Patel</td><td>Research</td><td>Manager</td><td class="num">600</td></tr>
+            <tr><td class="mono">rita</td><td class="mono">demo</td><td>Rita Gomez</td><td>Research</td><td>Member</td><td class="num">600</td></tr>
+            <tr><td class="mono">oscar</td><td class="mono">demo</td><td>Oscar Reed</td><td>Operations</td><td>Manager</td><td class="num">1,000</td></tr>
+            <tr><td class="mono">● carol</td><td class="mono">demo</td><td>Carol Davis</td><td>Operations</td><td>Administrator</td><td class="num">1,000</td></tr>
+            <tr><td class="mono">● dave</td><td class="mono">demo</td><td>Dave Kim</td><td>Operations</td><td>Resource Owner</td><td class="num">1,000</td></tr>
+            <tr><td class="mono">erin</td><td class="mono">demo</td><td>Erin Walsh</td><td>Operations</td><td>Capacity Planner</td><td class="num">1,000</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p style="font-size:0.88rem;color:var(--muted)">Prices: Meeting room 10, Microscope 40, GPU 5 credits per hour. Weekdays 09:00–17:00 cost ×1.5, weekends ×0.5. Research may hold at most 8 GPU units at once.</p>
+    </div>
+  </div>
+
+  <ol class="steps" style="padding:0;margin:0">
+    <li class="step"><div>
+      <h3>Browse the Inventory</h3>
+      <span class="who">as dave (Resource Owner), then carol (Administrator)</span>
+      <p>Show the three Resource Types defined as data, with no code change: Meeting room and Confocal microscope (Exclusive) and GPU (Metered). The GPU pool has two 8-unit nodes, so its Pool Capacity is 16. Filter Resources by type and attribute. As carol, open Resource Types to show how a new type is defined.</p>
+      <span class="req">Inventory.Type.Define · Inventory.Resource.Add · Inventory.View.Filter</span>
+    </div></li>
+
+    <li class="step"><div>
+      <h3>Draft a two-line Request and watch the Quotes</h3>
+      <span class="who">as alice (Platform Manager) · Requests → New Request</span>
+      <p>Add <b>Room A</b>, 1 instance, Tue 27 Oct 14:00–16:00. Add <b>GPU</b>, 4 units, Tue 27 Oct 09:00 to Thu 29 Oct 09:00. The Quotes are computed by the server and update as lines change.</p>
+      <dl class="expect">
+        <dt>Room A</dt><dd>30.00 (2 h × 10 × 1.5)</dd>
+        <dt>GPU</dt><dd>1,120.00 (4 units × 5 × 56 weighted hours)</dd>
+        <dt>Required total</dt><dd>1,150.00 of 5,000.00 available</dd>
+      </dl>
+      <span class="req">Draft.Create · Draft.Line.Add · Draft.Line.Required · Draft.Quote.Line · Ledger.Price.Formula</span>
+    </div></li>
+
+    <li class="step"><div>
+      <h3>Submit: the Request is Allocated</h3>
+      <span class="who">as alice · Submit</span>
+      <p>The Quotes lock, both lines are checked under the per-type lock, and the Request moves to <b>Allocated</b>. The detail view names Room A as the assigned Resource.</p>
+      <span class="req">Draft.Submit.Lock · Lifecycle.Evaluate · Lifecycle.Allocate · Exclusive.Conflict · Metered.Pool.Check</span>
+    </div></li>
+
+    <li class="step"><div>
+      <h3>Open Platform's Statement</h3>
+      <span class="who">as alice · Statement</span>
+      <dl class="expect">
+        <dt>Grants</dt><dd>5,000.00</dd>
+        <dt>Charges</dt><dd>1,150.00 (30.00 + 1,120.00, one per line)</dd>
+        <dt>Available</dt><dd>3,850.00</dd>
+      </dl>
+      <span class="req">Ledger.Account · Ledger.Transaction.Kinds</span>
+    </div></li>
+
+    <li class="step"><div>
+      <h3>A conflicting Request goes to the Waitlist</h3>
+      <span class="who">as bob (Research Manager)</span>
+      <p>New Request: <b>Room A</b> Tue 27 Oct 15:00–17:00, which overlaps alice's booking, and <b>GPU</b>, 10 units, Tue 27 Oct 10:00–14:00, over Research's Quota of 8. Submit.</p>
+      <dl class="expect">
+        <dt>Request</dt><dd>Waiting</dd>
+        <dt>Room A line</dt><dd>Waiting · NO_FREE_INSTANCE · Position 1</dd>
+        <dt>GPU line</dt><dd>Waiting · QUOTA_EXCEEDED · Position 1</dd>
+        <dt>Available</dt><dd>600.00, unchanged: waiting lines cost nothing</dd>
+      </dl>
+      <span class="req">Exclusive.Waitlist.Join · Metered.Line.Form · Lifecycle.States</span>
+    </div></li>
+
+    <li class="step"><div>
+      <h3>Over budget: refused with the shortfall</h3>
+      <span class="who">as bob</span>
+      <p>New Request, all Tue 27 Oct: Confocal microscope 09:00–17:00, Room B 09:00–17:00, and 1 GPU unit 09:00–10:00. Submit.</p>
+      <dl class="expect">
+        <dt>Result</dt><dd>Refused: short by 7.50 credits</dd>
+        <dt>Required</dt><dd>607.50 (480.00 + 120.00 + 7.50) against 600.00 available</dd>
+        <dt>Request</dt><dd>Stays a Draft, so bob can edit it</dd>
+      </dl>
+      <span class="req">Draft.Submit.Lock · INSUFFICIENT_BALANCE</span>
+    </div></li>
+
+    <li class="step"><div>
+      <h3>Withdraw the waiting Request</h3>
+      <span class="who">as bob · open the Waiting Request · Withdraw</span>
+      <p>The Request becomes <b>Withdrawn</b> and both lines leave the Waitlist. Their Position column goes blank.</p>
+      <span class="req">Lifecycle.States · Exclusive.Waitlist.Join</span>
+    </div></li>
+  </ol>
+
+  <div class="notes">
+    <span class="k">Talking points</span>
+    <ul>
+      <li>Step 3: the last-room race is tested. Two concurrent submits for the last free room: exactly one wins (<code>AllocationConcurrencyTest</code>, <code>SubmitConcurrencyTest</code>).</li>
+      <li>Step 5: the two refusal reasons come from different allocators. The Exclusive allocator finds no free room; the Metered allocator checks Pool Capacity and the Quota for every hour of the window.</li>
+      <li>Fallback if the live app fails: run <code>mvn test -Dtest=SubmitEndToEndTest</code>. It runs this same story against PostgreSQL 16.</li>
+    </ul>
+  </div>
+</section>
+
+<!-- 3. Coverage -->
+<section class="view" id="coverage" data-title="Coverage" role="tabpanel" hidden>
+  <div class="head">
+    <div class="eyebrow">Functionality implemented <span class="weight">40%</span></div>
+    <h2>What is built, against the SRS</h2>
+    <p class="lede">The submitted SRS lists 41 Release 1 requirements. This increment completes 15 (37%) and partly builds 7 more, which is above the rubric's target of about 30%. It covers everything for Exclusive and Metered resources, from Inventory to the Statement.</p>
+  </div>
+
+  <div class="panel">
+    <div class="meter" id="meter" role="img" aria-label="15 complete, 7 partial, 19 not started of 41"></div>
+    <div class="legend">
+      <span><i style="background:var(--done)"></i>Complete · 15</span>
+      <span><i style="background:var(--partial)"></i>Partly built · 7</span>
+      <span><i style="background:var(--todo)"></i>Next increments · 19</span>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h3>Back-end modules (one Java package each, ADR-0005)</h3>
+    <div class="mods">
+      <div class="mod built"><b>members</b><span>Teams, Members, roles</span></div>
+      <div class="mod built"><b>inventory</b><span>Types, Resources, Pool Capacity</span></div>
+      <div class="mod built"><b>settings</b><span>Periods, prices, Quota</span></div>
+      <div class="mod built"><b>ledger</b><span>Accounts, Charges, Statements</span></div>
+      <div class="mod built"><b>allocation</b><span>Allocators, type lock, Waitlist</span></div>
+      <div class="mod built"><b>requests</b><span>Drafts, Submit, lifecycle</span></div>
+      <div class="mod stub"><b>notifications</b><span>package only</span></div>
+      <div class="mod stub"><b>dashboard</b><span>package only</span></div>
+      <div class="mod stub"><b>jobs</b><span>package only</span></div>
+    </div>
+    <p style="font-size:0.88rem;color:var(--muted)">Also built: session sign-in with CSRF, the problem-details error mapping, 9 Flyway migrations, and the React client's screens for Sign-in, Home, Inventory, Resource Types, Requests and the Draft editor, Request detail, and Statement.</p>
+  </div>
+
+  <div class="filters" role="group" aria-label="Filter requirements">
+    <button type="button" data-f="all" aria-pressed="true">All 41</button>
+    <button type="button" data-f="done" aria-pressed="false">Complete</button>
+    <button type="button" data-f="partial" aria-pressed="false">Partly built</button>
+    <button type="button" data-f="todo" aria-pressed="false">Next</button>
+  </div>
+  <div class="grid cols-feat" id="features"></div>
+
+  <div class="notes">
+    <span class="k">Talking points</span>
+    <ul>
+      <li>Explain why this order: the design builds modules bottom-up in layer order, so Inventory, Settings and the Ledger came before Allocation and Requests.</li>
+      <li>"Partly built" means the core is in and tested but one piece is missing. For example, Holds already work inside the allocators, but nothing places them until the Pending state arrives with Matched allocation.</li>
+    </ul>
+  </div>
+</section>
+
+<!-- 4. Version control -->
+<section class="view" id="git" data-title="Version control" role="tabpanel" hidden>
+  <div class="head">
+    <div class="eyebrow">Use of version control <span class="weight">15%</span></div>
+    <h2>Git workflow</h2>
+    <p class="lede">Each slice of work was built on its own <code>feature/*</code> branch and merged into <code>main</code> with a merge commit, so every feature stays visible in the history. Commit messages say what changed in the imperative, and each feature lands with its tests.</p>
+  </div>
+
+  <div class="grid cols-4">
+    <div class="panel stat"><span class="n">53</span><span class="l">commits, 15–21 Oct</span></div>
+    <div class="panel stat"><span class="n">7</span><span class="l">feature branches, each merged with <code>--no-ff</code></span></div>
+    <div class="panel stat"><span class="n">313</span><span class="l">files added under <code>src/</code> and <code>web/</code></span></div>
+    <div class="panel stat"><span class="n">2</span><span class="l">repositories: <code>swe_csds393</code> for the spec, <code>openbench</code> for code</span></div>
+  </div>
+
+  <div class="panel">
+    <h3>Commits per day</h3>
+    <div class="days" id="days" role="img" aria-label="Commits per day from 15 to 21 October"></div>
+  </div>
+
+  <div class="branches" id="branches"></div>
+
+  <div class="panel">
+    <h3>Conventions</h3>
+    <ul>
+      <li>The specification lives in <code>swe_csds393</code>. <code>openbench/docs</code> holds a pinned snapshot (commit <code>e03bcc9</code>) that is never edited in place.</li>
+      <li>Code, tests, and identifiers use the glossary in <code>CONTEXT.md</code>. Test names carry SRS requirement ids such as <code>Exclusive.Conflict</code>.</li>
+      <li>The toolchain is pinned in <code>flake.nix</code> (JDK 25, Maven, Node 24, psql 16), so every machine builds the same way.</li>
+    </ul>
+  </div>
+
+  <div class="notes">
+    <span class="k">Talking points</span>
+    <ul>
+      <li>Open GitHub and show the branch merges in the network graph or <code>git log --graph --oneline</code>.</li>
+      <li>Point out that tests land in the same branch as the feature they cover, for example <code>feature/allocation</code> ends with two test commits.</li>
+    </ul>
+  </div>
+</section>
+
+<!-- 5. Testing -->
+<section class="view" id="tests" data-title="Testing" role="tabpanel" hidden>
+  <div class="head">
+    <div class="eyebrow">Use of automated testing framework <span class="weight">15%</span></div>
+    <h2>Automated tests</h2>
+    <p class="lede">JUnit 5 for the back end, and Vitest with React Testing Library for the client. Database tests run on a real PostgreSQL 16 in Testcontainers with the production migrations, never an in-memory substitute. All tests pass.</p>
+  </div>
+
+  <div class="grid cols-4">
+    <div class="panel stat"><span class="n">258</span><span class="l">JUnit test methods in 37 classes</span></div>
+    <div class="panel stat"><span class="n">68</span><span class="l">Vitest tests in 13 files</span></div>
+    <div class="panel stat"><span class="n">7,568</span><span class="l">lines of test code: 6,251 Java, 1,317 TypeScript</span></div>
+    <div class="panel stat"><span class="n">0</span><span class="l">failing tests</span></div>
+  </div>
+
+  <div class="grid cols-2">
+    <div class="panel">
+      <h3>Run them</h3>
+      <pre># back end: unit, integration on PostgreSQL 16, ArchUnit
+mvn verify
+
+# web client
+cd web &amp;&amp; npm test
+
+# just the demo story
+mvn test -Dtest=SubmitEndToEndTest</pre>
+    </div>
+    <div class="panel">
+      <h3>How they fit the workflow</h3>
+      <ul>
+        <li>Every feature branch ends with tests for the rules it adds, merged in the same branch.</li>
+        <li>Each test's display name carries the SRS requirement ids it covers, so the test report doubles as a traceability check.</li>
+        <li><code>TestConventionsTest</code> enforces how tests are written, and <code>ArchitectureTest</code> fails the build if a module breaks the layer rules.</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h3>Test levels</h3>
+    <div>
+      <div class="layer"><div><b>Unit</b><span class="tool">JUnit 5 · AssertJ</span></div><p>Pure rules as plain objects: <code>PricingTest</code>, <code>WindowsTest</code>, <code>HourlyLoadTest</code>, <code>CreditsTest</code>, <code>RequestStateTest</code>.</p></div>
+      <div class="layer"><div><b>Integration</b><span class="tool">Spring Boot Test · Testcontainers</span></div><p>Services and controllers on PostgreSQL 16: allocators, the Waitlist, the Ledger, Inventory, sessions, role checks, and 403/404 scoping.</p></div>
+      <div class="layer"><div><b>Database</b><span class="tool">Flyway · JDBC</span></div><p><code>MigrationsTest</code>, <code>ExclusionConstraintTest</code>, and <code>AppRoleGrantsTest</code>, which proves the application role cannot rewrite Transaction history.</p></div>
+      <div class="layer"><div><b>Concurrency</b><span class="tool">@RepeatedTest · threads</span></div><p>Two submits racing for the last room or the last GPU units: exactly one wins, and no hour exceeds Pool Capacity.</p></div>
+      <div class="layer"><div><b>Architecture</b><span class="tool">ArchUnit</span></div><p>Modules depend only downward and expose only their services and DTOs (ADR-0005).</p></div>
+      <div class="layer"><div><b>Front end</b><span class="tool">Vitest · Testing Library</span></div><p>Each route renders for the right roles, sends the right call, and shows the server's refusal message.</p></div>
+      <div class="layer" style="border-bottom:0"><div><b>End to end</b><span class="tool">MockMvc · real session + CSRF</span></div><p><code>SubmitEndToEndTest</code> signs in like the browser and runs the whole live demo story.</p></div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h3>Sample test names, from the report</h3>
+    <ul class="names">
+      <li><span class="tick">✓</span>QA-correct: the last free room goes to exactly one line</li>
+      <li><span class="tick">✓</span>Metered.Pool.Check: is POOL_FULL at 14:00, one unit short</li>
+      <li><span class="tick">✓</span>Bumped lines come first, then Priority lines, then by submission time</li>
+      <li><span class="tick">✓</span>Ledger.NoNegative: a Charge never takes the Balance below zero, nor spends another line's held credits</li>
+      <li><span class="tick">✓</span>INSUFFICIENT_BALANCE: a sum above the Available Balance is refused with the shortfall</li>
+      <li><span class="tick">✓</span>A Manager asking for another Team's Statement gets 404 NOT_FOUND</li>
+      <li><span class="tick">✓</span>a call that fails once on a lock succeeds on the second try</li>
+    </ul>
+  </div>
+
+  <div class="notes">
+    <span class="k">Talking points</span>
+    <ul>
+      <li>Run <code>mvn verify</code> live or show a recent run. The first run pulls the PostgreSQL image, so start it before the demo.</li>
+      <li>Explain why PostgreSQL in tests: the guarantee that rooms never double-book is an exclusion constraint in the database, which H2 cannot check.</li>
+    </ul>
+  </div>
+</section>
+
+<!-- 6. Roadmap -->
+<section class="view" id="roadmap" data-title="Next steps" role="tabpanel" hidden>
+  <div class="head">
+    <div class="eyebrow">Planning and next steps <span class="weight">10%</span></div>
+    <h2>Roadmap</h2>
+    <p class="lede">The remaining 19 Release 1 requirements and the 7 partial ones fall into two increments. Stretch items start only after the end-to-end test of a three-line Request (person, room, and GPU) passes, as the design document sets out.</p>
+  </div>
+
+  <div class="grid cols-3">
+    <div class="panel inc">
+      <span class="tag">Done · Demo 1</span>
+      <h3>Exclusive and Metered, end to end</h3>
+      <ul>
+        <li>Inventory and Resource Types as data</li>
+        <li>Drafts, Quotes, and Submit with locked Quotes</li>
+        <li>Exclusive and Metered allocators with the Waitlist</li>
+        <li>Accounts, Charges, Grants, and Statements</li>
+        <li>React screens for all of the above</li>
+      </ul>
+    </div>
+    <div class="panel inc">
+      <span class="tag">Next · Increment 2</span>
+      <h3>Matched allocation: lending people</h3>
+      <ul>
+        <li>Member Profiles: skills and availability</li>
+        <li>Shortlist of Candidates, approval routing, refusal and replacement, escalation</li>
+        <li>Pending state: Holds on the other lines and the Objection Window</li>
+        <li>Loans form and Earnings post to the lending Team</li>
+        <li>Re-evaluate Waiting Requests when capacity frees</li>
+        <li>The three-line end-to-end test</li>
+      </ul>
+    </div>
+    <div class="panel inc">
+      <span class="tag">Then · Increment 3</span>
+      <h3>Release, priority, and oversight</h3>
+      <ul>
+        <li>Release a line with the Refund Schedule, and prorated Loans</li>
+        <li>Priority lines and bumping</li>
+        <li>Suggestions from Members to their Manager</li>
+        <li>Jobs: Period rollover and Objection Window lapse</li>
+        <li>Showback dashboard, settings screens, and member admin</li>
+        <li>Stretch: Metered tiers, usage records, surcharge</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="grid cols-2">
+    <div class="panel">
+      <h3>Challenges we expect</h3>
+      <dl class="risk">
+        <dt>Time-driven behaviour</dt>
+        <dd>Objection Window lapses and Period rollover depend on the clock. The design tests them with a moved clock and finds due work by query, so a missed run catches up.</dd>
+        <dt>Lock order</dt>
+        <dd>Matched lines add Loans to the transaction. Every path must keep taking type locks in ascending order, or we risk deadlocks or an oversold pool.</dd>
+        <dt>Client and API drift</dt>
+        <dd>More screens means more endpoints. Generating client types from the OpenAPI document makes a changed endpoint fail the TypeScript build.</dd>
+        <dt>Scope for four students</dt>
+        <dd>Release 1 is fixed. Every Stretch item is an extension point and never a precondition.</dd>
+      </dl>
+    </div>
+    <div class="panel">
+      <h3>Process changes for the next increment</h3>
+      <ul>
+        <li>Add GitHub Actions to run <code>mvn verify</code> and <code>npm test</code> on every push and pull request.</li>
+        <li>Merge through pull requests with a review from a second teammate.</li>
+        <li>Run the Vitest suite inside <code>mvn verify</code>, so one command checks everything.</li>
+        <li>Track each increment's requirements as issues, with an owner per module.</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="notes">
+    <span class="k">Talking points</span>
+    <ul>
+      <li>Name who owns each part of Increment 2 (Profiles and Shortlist, approvals and the Objection Window, Loans and Earnings, the client screens).</li>
+      <li>Close by saying what Demo 2 will show: alice asks for a person, a room, and GPUs in one Request, and bob's team lends the person.</li>
+    </ul>
+  </div>
+</section>
+
+<div class="foot">
+  <span id="pos">1 / 6</span>
+  <span>← → to move between pages · N toggles the talking points</span>
+  <div class="pager">
+    <button type="button" id="prev">Previous</button>
+    <button type="button" id="next">Next</button>
+  </div>
+</div>
+
+</div>
+</main>
+
+<script>
+(function () {
+  // Requirements in the submitted SRS (Release 1 only, the 6 Stretch items excluded), by feature.
+  var FEATURES = [
+    ["Inventory and Resource Types", [
+      ["Inventory.Type.Define", "done", "Administrators define types and attributes as data; Person is built in"],
+      ["Inventory.Resource.Add", "done", "Owners add, change, and retire Resources, with the reduction guard"],
+      ["Inventory.View.Holder", "partial", "Filter by type and attribute works; the holder timeline is next"]]],
+    ["Member Profiles", [
+      ["Profile.Skills", "todo", "Increment 2"],
+      ["Profile.Availability", "todo", "Increment 2"]]],
+    ["Suggestions", [
+      ["Suggest.Create", "todo", "Increment 3"],
+      ["Suggest.Accept.Existing", "todo", "Increment 3"]]],
+    ["Draft and Submit", [
+      ["Draft.Create", "done", "Create a Draft for the Manager's Team"],
+      ["Draft.Line.Add", "done", "Add, change, split, and remove lines"],
+      ["Draft.Line.Required", "done", "Required and Optional lines, with separate sums"],
+      ["Draft.Quote.Line", "done", "Server-side Quote per line and totals against the balance"],
+      ["Draft.Submit.Lock", "done", "Quotes lock on Submit; over budget is refused with the shortfall"]]],
+    ["Matched Allocation", [
+      ["Matched.Shortlist.Build", "todo", "Increment 2"],
+      ["Matched.Approve.Route", "todo", "Increment 2"],
+      ["Matched.Refuse.Replace", "todo", "Increment 2"],
+      ["Matched.Escalate", "todo", "Increment 2"],
+      ["Matched.Loan.Form", "todo", "Increment 2"]]],
+    ["Exclusive Allocation", [
+      ["Exclusive.Conflict", "done", "Exclusion constraint; the least-used free room wins"],
+      ["Exclusive.Waitlist.Join", "done", "Ordered Waitlist with positions; Optional lines never join"],
+      ["Exclusive.Priority.Bump", "todo", "Increment 3 (Waitlist ordering is ready for it)"],
+      ["Exclusive.Bump.Effect", "todo", "Increment 3"]]],
+    ["Metered Allocation", [
+      ["Metered.Line.Form", "done", "Units over a window, waiting when they do not fit"],
+      ["Metered.Pool.Check", "done", "Hourly check against Pool Capacity and the Team's Quota"]]],
+    ["Request Lifecycle and Holds", [
+      ["Lifecycle.States", "partial", "Draft, Submitted, Allocated, Waiting, Withdrawn; Pending comes with Matched"],
+      ["Lifecycle.Evaluate", "done", "Every Required line is evaluated at Submit"],
+      ["Lifecycle.Hold.Place", "partial", "Hold, commit, and cancel work in both allocators; placing them needs Pending"],
+      ["Lifecycle.Window.Start", "todo", "Increment 2"],
+      ["Lifecycle.Allocate", "partial", "Commit and Charges in one transaction; Loans and Earnings with Matched"],
+      ["Lifecycle.Waiting.Reevaluate", "todo", "Increment 2"]]],
+    ["Release and Refund", [
+      ["Release.Line", "todo", "Increment 3"],
+      ["Release.Refund", "partial", "Refund Schedule step function priced and tested; release flow next"],
+      ["Release.Loan.Prorate", "todo", "Increment 3"]]],
+    ["Ledger and Pricing", [
+      ["Ledger.Account", "done", "Balance is granted plus earned; Available subtracts held"],
+      ["Ledger.Transaction.Kinds", "done", "Append-only Transactions; the app role cannot change history"],
+      ["Ledger.Grant.Period", "partial", "Grants, mid-Period Grants, and Statements; rollover job next"],
+      ["Ledger.Price.Formula", "done", "Unit Price × Price Band × premium, rounded"],
+      ["Ledger.Earning.Post", "todo", "Increment 2"]]],
+    ["Showback Dashboard", [
+      ["Dashboard.Utilization", "todo", "Increment 3"],
+      ["Dashboard.Credits", "todo", "Increment 3"]]],
+    ["Administration", [
+      ["Admin.Member.Create", "todo", "Increment 3"],
+      ["Planner.Settings", "partial", "Settings stored as data and served by the API; edit screens next"]]]
+  ];
+  var LABEL = { done: "Complete", partial: "Partial", todo: "Next" };
+
+  var BRANCHES = [
+    ["feature/web-foundation", "16 Oct", [
+      ["edf767b", "15 Oct", "Scaffold the web client with Vite, React, and TypeScript"],
+      ["9fd5f6c", "15 Oct", "Add the API client with CSRF and problem details"],
+      ["f0cccb9", "16 Oct", "Add the house style: stylesheet, UI components, formatting"],
+      ["e49c536", "16 Oct", "Add sign-in, the role-aware shell, and the route registry"],
+      ["64ee35c", "16 Oct", "Add fieldError for the per-field messages of a rejected write"],
+      ["a08a02b", "16 Oct", "Document how to run, test, and extend the web client"],
+      ["8b98fa5", "16 Oct", "Say in the web README that calls go through queries and mutations"]], "41d86e1"],
+    ["feature/backend-foundation", "18 Oct", [
+      ["0a547fb", "16 Oct", "Add the Maven build and the application skeleton"],
+      ["3905c4f", "16 Oct", "Add typed ids, value types, roles, and the error mapping"],
+      ["2bf378a", "17 Oct", "Configure the clock, JSON, MVC, and OpenAPI"],
+      ["de08cbc", "17 Oct", "Add the Demo 1 schema, the app role grants, and compose"],
+      ["c162620", "17 Oct", "Add the PostgreSQL test base class and schema tests"],
+      ["7bbd461", "17 Oct", "Add the Members module: Teams, Members, roles, and reads"],
+      ["8321599", "17 Oct", "Add session login with cookie-to-header CSRF and /api/me"],
+      ["a50d2be", "17 Oct", "Test the problem response of every error class"],
+      ["321788c", "17 Oct", "Add the ArchUnit test of the module rules"],
+      ["14de4b8", "17 Oct", "Add the demo profile and the Teams and Members seed"],
+      ["01bfe59", "18 Oct", "Serve the client at the root path and test the fallback"],
+      ["9582630", "18 Oct", "Add the README: prerequisites, tests, demo run, logins"],
+      ["df576b5", "18 Oct", "Name the test that forbids csrf() in the PostgresTest docs"]], "501cdbf"],
+    ["feature/inventory", "19 Oct", [
+      ["9740480", "18 Oct", "Add the Inventory module: types, Resources, Pool Capacity, guard port"],
+      ["ae14d6a", "18 Oct", "Seed the demo Inventory: three types, five Resources owned by dave"],
+      ["44ba973", "18 Oct", "Test the Inventory rules, refusal codes, guard, and role checks"],
+      ["9000837", "19 Oct", "Add the Inventory and Resource Types screens"]], "ade6f21"],
+    ["feature/settings-ledger", "20 Oct", [
+      ["053d9d2", "19 Oct", "Add Pricing with the settings value types it reads"],
+      ["6c483b5", "19 Oct", "Add SettingsService: the settings snapshot and the Periods"],
+      ["02f893e", "19 Oct", "Add LedgerService: Accounts, held credits, Charges, Grants, Statements"],
+      ["291a310", "19 Oct", "Seed the demo world's settings, prices, Quota, and October Grants"],
+      ["5dec316", "19 Oct", "Add the Statement screen"],
+      ["350f9c0", "19 Oct", "Wrap long Ledger lines and check how a Period's previous serializes"]], "1011299"],
+    ["feature/requests-draft", "20 Oct", [
+      ["1b5316f", "20 Oct", "Add RequestService: Drafts, line rules, Quotes, and the Draft view"],
+      ["2891c45", "20 Oct", "Test Draft editing: Quotes, sums, split, every line rule, scope, roles"],
+      ["0168865", "20 Oct", "Add the Requests list and the Draft editor screens"]], "59c3593"],
+    ["feature/allocation", "21 Oct", [
+      ["23ccc9f", "20 Oct", "Add the Allocation types, interfaces, Windows, and HourlyLoad"],
+      ["dd306fd", "20 Oct", "Add the type lock, the Exclusive and Metered allocators, and the guard"],
+      ["c5065bc", "20 Oct", "Test the Exclusive and Metered allocators and the waitlist on PostgreSQL"],
+      ["d4ca36b", "21 Oct", "Test the guard, the type lock, the registry, and the race for capacity"]], "0527fdf"],
+    ["feature/submit-lifecycle", "21 Oct", [
+      ["6054997", "21 Oct", "Add the Request state rules and the one retry on a lock failure"],
+      ["c9225e5", "21 Oct", "Submit and withdraw a Request, and show its detail"],
+      ["765adcd", "21 Oct", "Test submission, withdrawal, the race for the last room, and the retry"],
+      ["ce847c0", "21 Oct", "Add Submit to the Draft editor, the Request detail, and Statement links"]], "66bfd67"]
+  ];
+  // Every commit on main by author date, merges included (git log --date=short).
+  var PER_DAY = [["15", 5], ["16", 8], ["17", 8], ["18", 8], ["19", 8], ["20", 8], ["21", 8]];
+
+  function el(tag, cls, text) {
+    var e = document.createElement(tag);
+    if (cls) e.className = cls;
+    if (text != null) e.textContent = text;
+    return e;
+  }
+
+  // Coverage
+  var counts = { done: 0, partial: 0, todo: 0 };
+  var featBox = document.getElementById("features");
+  FEATURES.forEach(function (f) {
+    var card = el("div", "panel feature");
+    var done = f[1].filter(function (r) { return r[1] === "done"; }).length;
+    var h = el("h3", null, f[0]);
+    h.appendChild(el("small", null, done + " / " + f[1].length));
+    card.appendChild(h);
+    var ul = el("ul", "reqs");
+    f[1].forEach(function (r) {
+      counts[r[1]]++;
+      var li = el("li");
+      li.dataset.s = r[1];
+      li.appendChild(el("span", "id", r[0]));
+      li.appendChild(el("span", "pill " + r[1], LABEL[r[1]]));
+      li.appendChild(el("span", "why", r[2]));
+      ul.appendChild(li);
+    });
+    card.appendChild(ul);
+    featBox.appendChild(card);
+  });
+  var total = counts.done + counts.partial + counts.todo;
+  var meter = document.getElementById("meter");
+  [["done", "--done"], ["partial", "--partial"], ["todo", "--todo"]].forEach(function (p) {
+    var s = el("span");
+    s.style.width = (counts[p[0]] / total * 100) + "%";
+    s.style.background = "var(" + p[1] + ")";
+    meter.appendChild(s);
+  });
+  document.querySelectorAll(".filters button").forEach(function (b) {
+    b.addEventListener("click", function () {
+      var f = b.dataset.f;
+      document.querySelectorAll(".filters button").forEach(function (o) { o.setAttribute("aria-pressed", String(o === b)); });
+      featBox.querySelectorAll(".reqs li").forEach(function (li) { li.hidden = f !== "all" && li.dataset.s !== f; });
+      featBox.querySelectorAll(".feature").forEach(function (card) {
+        card.hidden = !card.querySelector(".reqs li:not([hidden])");
+      });
+    });
+  });
+
+  // Git
+  var bBox = document.getElementById("branches");
+  BRANCHES.forEach(function (b) {
+    var row = el("div", "branch");
+    var name = el("div", "name");
+    name.appendChild(el("b", null, b[0]));
+    name.appendChild(el("span", null, b[2].length + " commits · merged " + b[1]));
+    row.appendChild(name);
+    var ul = el("ul", "commits");
+    b[2].forEach(function (c) {
+      var li = el("li");
+      li.appendChild(el("span", "h", c[0]));
+      li.appendChild(el("span", "d", c[1]));
+      li.appendChild(el("span", null, c[2]));
+      ul.appendChild(li);
+    });
+    var m = el("li", "merge");
+    m.appendChild(el("span", "h", b[3]));
+    m.appendChild(el("span", "d", b[1]));
+    m.appendChild(el("span", null, "Merge branch '" + b[0] + "' into main"));
+    ul.appendChild(m);
+    row.appendChild(ul);
+    bBox.appendChild(row);
+  });
+  var max = Math.max.apply(null, PER_DAY.map(function (d) { return d[1]; }));
+  var days = document.getElementById("days");
+  PER_DAY.forEach(function (d) {
+    var col = el("div", "day");
+    var bar = el("div", "b");
+    bar.style.height = (d[1] / max * 100) + "%";
+    col.appendChild(bar);
+    col.appendChild(el("span", "v", String(d[1])));
+    col.appendChild(el("span", "x", d[0] + " Oct"));
+    days.appendChild(col);
+  });
+
+  // Navigation
+  var views = Array.prototype.slice.call(document.querySelectorAll(".view"));
+  var tabs = document.getElementById("tabs");
+  var agenda = document.getElementById("agenda");
+  var WEIGHT = { overview: "", demo: "40%", coverage: "40%", git: "15%", tests: "15%", roadmap: "10%" };
+  var current = 0;
+  views.forEach(function (v, i) {
+    var t = el("button", "tab");
+    t.type = "button";
+    t.setAttribute("role", "tab");
+    t.id = "tab-" + v.id;
+    t.setAttribute("aria-controls", v.id);
+    t.appendChild(el("b", null, String(i + 1)));
+    t.appendChild(document.createTextNode(v.dataset.title));
+    t.addEventListener("click", function () { show(i); });
+    tabs.appendChild(t);
+    if (i > 0) {
+      var li = el("li");
+      var go = el("button", null, v.dataset.title);
+      go.type = "button";
+      go.addEventListener("click", function () { show(i); });
+      li.appendChild(go);
+      li.appendChild(el("span", "w", WEIGHT[v.id]));
+      agenda.appendChild(li);
+    }
+  });
+  var aq = el("li");
+  aq.appendChild(el("span", null, "Questions"));
+  aq.appendChild(el("span", "w", ""));
+  agenda.appendChild(aq);
+
+  function show(i, keepHash) {
+    current = Math.max(0, Math.min(views.length - 1, i));
+    views.forEach(function (v, j) { v.hidden = j !== current; });
+    tabs.querySelectorAll(".tab").forEach(function (t, j) { t.setAttribute("aria-selected", String(j === current)); });
+    document.getElementById("pos").textContent = (current + 1) + " / " + views.length;
+    document.getElementById("prev").disabled = current === 0;
+    document.getElementById("next").disabled = current === views.length - 1;
+    if (!keepHash) { try { history.replaceState(null, "", "#" + views[current].id); } catch (e) {} }
+    window.scrollTo(0, 0);
+    requestAnimationFrame(function () { window.scrollTo(0, 0); });
+  }
+  document.getElementById("prev").addEventListener("click", function () { show(current - 1); });
+  document.getElementById("next").addEventListener("click", function () { show(current + 1); });
+
+  var notesBtn = document.getElementById("notesBtn");
+  function setNotes(on) {
+    document.body.classList.toggle("hide-notes", !on);
+    notesBtn.setAttribute("aria-pressed", String(on));
+    notesBtn.textContent = on ? "Notes on" : "Notes off";
+  }
+  notesBtn.addEventListener("click", function () { setNotes(document.body.classList.contains("hide-notes")); });
+
+  document.addEventListener("keydown", function (e) {
+    if (e.altKey || e.ctrlKey || e.metaKey) return;
+    if (/input|textarea|select/i.test(e.target.tagName)) return;
+    if (e.key === "ArrowRight" || e.key === "PageDown") { show(current + 1); e.preventDefault(); }
+    else if (e.key === "ArrowLeft" || e.key === "PageUp") { show(current - 1); e.preventDefault(); }
+    else if (e.key === "n" || e.key === "N") { setNotes(document.body.classList.contains("hide-notes")); }
+    else if (/^[1-6]$/.test(e.key)) { show(Number(e.key) - 1); }
+  });
+
+  var start = views.findIndex(function (v) { return "#" + v.id === location.hash; });
+  try { history.scrollRestoration = "manual"; } catch (e) {}
+  show(start < 0 ? 0 : start, true);
+  window.addEventListener("load", function () { window.scrollTo(0, 0); });
+})();
+</script>

@@ -1,0 +1,190 @@
+<title>How OpenBench Works</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;600&family=IBM+Plex+Mono:wght@500&display=swap">
+<style>
+/* Layout: one narrow reading column; "how we built it" boxes set off from the plain explanation. */
+:root {
+  --bg: #ffffff; --ink: #18222d; --muted: #5b6876; --line: #dde3e9; --accent: #1f5f8b; --soft: #eef3f7;
+  --built: #2f7d4f; --next: #a3650c;
+  --body: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) { --bg: #12181e; --ink: #e5ebf0; --muted: #9aa7b4; --line: #2b3641; --accent: #74b6e2; --soft: #1c2731; --built: #6cc28f; --next: #e2a54a; color-scheme: dark; }
+}
+:root[data-theme="dark"] { --bg: #12181e; --ink: #e5ebf0; --muted: #9aa7b4; --line: #2b3641; --accent: #74b6e2; --soft: #1c2731; --built: #6cc28f; --next: #e2a54a; color-scheme: dark; }
+body {
+  background: var(--bg); color: var(--ink); font: 17px/1.6 var(--body);
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 28px 64px;
+}
+main { max-width: 740px; margin: 0 auto; }
+h1 { font-size: 1.7rem; margin: 0 0 4px; }
+h2 { font-size: 1.25rem; margin: 36px 0 8px; padding-top: 16px; border-top: 2px solid var(--line); }
+h3 { font-size: 1.02rem; margin: 18px 0 4px; }
+p { margin: 6px 0; }
+ul, ol { margin: 6px 0; padding-left: 1.4em; }
+li { margin: 4px 0; }
+li::marker { color: var(--accent); }
+code { font-family: var(--mono); font-size: 0.86em; background: var(--soft); padding: 1px 5px; border-radius: 4px; }
+.sub { color: var(--muted); }
+.how { background: var(--soft); border-radius: 8px; padding: 12px 16px; margin: 10px 0; }
+.how b:first-child { color: var(--accent); display: block; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 2px; }
+.how ul { margin: 4px 0; }
+.tag { font-size: 0.72rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; padding: 1px 7px; border-radius: 999px; border: 1px solid currentColor; vertical-align: 2px; margin-left: 6px; white-space: nowrap; }
+.tag.built { color: var(--built); }
+.tag.next { color: var(--next); }
+.scroll { overflow-x: auto; }
+table { border-collapse: collapse; font-size: 0.93rem; width: 100%; }
+td, th { padding: 6px 12px 6px 0; text-align: left; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { color: var(--muted); font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.04em; }
+.flow { font-family: var(--mono); font-size: 0.9rem; background: var(--soft); border-radius: 8px; padding: 10px 14px; overflow-x: auto; white-space: pre; }
+nav { font-size: 0.92rem; color: var(--muted); margin-top: 10px; }
+nav a { color: var(--accent); }
+</style>
+
+<main>
+<h1>How OpenBench works</h1>
+<p class="sub">A plain-language guide to the idea, the vocabulary, and the hard parts. <span class="tag built">Built</span> means it's in Demo 1. <span class="tag next">Next</span> means it's designed but not built yet.</p>
+<nav>Jump to: <a href="#idea">Idea</a> · <a href="#resources">Resource types</a> · <a href="#roles">Roles</a> · <a href="#request">A Request's life</a> · <a href="#credits">Credits</a> · <a href="#hard">How we built the hard parts</a> · <a href="#arch">Architecture</a></nav>
+
+<h2 id="idea">The idea</h2>
+<p>Inside a company, teams compete for the same things: people with the right skills, rooms and lab instruments, and compute like GPU hours. Today each is booked in a different place, with no shared rules.</p>
+<p>OpenBench is one internal marketplace for all of them:</p>
+<ul>
+  <li>A team's <b>Manager</b> writes one <b>Request</b> that can ask for a person, a room, and GPU time together.</li>
+  <li>The system <b>allocates</b> each part by the rules for that kind of resource.</li>
+  <li>Everything is paid for in <b>credits</b> from the team's budget. Credits are for visibility ("showback"), not real money.</li>
+</ul>
+<p class="sub">Example: "For Tuesday's workshop, Platform needs Room A from 14:00 to 16:00 and 4 GPUs for two days." That is one Request with two lines.</p>
+
+<h2 id="resources">Resource types</h2>
+<p>Every resource has a <b>Resource Type</b> (for example "Meeting room" or "GPU"). An Administrator creates types as data in the app, so adding a new kind of resource needs no code change. Each type belongs to one of three <b>Allocation Classes</b>, which decide how it is handed out:</p>
+
+<div class="scroll">
+<table>
+  <tr><th>Class</th><th>What it is</th><th>How it is allocated</th><th>Demo examples</th></tr>
+  <tr><td><b>Exclusive</b><span class="tag built">Built</span></td><td>Something one team holds whole for a time window.</td><td>No overlaps. If it's taken, the line joins a Waitlist.</td><td>Meeting room (Room A, Room B), Confocal microscope</td></tr>
+  <tr><td><b>Metered</b><span class="tag built">Built</span></td><td>A divisible pool shared by many teams.</td><td>A line asks for some units. Each hour, total use must fit the pool, and a team may have a cap (Quota).</td><td>GPU: two 8-unit nodes, so a pool of 16. Research's Quota is 8.</td></tr>
+  <tr><td><b>Matched</b><span class="tag next">Next</span></td><td>A person lent to another team.</td><td>Matched by skills and availability. The person's own Manager must approve.</td><td>A built-in "Person" type</td></tr>
+</table>
+</div>
+
+<h2 id="roles">Roles</h2>
+<p>Everyone is a <b>Member</b> of exactly one <b>Team</b>. Some Members also have extra roles:</p>
+<div class="scroll">
+<table>
+  <tr><th>Role</th><th>What they do</th><th>Demo login</th></tr>
+  <tr><td><b>Member</b></td><td>Browses the Inventory. Later, suggests lines to their Manager.</td><td><code>ben</code>, <code>rita</code></td></tr>
+  <tr><td><b>Manager</b></td><td>Leads a Team. The only one who submits Requests, and approves lending their people.</td><td><code>alice</code>, <code>bob</code>, <code>oscar</code></td></tr>
+  <tr><td><b>Resource Owner</b></td><td>Keeps the records of specific rooms, instruments, or pools. Never approves allocations.</td><td><code>dave</code></td></tr>
+  <tr><td><b>Capacity Planner</b></td><td>Sets each team's credit budget, prices, Quotas, and refund rules.</td><td><code>erin</code></td></tr>
+  <tr><td><b>Administrator</b></td><td>Manages users, Teams, and Resource Types. Sets no policy.</td><td><code>carol</code></td></tr>
+</table>
+</div>
+<p class="sub">All demo passwords are <code>demo</code>.</p>
+
+<h2 id="request">A Request's life</h2>
+<ul>
+  <li>A Request has one or more <b>lines</b>. Each line is a type, a quantity, and a time window.</li>
+  <li>Each line is <b>Required</b> or <b>Optional</b>. The Request succeeds only if every Required line can be given. Optional lines never block it.</li>
+  <li>While drafting, each line shows a <b>Quote</b>: its price in credits, worked out by the server.</li>
+</ul>
+<div class="flow">Draft ──Submit──▶ Submitted ──▶ Allocated   (every Required line fits)
+                              └──▶ Waiting     (something is taken; lines join the Waitlist)
+Draft or Waiting ──Withdraw──▶ Withdrawn</div>
+<ul>
+  <li><b>Submit</b> locks the Quotes, so the price can't change afterwards. It's refused if the team can't afford the Required lines, and the refusal says how many credits short it is.</li>
+  <li><b>Waitlist</b> order: bumped lines first, then Priority lines, then by submission time.</li>
+  <li><span class="tag next">Next</span> <b>Pending</b>: when a Request includes a person, it waits for the lending Manager's approval. Meanwhile the room and GPUs are put on <b>Hold</b> (reserved but not charged) for a limited time, the <b>Objection Window</b>.</li>
+</ul>
+
+<h2 id="credits">Credits and pricing</h2>
+<ul>
+  <li>Each Team has an <b>Account</b>. The Capacity Planner gives it a <b>Grant</b> every Period (one month). In the demo, Platform gets 5,000, Research 600, and Operations 1,000.</li>
+  <li><b>Balance</b> = granted + earned credits. <b>Available</b> = Balance minus credits held for pending work.</li>
+  <li><b>Price</b> = Unit Price × hours × the Price Band multiplier. Weekdays 09:00–17:00 cost ×1.5, weekends ×0.5, and other hours ×1.0.
+    <br><span class="sub">Example: Room A on Tuesday 14:00–16:00 costs 10 × 2 h × 1.5 = 30 credits.</span></li>
+  <li>A charge spends granted credits first, then earned ones. Unused granted credits expire at the end of the Period.</li>
+  <li><span class="tag next">Next</span> Teams <b>earn</b> credits when they lend a person. Releasing a booking early refunds a share: 75% if it's at least 7 days ahead, otherwise 25%.</li>
+</ul>
+
+<h2 id="hard">How we built the hard parts</h2>
+
+<h3>1. Two people booking the last room at the same moment</h3>
+<p>If two Managers submit at the same instant, both could see Room A as free and both book it. We stop this in two ways:</p>
+<div class="how">
+  <b>How we did it</b>
+  <ul>
+    <li><b>The database refuses overlaps.</b> The <code>exclusive_occurrence</code> table has a PostgreSQL <i>exclusion constraint</i>: no two active bookings of the same resource may have overlapping time ranges (<code>EXCLUDE USING gist</code>). Even buggy Java code can't double-book a room.</li>
+    <li><b>One submit per Resource Type at a time.</b> Before checking anything, a submit locks the row for each Resource Type it touches (<code>SELECT … FOR UPDATE</code>). A second submit for the same type waits until the first finishes, then sees the up-to-date picture.</li>
+  </ul>
+</div>
+
+<h3>2. Sharing a GPU pool fairly</h3>
+<p>A GPU pool can be split, so "no overlap" doesn't apply. The rule is that in every hour, the units in use must not exceed the pool, or the team's Quota.</p>
+<div class="how">
+  <b>How we did it</b>
+  <ul>
+    <li>A query sums the units already used (allocated or held) <b>for each hour</b> of the requested window.</li>
+    <li>A small pure function (<code>HourlyLoad</code>) finds the first hour where the new line wouldn't fit. It reports <code>POOL_FULL</code> or <code>QUOTA_EXCEEDED</code> with that hour.</li>
+    <li>A database constraint can't express a sum, so this check relies on the same type lock as above. Nobody can change the pool between the check and the write.</li>
+    <li>The same check guards the Resource Owner: shrinking or retiring a GPU node is refused if future bookings would no longer fit.</li>
+  </ul>
+</div>
+
+<h3>3. Avoiding deadlocks and stuck waits</h3>
+<div class="how">
+  <b>How we did it</b>
+  <ul>
+    <li><b>Locks are always taken in the same order</b> (ascending type id). Two transactions can't each hold a lock the other wants, so they can't deadlock on type locks.</li>
+    <li>Every allocating transaction sets a <b>5-second lock timeout</b>, so it never waits forever.</li>
+    <li>If a submit hits a timeout or deadlock, it is <b>retried once</b> in a fresh transaction. If that fails too, the user gets "try again" (HTTP 503), and nothing has changed.</li>
+  </ul>
+</div>
+
+<h3>4. Never spending more credits than a team has</h3>
+<div class="how">
+  <b>How we did it</b>
+  <ul>
+    <li>Charging or holding credits locks the team's <b>account row</b> first, then checks the Available balance. Two submits from one team can't both spend the same credits.</li>
+    <li>The account totals always equal the sum of the team's transactions, and the tests check this.</li>
+  </ul>
+</div>
+
+<h3>5. History that can't be rewritten</h3>
+<div class="how">
+  <b>How we did it</b>
+  <ul>
+    <li>Credit <b>transactions</b>, Request history, and the settings change log are append-only. The database account the app connects as is <b>not granted</b> UPDATE or DELETE on those tables. It's enforced by permissions, not just by convention.</li>
+  </ul>
+</div>
+
+<h3>6. Who can see and do what</h3>
+<div class="how">
+  <b>How we did it</b>
+  <ul>
+    <li>Session login with CSRF protection (the browser sends a token from a cookie back in a header).</li>
+    <li>Every write checks the role. Without it the answer is <code>403 Forbidden</code>, and nothing changes.</li>
+    <li>A Manager asking for another team's Request or Statement gets <code>404 Not Found</code>, so the app doesn't reveal that it exists.</li>
+  </ul>
+</div>
+
+<h3>7. Keeping prices honest</h3>
+<div class="how">
+  <b>How we did it</b>
+  <ul>
+    <li>Quotes are only ever computed on the server. The React client fetches them and never does its own math, so the Quote you see is exactly the one that gets locked.</li>
+    <li>Prices are rounded once per line (half-up, to 2 decimals). Refunds round down.</li>
+  </ul>
+</div>
+
+<h2 id="arch">Architecture in one minute</h2>
+<ul>
+  <li><b>One app, one database:</b> a Spring Boot (Java) back end, PostgreSQL 16, and a React + TypeScript front end served by the same app. This is a "modular monolith".</li>
+  <li><b>Modules:</b> <code>members</code>, <code>inventory</code>, <code>settings</code>, <code>ledger</code>, <code>allocation</code>, and <code>requests</code> are built. <code>notifications</code>, <code>dashboard</code>, and <code>jobs</code> come next.</li>
+  <li><b>Module rules:</b> a module only calls the modules below it and only writes its own tables. An <b>ArchUnit</b> test fails the build if anyone breaks this.</li>
+  <li><b>Database changes</b> are versioned scripts run by <b>Flyway</b> at startup.</li>
+  <li><b>Tests</b> run on a real PostgreSQL 16 started by Testcontainers. An in-memory database couldn't check the exclusion constraint or the locks.</li>
+</ul>
+</main>

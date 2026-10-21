@@ -1,0 +1,159 @@
+<title>OpenBench Demo Cheat Sheet</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;600&family=IBM+Plex+Mono:wght@500&display=swap">
+<style>
+/* Layout: one narrow reading column, numbered sections in speaking order. */
+:root {
+  --bg: #ffffff; --ink: #18222d; --muted: #5b6876; --line: #dde3e9; --accent: #1f5f8b; --soft: #eef3f7;
+  --body: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) { --bg: #12181e; --ink: #e5ebf0; --muted: #9aa7b4; --line: #2b3641; --accent: #74b6e2; --soft: #1c2731; color-scheme: dark; }
+}
+:root[data-theme="dark"] { --bg: #12181e; --ink: #e5ebf0; --muted: #9aa7b4; --line: #2b3641; --accent: #74b6e2; --soft: #1c2731; color-scheme: dark; }
+body {
+  background: var(--bg); color: var(--ink); font: 17px/1.6 var(--body);
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 28px 64px;
+}
+main { max-width: 720px; margin: 0 auto; }
+h1 { font-size: 1.7rem; margin: 0 0 4px; }
+h2 { font-size: 1.2rem; margin: 36px 0 8px; padding-top: 16px; border-top: 2px solid var(--line); display: flex; justify-content: space-between; gap: 8px; }
+h2 small { font: 500 0.85rem var(--mono); color: var(--muted); }
+p { margin: 6px 0; }
+ul, ol { margin: 6px 0; padding-left: 1.4em; }
+li { margin: 4px 0; }
+li::marker { color: var(--accent); font-weight: 600; }
+code, b.k { font-family: var(--mono); font-size: 0.88em; background: var(--soft); padding: 1px 5px; border-radius: 4px; font-weight: 500; }
+.say { color: var(--muted); font-style: italic; }
+.see { display: block; color: var(--accent); font-size: 0.95em; }
+.sub { color: var(--muted); }
+table { border-collapse: collapse; font-size: 0.92rem; }
+td, th { padding: 4px 14px 4px 0; text-align: left; border-bottom: 1px solid var(--line); }
+.scroll { overflow-x: auto; }
+</style>
+
+<main>
+<h1>OpenBench Demo 1 cheat sheet</h1>
+<p class="sub">Every password is <code>demo</code>. Lines in <span class="say">italics</span> are things to say. Lines in <span style="color:var(--accent)">blue</span> are what you should see.</p>
+
+<h2>Before the grader arrives</h2>
+<ol>
+  <li>Start Docker.</li>
+  <li>For a clean database: <code>docker compose down</code></li>
+  <li>Start the app: <code>mvn spring-boot:run -Dspring-boot.run.profiles=demo</code></li>
+  <li>Open <code>http://localhost:8080</code> in the browser.</li>
+  <li>Open a second tab on the GitHub repo, and a terminal in the repo folder.</li>
+</ol>
+
+<h2>1. Intro <small>~1 min</small></h2>
+<ul>
+  <li class="say">"OpenBench is an internal marketplace. A team's Manager asks for people, rooms, and GPU time in one Request, and pays in credits."</li>
+  <li class="say">"Demo 1 covers rooms and GPUs end to end. Lending people comes next."</li>
+  <li>Stack: Spring Boot, PostgreSQL, React. One app, one database.</li>
+</ul>
+
+<h2>2. Live demo <small>~5 min · 40%</small></h2>
+
+<p><b>Inventory</b></p>
+<ol>
+  <li>Log in as <b class="k">dave</b> (Resource Owner).</li>
+  <li>Click <b>Inventory</b>.
+    <span class="see">3 types: Meeting room, Confocal microscope, GPU. The GPU pool is two nodes of 8 = 16 units.</span></li>
+  <li>Filter by type to show the filter works.</li>
+  <li>Click <b>Sign out</b>.</li>
+  <li>Log in as <b class="k">carol</b> (Administrator) and click <b>Resource Types</b>.
+    <span class="say">"New resource types are data. No code change needed."</span></li>
+  <li>Click <b>Sign out</b>.</li>
+</ol>
+
+<p><b>A Request that succeeds</b></p>
+<ol start="7">
+  <li>Log in as <b class="k">alice</b> (Platform Manager, 5,000 credits).</li>
+  <li>Click <b>Requests</b>, then <b>New Request</b>.</li>
+  <li>Add a line: <b>Meeting room</b>, Specific Resource <b>Room A</b>, 1, Tue 27 Oct 14:00 to 16:00. Click <b>Add line</b>.
+    <span class="see">Quote 30.00</span></li>
+  <li>Add a line: <b>GPU</b>, 4 units, Tue 27 Oct 09:00 to Thu 29 Oct 09:00. Click <b>Add line</b>.
+    <span class="see">Quote 1,120.00. Total 1,150.00 of 5,000.00.</span></li>
+  <li>Click <b>Submit</b>.
+    <span class="see">State: Allocated. Room A is assigned.</span></li>
+  <li>Click <b>Statement</b>.
+    <span class="see">Grants 5,000. Charges 1,150. Available 3,850.</span></li>
+  <li>Click <b>Sign out</b>.</li>
+</ol>
+
+<p><b>A Request that has to wait</b></p>
+<ol start="14">
+  <li>Log in as <b class="k">bob</b> (Research Manager, 600 credits).</li>
+  <li><b>Requests</b>, then <b>New Request</b>. Add <b>Room A</b>, Tue 27 Oct 15:00 to 17:00. Add <b>GPU</b>, 10 units, Tue 27 Oct 10:00 to 14:00.</li>
+  <li>Click <b>Submit</b>.
+    <span class="see">State: Waiting. Room A: NO_FREE_INSTANCE, Position 1. GPU: QUOTA_EXCEEDED, Position 1.</span>
+    <span class="say">"Room A is taken by alice, and Research may only hold 8 GPUs at once."</span></li>
+</ol>
+
+<p><b>A Request that is too expensive</b></p>
+<ol start="17">
+  <li><b>New Request</b>. All on Tue 27 Oct: <b>Confocal microscope</b> 09:00 to 17:00, <b>Room B</b> 09:00 to 17:00, <b>GPU</b> 1 unit 09:00 to 10:00.</li>
+  <li>Click <b>Submit</b>.
+    <span class="see">Refused: short by 7.50 credits (needs 607.50, has 600.00).</span></li>
+</ol>
+
+<p><b>Withdraw</b></p>
+<ol start="19">
+  <li>Go back to <b>Requests</b> and open bob's Waiting Request.</li>
+  <li>Click <b>Withdraw</b>.
+    <span class="see">State: Withdrawn. The Position column is now blank.</span></li>
+</ol>
+
+<p class="sub">If the app breaks: run <code>mvn test -Dtest=SubmitEndToEndTest</code>. It runs this same story against the database.</p>
+
+<h2>3. How much is done <small>~1 min · 40%</small></h2>
+<ul>
+  <li>15 of 41 requirements done (37%), 7 more partly built. Target was about 30%.</li>
+  <li>Done: Inventory, Drafts and Quotes, Submit, room and GPU allocation, Waitlist, credit Statement.</li>
+  <li>Not yet: lending people, dashboard, refunds, priority bumping.</li>
+</ul>
+
+<h2>4. Version control <small>~1 min · 15%</small></h2>
+<ol>
+  <li>Show the GitHub tab, or run <code>git log --graph --oneline</code>.</li>
+  <li class="say">"Each feature was built on its own branch and merged into main. There are 7 branches and 53 commits."</li>
+  <li class="say">"Every branch includes its own tests."</li>
+  <li class="say">"The spec lives in a separate repo, swe_csds393."</li>
+</ol>
+
+<h2>5. Testing <small>~1 min · 15%</small></h2>
+<ol>
+  <li>In the terminal, run <code>mvn verify</code> (or show the last run).</li>
+  <li class="say">"258 JUnit tests on the back end, 68 Vitest tests on the front end. All pass."</li>
+  <li class="say">"Database tests run on a real PostgreSQL 16 in Testcontainers."</li>
+  <li class="say">"We test the race for the last room: two people submit at once, and only one gets it."</li>
+  <li class="say">"An ArchUnit test fails the build if modules break the layer rules."</li>
+</ol>
+
+<h2>6. Next steps <small>~1 min · 10%</small></h2>
+<ul>
+  <li><b>Increment 2:</b> lending people. Profiles, a Shortlist of candidates, manager approvals, Loans.</li>
+  <li><b>Increment 3:</b> refunds, priority bumping, suggestions, dashboard, settings screens.</li>
+  <li><b>Challenges:</b> time-based rules (approval deadlines, month rollover) and keeping locks in order.</li>
+  <li><b>Process:</b> add CI on GitHub, merge through pull requests with reviews.</li>
+  <li class="say">Say who owns what next: ______________________</li>
+</ul>
+
+<h2>Logins</h2>
+<div class="scroll">
+<table>
+  <tr><th>User</th><th>Team</th><th>Role</th></tr>
+  <tr><td><code>alice</code></td><td>Platform</td><td>Manager</td></tr>
+  <tr><td><code>ben</code></td><td>Platform</td><td>Member</td></tr>
+  <tr><td><code>bob</code></td><td>Research</td><td>Manager</td></tr>
+  <tr><td><code>rita</code></td><td>Research</td><td>Member</td></tr>
+  <tr><td><code>oscar</code></td><td>Operations</td><td>Manager</td></tr>
+  <tr><td><code>carol</code></td><td>Operations</td><td>Administrator</td></tr>
+  <tr><td><code>dave</code></td><td>Operations</td><td>Resource Owner</td></tr>
+  <tr><td><code>erin</code></td><td>Operations</td><td>Capacity Planner</td></tr>
+</table>
+</div>
+<p class="sub">Password for all: <code>demo</code></p>
+</main>
