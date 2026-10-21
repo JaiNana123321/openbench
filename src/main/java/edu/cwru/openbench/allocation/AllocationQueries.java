@@ -4,6 +4,7 @@ import edu.cwru.openbench.common.RequestLineId;
 import edu.cwru.openbench.common.ResourceId;
 import edu.cwru.openbench.common.ResourceTypeId;
 import java.time.Instant;
+import java.util.List;
 import java.util.Optional;
 
 /** Read-only questions about live (HELD or ALLOCATED) rows and the waitlist. */
@@ -15,6 +16,12 @@ public interface AllocationQueries {
      * then Priority, then submission time, then entry id). Empty when the line is not waiting.
      */
     Optional<Integer> waitlistPosition(RequestLineId line);
+
+    /**
+     * The Resources an Exclusive line's live (HELD or ALLOCATED) occurrences are on, by id; empty
+     * for a Metered line, whose units come from the pool, and for a line with no live rows.
+     */
+    List<ResourceId> resourcesOf(RequestLineId line);
 
     /**
      * The largest hourly sum of live units from {@code from} on, Holds counted: of the type's Metered

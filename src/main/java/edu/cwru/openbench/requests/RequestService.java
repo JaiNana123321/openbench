@@ -14,6 +14,8 @@ import edu.cwru.openbench.inventory.ResourceType;
 import edu.cwru.openbench.ledger.LedgerService;
 import java.time.Clock;
 import java.time.Instant;
+import java.util.Collection;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -149,6 +151,25 @@ public class RequestService {
         Credits available = ledger.account(new TeamId(request.teamId())).available();
         Credits shortfall = required.compareTo(available) > 0 ? required.minus(available) : Credits.ZERO;
         return new DraftView(session.request(request), shown, required, optional, available, shortfall);
+    }
+
+    /**
+     * GET /api/requests/lines?ids=...: the lines with these ids that the caller may see, by id, so a
+     * Statement can link each Charge to its Request. Ids out of scope or unknown are left out.
+     */
+    @PreAuthorize("hasAnyAuthority('MANAGER', 'PLANNER')")
+    public List<RequestLine> lines(Actor actor, Collection<RequestLineId> ids) {
+        List<RequestLineRow> rows = lines.findAllById(ids.stream().map(RequestLineId::value).toList());
+        Map<Long, RequestRow> owners = requests.findAllById(rows.stream().map(RequestLineRow::requestId).toList())
+                .stream()
+                .filter(request -> RequestAccess.mayView(actor, request.teamId()))
+                .collect(Collectors.toMap(RequestRow::id, request -> request));
+        RequestViews.Session session = views.session();
+        return rows.stream()
+                .filter(row -> owners.containsKey(row.requestId()))
+                .sorted(Comparator.comparing(RequestLineRow::id))
+                .map(row -> session.line(owners.get(row.requestId()), row))
+                .toList();
     }
 
     /**
