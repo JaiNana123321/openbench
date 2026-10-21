@@ -52,12 +52,16 @@ abstract class AllocationTest extends PostgresTest {
 
     protected long owner;
 
+    /** The username of {@link #owner}, a Resource Owner who owns every Resource these tests add. */
+    protected String ownerUsername;
+
     @BeforeEach
     void createATeamAndAnOwner() {
         tx = new TransactionTemplate(transactionManager);
         testData().periodContaining(LocalDate.now(clock));
         team = testData().team(unique("Team"));
-        owner = testData().member(team, unique("owner"), Role.RESOURCE_OWNER);
+        ownerUsername = unique("owner");
+        owner = testData().member(team, ownerUsername, Role.RESOURCE_OWNER);
     }
 
     // ---------------------------------------------------------------- time

@@ -3,7 +3,9 @@ package edu.cwru.openbench.allocation;
 import edu.cwru.openbench.common.NotFoundException;
 import edu.cwru.openbench.common.ResourceTypeId;
 import java.util.SortedSet;
+import javax.sql.DataSource;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.support.SQLErrorCodeSQLExceptionTranslator;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
@@ -17,8 +19,14 @@ import org.springframework.transaction.annotation.Transactional;
  * <p>Before locking it sets {@code lock_timeout} to 5 s with {@code set_config(..., true)}, the
  * function form of {@code SET LOCAL}, so the limit ends with the transaction and covers every later
  * lock in it, the account lock included. A timeout the transaction already set is kept, which lets
- * a test shorten the wait. A lock timeout (55P03) or deadlock (40P01) reaches the caller as Spring's
- * {@code PessimisticLockingFailureException}, unchanged; the caller retries.
+ * a test shorten the wait.
+ *
+ * <p>A lock timeout (55P03) or deadlock (40P01) reaches the caller as Spring's
+ * {@code PessimisticLockingFailureException}, unchanged; the caller retries. That needs Spring's
+ * error-code translator, which knows PostgreSQL's codes ({@code CannotAcquireLockException} for
+ * 55P03): the default translator of a {@code JdbcTemplate} since Spring 6 leaves 55P03
+ * uncategorized. So this class builds its own template on the application's {@code DataSource};
+ * it still runs on the transaction's connection.
  */
 @Component
 @Transactional(propagation = Propagation.MANDATORY)
@@ -28,8 +36,9 @@ class TypeRowLock implements AllocationLock {
 
     private final JdbcTemplate jdbc;
 
-    TypeRowLock(JdbcTemplate jdbc) {
-        this.jdbc = jdbc;
+    TypeRowLock(DataSource dataSource) {
+        this.jdbc = new JdbcTemplate(dataSource);
+        this.jdbc.setExceptionTranslator(new SQLErrorCodeSQLExceptionTranslator(dataSource));
     }
 
     @Override
