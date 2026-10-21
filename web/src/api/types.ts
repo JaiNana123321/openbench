@@ -284,3 +284,48 @@ export interface RequestSummary {
   lineCount: number;
   requiredSum: Credits;
 }
+
+// ---------------------------------------------------------------- Requests: submission and detail
+
+/** A Resource an allocated Exclusive line is on. */
+export interface AssignedResource {
+  id: Id;
+  name: string;
+}
+
+/**
+ * One line of a Request detail. `reason` is a code such as `NO_FREE_INSTANCE`, `POOL_FULL`, or
+ * `QUOTA_EXCEEDED`, with `reasonMessage` the server's sentence, for a line that waits or was
+ * Dropped; `waitlistPosition` counts from 1 while the line is on its waitlist.
+ */
+export interface LineDetail {
+  line: RequestLine;
+  assignedResources: AssignedResource[];
+  reason: string | null;
+  reasonMessage: string | null;
+  waitlistPosition: number | null;
+}
+
+/**
+ * One entry of a Request's history: a change of the Request (`line` null) or of one line.
+ * `fromState` is null when the Request was created; `actor` is null for the system.
+ */
+export interface RequestEvent {
+  at: Instant;
+  line: Id | null;
+  fromState: string | null;
+  toState: string;
+  actor: Id | null;
+  actorName: string | null;
+  note: string | null;
+}
+
+/**
+ * GET /api/requests/{id}: the Request, its lines as they stand, and its history, oldest first.
+ * POST /api/requests/{id}/submit and /withdraw answer the Request in its new state (`RequestRecord`).
+ */
+export interface RequestDetail {
+  request: RequestRecord;
+  lines: LineDetail[];
+  history: RequestEvent[];
+}

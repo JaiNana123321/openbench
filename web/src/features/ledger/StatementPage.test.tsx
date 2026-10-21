@@ -4,6 +4,7 @@ import type { Period, Statement } from '../../api/types';
 import { alice, ben, erin } from '../../test/members';
 import { json, mockApi, problem, session } from '../../test/mockApi';
 import { renderApp } from '../../test/renderApp';
+import { gpuLine, roomLine } from '../requests/fixtures';
 
 const october: Period = { id: 10, startsOn: '2026-10-01', endsOn: '2026-10-31', previous: null };
 const november: Period = { id: 11, startsOn: '2026-11-01', endsOn: '2026-11-30', previous: 10 };
@@ -112,6 +113,27 @@ describe('StatementPage', () => {
     expect(server.callsTo('GET /api/ledger/statements/:team/:period').map((call) => call.path)).toEqual([
       '/api/ledger/statements/1/10',
     ]);
+  });
+
+  it('links each Charge to its Request', async () => {
+    const server = mockApi({
+      'GET /api/me': session(alice),
+      'GET /api/settings/periods': json([october, november]),
+      'GET /api/ledger/statements/:team/:period': json(platformOctober),
+      'GET /api/requests/lines': json([
+        { ...roomLine, id: 41 },
+        { ...gpuLine, id: 42 },
+      ]),
+    });
+    renderApp('/statement');
+
+    expect(await screen.findAllByRole('link', { name: 'Request #42' })).toHaveLength(2);
+    const rows = within(screen.getByRole('table', { name: 'Transactions' })).getAllByRole('row');
+    expect(within(rows[2]).getByRole('link', { name: 'Request #42' })).toHaveAttribute('href', '/requests/42');
+    expect(rows[2]).toHaveTextContent('Meeting room');
+    expect(within(rows[3]).getByRole('link', { name: 'Request #42' })).toHaveAttribute('href', '/requests/42');
+    expect(rows[3]).toHaveTextContent('GPU');
+    expect(server.callsTo('GET /api/requests/lines').map((call) => call.query.get('ids'))).toEqual(['41,42']);
   });
 
   it('lets a Manager pick another Period', async () => {
