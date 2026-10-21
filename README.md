@@ -1,5 +1,13 @@
 # OpenBench
 
+### Collaborators:
+
+Jai Nana - jai.nana.rsa@gmail.com
+Yerassyl Shnazbaev - yerassyl.shnazbaev06@gmail.com
+Brian Lujan - brianlujan@outlook.com
+Fotih Turopov - fotihturopov@gmail.com
+
+
 An internal resource marketplace: a Team's Manager posts one Request for people, Exclusive resources such as rooms, and Metered capacity such as GPU hours, and the system allocates each line under its Allocation Class and settles it in credits.
 
 The specification (SRS, design document, ADRs) is in [`docs/`](docs/README.md); the domain vocabulary is in [`CONTEXT.md`](CONTEXT.md).
@@ -23,7 +31,7 @@ This runs the unit tests, the integration tests on PostgreSQL 16 with the produc
 mvn spring-boot:run -Dspring-boot.run.profiles=demo
 ```
 
-Spring Boot starts the database from `compose.yaml`, Flyway migrates it, and the `demo` profile adds the demo world's seed data (`src/main/resources/db/demo`). The application listens on <http://localhost:8080>; the API is under `/api`, and its OpenAPI document is at `/api/docs` (browsable at `/api/docs/ui` once signed in). Stopping the application stops the database container and keeps its data; `docker compose down` removes it.
+Spring Boot starts the database from `compose.yaml`, Flyway migrates it, and the `demo` profile adds the demo world's seed data (`src/main/resources/db/demo`). The application listens on [http://localhost:8080](http://localhost:8080); the API is under `/api`, and its OpenAPI document is at `/api/docs` (browsable at `/api/docs/ui` once signed in). Stopping the application stops the database container and keeps its data; `docker compose down` removes it.
 
 A quick check from the command line:
 
@@ -38,25 +46,25 @@ curl -s -c jar -b jar http://localhost:8080/api/me                       # 200, 
 
 Every demo Member's password is `demo`.
 
-| Username | Name | Team | Roles besides Member |
-|---|---|---|---|
-| `alice` | Alice Chen | Platform | Manager |
-| `ben` | Ben Ortiz | Platform | |
-| `bob` | Bob Patel | Research | Manager |
-| `rita` | Rita Gomez | Research | |
-| `oscar` | Oscar Reed | Operations | Manager |
-| `carol` | Carol Davis | Operations | Administrator |
-| `dave` | Dave Kim | Operations | Resource Owner |
-| `erin` | Erin Walsh | Operations | Capacity Planner |
+| Username  | Name        | Team       | Roles besides Member |
+| --------- | ----------- | ---------- | -------------------- |
+| `alice` | Alice Chen  | Platform   | Manager              |
+| `ben`   | Ben Ortiz   | Platform   |                      |
+| `bob`   | Bob Patel   | Research   | Manager              |
+| `rita`  | Rita Gomez  | Research   |                      |
+| `oscar` | Oscar Reed  | Operations | Manager              |
+| `carol` | Carol Davis | Operations | Administrator        |
+| `dave`  | Dave Kim    | Operations | Resource Owner       |
+| `erin`  | Erin Walsh  | Operations | Capacity Planner     |
 
 ## Configuration
 
 Settings come from `src/main/resources/application.yaml` and can be overridden with environment variables:
 
-| Variable | Meaning | Default |
-|---|---|---|
+| Variable                                                                                  | Meaning                                                                                                                                                        | Default               |
+| ----------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------- |
 | `SPRING_DATASOURCE_URL`, `SPRING_DATASOURCE_USERNAME`, `SPRING_DATASOURCE_PASSWORD` | The database. In production the application connects as `openbench_app` and Flyway as the schema owner (`SPRING_FLYWAY_USER`, `SPRING_FLYWAY_PASSWORD`). | from `compose.yaml` |
-| `OPENBENCH_ZONE` | The company time zone | `America/New_York` |
-| `SERVER_SERVLET_SESSION_COOKIE_SECURE` | Mark the session cookie `Secure`; set it to `true` behind HTTPS | `false` |
+| `OPENBENCH_ZONE`                                                                        | The company time zone                                                                                                                                          | `America/New_York`  |
+| `SERVER_SERVLET_SESSION_COOKIE_SECURE`                                                  | Mark the session cookie `Secure`; set it to `true` behind HTTPS                                                                                            | `false`             |
 
 ## Web client
