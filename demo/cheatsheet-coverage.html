@@ -1,0 +1,102 @@
+<title>OpenBench Coverage Cheat Sheet</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;600&family=IBM+Plex+Mono:wght@500&display=swap">
+<style>
+/* Layout: one narrow reading column, numbered sections in speaking order. */
+:root {
+  --bg: #ffffff; --ink: #18222d; --muted: #5b6876; --line: #dde3e9; --accent: #1f5f8b; --soft: #eef3f7;
+  --body: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) { --bg: #12181e; --ink: #e5ebf0; --muted: #9aa7b4; --line: #2b3641; --accent: #74b6e2; --soft: #1c2731; color-scheme: dark; }
+}
+:root[data-theme="dark"] { --bg: #12181e; --ink: #e5ebf0; --muted: #9aa7b4; --line: #2b3641; --accent: #74b6e2; --soft: #1c2731; color-scheme: dark; }
+body {
+  background: var(--bg); color: var(--ink); font: 17px/1.6 var(--body);
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 28px 64px;
+}
+main { max-width: 720px; margin: 0 auto; }
+h1 { font-size: 1.7rem; margin: 0 0 4px; }
+h2 { font-size: 1.2rem; margin: 36px 0 8px; padding-top: 16px; border-top: 2px solid var(--line); display: flex; justify-content: space-between; gap: 8px; }
+h2 small { font: 500 0.85rem var(--mono); color: var(--muted); }
+p { margin: 6px 0; }
+ul, ol { margin: 6px 0; padding-left: 1.4em; }
+li { margin: 4px 0; }
+li::marker { color: var(--accent); font-weight: 600; }
+code, b.k { font-family: var(--mono); font-size: 0.88em; background: var(--soft); padding: 1px 5px; border-radius: 4px; font-weight: 500; }
+.say { color: var(--muted); font-style: italic; }
+.see { display: block; color: var(--accent); font-size: 0.95em; }
+.sub { color: var(--muted); }
+table { border-collapse: collapse; font-size: 0.92rem; }
+td, th { padding: 4px 14px 4px 0; text-align: left; border-bottom: 1px solid var(--line); }
+.scroll { overflow-x: auto; }
+.qa li { margin: 8px 0; }
+.qa b { display: block; }
+h3 { font-size: 1rem; margin: 18px 0 4px; }
+</style>
+
+
+<main>
+<h1>Section 3 cheat sheet: How much is done</h1>
+<p class="sub">About 1 minute · Functionality, 40%. <span class="say">Italics</span> = say it. <span style="color:var(--accent)">Blue</span> = what's on screen.</p>
+
+<h2>Steps</h2>
+<ol>
+  <li>Open the presenter page and press <b class="k">3</b> (Coverage).
+    <span class="see">The bar: 15 complete (green), 7 partly built (amber), 19 next (grey).</span></li>
+  <li class="say">"The SRS has 41 Release 1 requirements. 15 are complete, which is 37%, and 7 more are partly built. The target was about 30%."</li>
+  <li>Point at the module boxes.
+    <span class="say">"Six of the nine back-end modules are built. The other three are empty packages for the next increments."</span></li>
+  <li>Click <b>Complete</b> in the filter to show only finished requirements.</li>
+  <li>Click <b>Partly built</b> and explain one example (below).</li>
+  <li>Click <b>All 41</b> to reset.</li>
+</ol>
+
+<h2>The key numbers</h2>
+<ul>
+  <li>41 Release 1 requirements in the submitted SRS (plus 6 Stretch ones, not counted).</li>
+  <li>15 complete (37%), 7 partly built, 19 not started.</li>
+  <li>6 of 9 modules built: members, inventory, settings, ledger, allocation, requests.</li>
+  <li>About 11,500 lines of app code: 7,712 Java and 3,809 TypeScript.</li>
+</ul>
+
+<h2>What is complete</h2>
+<ul>
+  <li><b>Inventory:</b> define Resource Types as data, then add, change and retire Resources.</li>
+  <li><b>Drafts:</b> create a Request, add lines, mark them Required or Optional, and see live Quotes.</li>
+  <li><b>Submit:</b> Quotes lock, and the Request is refused with the shortfall if the team can't afford it.</li>
+  <li><b>Rooms (Exclusive):</b> no double-booking, plus the Waitlist.</li>
+  <li><b>GPUs (Metered):</b> an hour-by-hour check against the pool size and the team Quota.</li>
+  <li><b>Credits:</b> Accounts, the append-only transaction history, and the price formula.</li>
+</ul>
+
+<h2>What "partly built" means</h2>
+<p>The core is in and tested, but one piece is missing. Examples to quote:</p>
+<ul>
+  <li><b>Holds:</b> holding and releasing a booking work in both allocators, but nothing places a Hold until the Pending state arrives with people-lending.</li>
+  <li><b>Grants:</b> monthly Grants, mid-month Grants and Statements work. The job that rolls over to the next month is next.</li>
+  <li><b>Refunds:</b> the refund formula is built and tested. The screen to release a booking is next.</li>
+  <li><b>Settings:</b> prices and Quotas are stored as data and served by the API. The edit screens are next.</li>
+</ul>
+
+<h2>What is not built yet</h2>
+<ul>
+  <li>Lending people (the Matched class): profiles, shortlists, approvals, Loans.</li>
+  <li>Priority bumping, releasing a booking, suggestions, the dashboard, adding members.</li>
+</ul>
+
+<h2>Why we built in this order</h2>
+<ul>
+  <li class="say">"Our design builds modules from the bottom up. Inventory, Settings and the Ledger don't depend on anything else, so they came first. Allocation and Requests sit on top of them."</li>
+  <li class="say">"That gave us one complete path, from Inventory to a charge on the Statement, instead of many half-finished features."</li>
+</ul>
+
+<h2>If the grader asks</h2>
+<ul class="qa">
+  <li><b>"How did you count 30%?"</b> By requirements in the SRS: 15 of 41 are fully done. We count partial ones separately, not as done.</li>
+  <li><b>"Why no people-lending yet?"</b> It depends on everything else: Holds, the Pending state, approvals, and earning credits. It's the whole of the next increment.</li>
+  <li><b>"Is this a mockup?"</b> No. Every screen calls the real API, and the data is in PostgreSQL. The live demo shows it.</li>
+</ul>
+</main>

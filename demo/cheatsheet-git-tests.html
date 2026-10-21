@@ -1,0 +1,109 @@
+<title>OpenBench Git and Tests Cheat Sheet</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;600&family=IBM+Plex+Mono:wght@500&display=swap">
+<style>
+/* Layout: one narrow reading column, numbered sections in speaking order. */
+:root {
+  --bg: #ffffff; --ink: #18222d; --muted: #5b6876; --line: #dde3e9; --accent: #1f5f8b; --soft: #eef3f7;
+  --body: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) { --bg: #12181e; --ink: #e5ebf0; --muted: #9aa7b4; --line: #2b3641; --accent: #74b6e2; --soft: #1c2731; color-scheme: dark; }
+}
+:root[data-theme="dark"] { --bg: #12181e; --ink: #e5ebf0; --muted: #9aa7b4; --line: #2b3641; --accent: #74b6e2; --soft: #1c2731; color-scheme: dark; }
+body {
+  background: var(--bg); color: var(--ink); font: 17px/1.6 var(--body);
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 28px 64px;
+}
+main { max-width: 720px; margin: 0 auto; }
+h1 { font-size: 1.7rem; margin: 0 0 4px; }
+h2 { font-size: 1.2rem; margin: 36px 0 8px; padding-top: 16px; border-top: 2px solid var(--line); display: flex; justify-content: space-between; gap: 8px; }
+h2 small { font: 500 0.85rem var(--mono); color: var(--muted); }
+p { margin: 6px 0; }
+ul, ol { margin: 6px 0; padding-left: 1.4em; }
+li { margin: 4px 0; }
+li::marker { color: var(--accent); font-weight: 600; }
+code, b.k { font-family: var(--mono); font-size: 0.88em; background: var(--soft); padding: 1px 5px; border-radius: 4px; font-weight: 500; }
+.say { color: var(--muted); font-style: italic; }
+.see { display: block; color: var(--accent); font-size: 0.95em; }
+.sub { color: var(--muted); }
+table { border-collapse: collapse; font-size: 0.92rem; }
+td, th { padding: 4px 14px 4px 0; text-align: left; border-bottom: 1px solid var(--line); }
+.scroll { overflow-x: auto; }
+.qa li { margin: 8px 0; }
+.qa b { display: block; }
+h3 { font-size: 1rem; margin: 18px 0 4px; }
+</style>
+
+
+<main>
+<h1>Sections 4 and 5 cheat sheet: Git and tests</h1>
+<p class="sub">About 2 minutes · Version control 15% + Testing 15%. <span class="say">Italics</span> = say it. <span style="color:var(--accent)">Blue</span> = what's on screen.</p>
+
+<h2>Before you start</h2>
+<ul>
+  <li>Run <code>mvn verify</code> once earlier in the day. The first run downloads the PostgreSQL image and is slow.</li>
+  <li>Have a terminal open in the <code>openbench</code> folder, and a browser tab on the GitHub repo.</li>
+</ul>
+
+<h2>Part 1: Version control</h2>
+<ol>
+  <li>In the terminal, run:
+    <br><code>git log --graph --oneline -25</code>
+    <span class="see">Branch lines joining main at each "Merge branch 'feature/…'" commit.</span></li>
+  <li class="say">"Each feature was built on its own branch and merged into main. There are 7 feature branches and 53 commits from 15 to 21 October."</li>
+  <li>Point at one branch, for example <code>feature/allocation</code>:
+    <span class="say">"Each branch adds the code, then its tests, then merges. Here are two code commits followed by two test commits."</span></li>
+  <li>Read one commit message out loud, for example <i>"Test the guard, the type lock, the registry, and the race for capacity"</i>.
+    <span class="say">"Messages say what changed, so the history reads like a changelog."</span></li>
+  <li>In the GitHub tab, open <b>Branches</b> to show the pushed branches.</li>
+  <li class="say">"The spec (SRS, design doc, ADRs) is in a separate repo, swe_csds393. The code repo keeps a pinned copy."</li>
+</ol>
+
+<h3>The 7 branches, in order</h3>
+<ol>
+  <li><code>feature/web-foundation</code>: React app, sign-in, layout</li>
+  <li><code>feature/backend-foundation</code>: Spring Boot, database schema, login, ArchUnit</li>
+  <li><code>feature/inventory</code>: Resource Types and Resources</li>
+  <li><code>feature/settings-ledger</code>: prices, Grants, Accounts, Statements</li>
+  <li><code>feature/requests-draft</code>: Drafts, lines, Quotes</li>
+  <li><code>feature/allocation</code>: room and GPU allocators, the Waitlist</li>
+  <li><code>feature/submit-lifecycle</code>: Submit, Withdraw, Request detail</li>
+</ol>
+
+<h2>Part 2: Testing</h2>
+<ol>
+  <li>Run the back-end tests:
+    <br><code>mvn verify</code>
+    <span class="see">BUILD SUCCESS, with the test counts.</span></li>
+  <li class="say">"258 JUnit tests on the back end. They run on a real PostgreSQL 16 that Testcontainers starts in Docker, using our real migrations."</li>
+  <li>Run the front-end tests:
+    <br><code>cd web &amp;&amp; npm test</code>
+    <span class="see">13 test files, 68 tests passing.</span></li>
+  <li class="say">"68 Vitest tests on the React screens: each page renders for the right roles and shows the server's error messages."</li>
+  <li>Open <code>src/test/java/edu/cwru/openbench/allocation/AllocationConcurrencyTest.java</code>.
+    <span class="say">"This test makes two threads race for the last free room. Exactly one wins, every time. It's a repeated test."</span></li>
+  <li>Show a test display name with a requirement id, for example <i>"Metered.Pool.Check: is POOL_FULL at 14:00, one unit short"</i>.
+    <span class="say">"Test names carry the SRS requirement ids, so we can trace every requirement to its tests."</span></li>
+  <li class="say">"ArchUnit fails the build if a module breaks our layer rules."</li>
+</ol>
+
+<h3>Kinds of tests (if asked)</h3>
+<ul>
+  <li><b>Unit:</b> pure rules such as pricing, time windows and the hourly GPU check.</li>
+  <li><b>Integration:</b> services and REST endpoints on PostgreSQL.</li>
+  <li><b>Database:</b> migrations, the no-overlap constraint, and the append-only permissions.</li>
+  <li><b>Concurrency:</b> races for the last room and the last GPU units.</li>
+  <li><b>Architecture:</b> ArchUnit module rules.</li>
+  <li><b>End to end:</b> <code>SubmitEndToEndTest</code> runs the whole live demo story.</li>
+</ul>
+
+<h2>If the grader asks</h2>
+<ul class="qa">
+  <li><b>"Why not an in-memory database for tests?"</b> Our no-double-booking rule is a PostgreSQL exclusion constraint. H2 can't check it, so the tests would prove nothing.</li>
+  <li><b>"Do the tests run automatically?"</b> They run with <code>mvn verify</code> on every build. Adding GitHub Actions so they run on every push is our first next step.</li>
+  <li><b>"How do you collaborate?"</b> Feature branches merged into main. Next increment, every merge goes through a pull request reviewed by a teammate.</li>
+</ul>
+</main>

@@ -1,0 +1,113 @@
+<title>OpenBench Roadmap Cheat Sheet</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;600&family=IBM+Plex+Mono:wght@500&display=swap">
+<style>
+/* Layout: one narrow reading column, numbered sections in speaking order. */
+:root {
+  --bg: #ffffff; --ink: #18222d; --muted: #5b6876; --line: #dde3e9; --accent: #1f5f8b; --soft: #eef3f7;
+  --body: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) { --bg: #12181e; --ink: #e5ebf0; --muted: #9aa7b4; --line: #2b3641; --accent: #74b6e2; --soft: #1c2731; color-scheme: dark; }
+}
+:root[data-theme="dark"] { --bg: #12181e; --ink: #e5ebf0; --muted: #9aa7b4; --line: #2b3641; --accent: #74b6e2; --soft: #1c2731; color-scheme: dark; }
+body {
+  background: var(--bg); color: var(--ink); font: 17px/1.6 var(--body);
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 28px 64px;
+}
+main { max-width: 720px; margin: 0 auto; }
+h1 { font-size: 1.7rem; margin: 0 0 4px; }
+h2 { font-size: 1.2rem; margin: 36px 0 8px; padding-top: 16px; border-top: 2px solid var(--line); display: flex; justify-content: space-between; gap: 8px; }
+h2 small { font: 500 0.85rem var(--mono); color: var(--muted); }
+p { margin: 6px 0; }
+ul, ol { margin: 6px 0; padding-left: 1.4em; }
+li { margin: 4px 0; }
+li::marker { color: var(--accent); font-weight: 600; }
+code, b.k { font-family: var(--mono); font-size: 0.88em; background: var(--soft); padding: 1px 5px; border-radius: 4px; font-weight: 500; }
+.say { color: var(--muted); font-style: italic; }
+.see { display: block; color: var(--accent); font-size: 0.95em; }
+.sub { color: var(--muted); }
+table { border-collapse: collapse; font-size: 0.92rem; }
+td, th { padding: 4px 14px 4px 0; text-align: left; border-bottom: 1px solid var(--line); }
+.scroll { overflow-x: auto; }
+.qa li { margin: 8px 0; }
+.qa b { display: block; }
+h3 { font-size: 1rem; margin: 18px 0 4px; }
+</style>
+
+
+<main>
+<h1>Section 6 cheat sheet: Next steps</h1>
+<p class="sub">About 1 minute · Planning, 10%. <span class="say">Italics</span> = say it. Fill in the blanks before the demo.</p>
+
+<h2>Steps</h2>
+<ol>
+  <li>Open the presenter page and press <b class="k">6</b> (Next steps).</li>
+  <li>Walk the three columns left to right: Done, Increment 2, Increment 3.</li>
+  <li>Name the owners (table below).</li>
+  <li>Mention the challenges and the process changes.</li>
+  <li>Close with the Demo 2 line, then ask for questions.</li>
+</ol>
+
+<h2>Increment 2: lending people</h2>
+<p class="say">"Next we build the third Allocation Class, Matched: lending a person from one team to another."</p>
+<ul>
+  <li><b>Profiles:</b> Members record their skills and availability.</li>
+  <li><b>Shortlist:</b> for a skill request, a list of matching people, least-lent first.</li>
+  <li><b>Approvals:</b> the person's own Manager approves or refuses. A refusal can be replaced. No answer escalates to the Capacity Planner.</li>
+  <li><b>Pending and Holds:</b> while waiting for approval, the room and GPUs are held but not charged, for a limited time (the Objection Window).</li>
+  <li><b>Loans and Earnings:</b> once approved, the person is on Loan and the lending team earns credits.</li>
+  <li><b>Re-check Waiting Requests</b> whenever capacity frees up.</li>
+  <li><b>Goal:</b> an end-to-end test of one Request asking for a person, a room and GPUs.</li>
+</ul>
+
+<h2>Increment 3: release, priority, oversight</h2>
+<ul>
+  <li>Release a booking early, with refunds by how far ahead it is.</li>
+  <li>Priority lines that can bump standard ones.</li>
+  <li>Suggestions: Members propose lines to their Manager.</li>
+  <li>Scheduled jobs: month rollover and approval deadlines.</li>
+  <li>Showback dashboard, settings screens, and adding members.</li>
+  <li>Stretch only after that: GPU tiers, usage records, demand surcharge.</li>
+</ul>
+
+<h2>Who owns what</h2>
+<div class="scroll">
+<table>
+  <tr><th>Work</th><th>Owner</th></tr>
+  <tr><td>Profiles and Shortlist</td><td>__________</td></tr>
+  <tr><td>Approvals, Objection Window, escalation</td><td>__________</td></tr>
+  <tr><td>Loans, Earnings, Holds</td><td>__________</td></tr>
+  <tr><td>Client screens for all of the above</td><td>__________</td></tr>
+  <tr><td>CI and code review setup</td><td>__________</td></tr>
+</table>
+</div>
+
+<h2>Challenges to mention</h2>
+<ul>
+  <li><b>Time-based rules.</b> <span class="say">"Approval deadlines and month rollover depend on the clock. We'll test them by moving a fake clock forward."</span></li>
+  <li><b>Lock order.</b> <span class="say">"Loans add more locks to a submit. We have to keep taking them in the same order to avoid deadlocks."</span></li>
+  <li><b>Front end and API drift.</b> <span class="say">"More screens means more endpoints. Generating TypeScript types from the API makes a mismatch fail the build."</span></li>
+  <li><b>Scope.</b> <span class="say">"Four students, one semester. Release 1 is fixed, and stretch features only start once it works end to end."</span></li>
+</ul>
+
+<h2>Process changes</h2>
+<ul>
+  <li>GitHub Actions runs <code>mvn verify</code> and <code>npm test</code> on every push and pull request.</li>
+  <li>Every merge goes through a pull request reviewed by another teammate.</li>
+  <li>Vitest runs inside <code>mvn verify</code>, so one command checks everything.</li>
+  <li>Each requirement becomes a tracked issue with an owner.</li>
+</ul>
+
+<h2>Closing line</h2>
+<p class="say">"In Demo 2, alice will ask for a person, a room and GPUs in one Request. Bob's team lends the person and earns credits for it. Questions?"</p>
+
+<h2>If the grader asks</h2>
+<ul class="qa">
+  <li><b>"What's the riskiest part?"</b> The approval flow, because it mixes timing (deadlines), Holds on other resources, and a second Manager's decision.</li>
+  <li><b>"How will you know you're on track?"</b> The end-to-end test of the three-line Request. When it passes, Increment 2 is done.</li>
+  <li><b>"What if you run out of time?"</b> Stretch features are optional extension points, so dropping them doesn't break anything.</li>
+</ul>
+</main>
