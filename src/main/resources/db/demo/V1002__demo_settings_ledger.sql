@@ -1,7 +1,9 @@
--- Demo world: Periods, planner settings, prices, Price Bands, Refund steps, bump cutoffs, the Quota,
--- and the October Grants with their Accounts (.scratch/demo1/demo-world.md). Runs only under the
--- Spring profile `demo`. Teams come from V1000 and Resource Types from V1001, found by name, never
--- by id; the Capacity Planner erin is recorded as the creator of the settings.
+-- Demo world: planner settings, prices, Price Bands, Refund steps, bump cutoffs, the Quota, and the
+-- current Period's Grants with their Accounts. Runs only under the Spring profile `demo`. Teams come
+-- from V1000, Resource Types from V1001, and the Periods from V21 (ten years of months from the
+-- installation month), found by name or date, never by id; the Capacity Planner erin is recorded as
+-- the creator of the settings. "Current" is the Period containing the day the database is created,
+-- in the company zone (${zone}); until the rollover exists, reset the database after a Period ends.
 
 -- Fail loudly if an earlier seed lacks a name this one looks up, instead of seeding nothing for it.
 DO $$
@@ -30,11 +32,6 @@ BEGIN
         RAISE EXCEPTION 'V1002 needs the demo Member erin from V1000';
     END IF;
 END $$;
-
-INSERT INTO period (starts_on, ends_on, created_by)
-SELECT p.starts_on, p.ends_on, (SELECT id FROM member WHERE username = 'erin')
-FROM (VALUES (DATE '2026-10-01', DATE '2026-10-31'), (DATE '2026-11-01', DATE '2026-11-30')) AS p(starts_on, ends_on)
-ORDER BY p.starts_on;
 
 -- V20 installs defaults under the same keys; these are the demo world's values.
 INSERT INTO planner_setting (key, value, created_by)
@@ -80,23 +77,29 @@ SELECT team.id, resource_type.id, 8, (SELECT id FROM member WHERE username = 'er
 FROM team JOIN resource_type ON resource_type.name = 'GPU'
 WHERE team.name = 'Research';
 
--- The October Grants: planned (a plan recurs until changed), then posted as Grant Transactions at
--- the start of October in the company zone by the system (no actor), with the Accounts that sum them.
+-- The current Period's Grants: planned (a plan recurs until changed), then posted as Grant
+-- Transactions at the Period's first midnight in the company zone by the system (no actor), with
+-- the Accounts that sum them.
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM period WHERE (now() AT TIME ZONE '${zone}')::date BETWEEN starts_on AND ends_on) THEN
+        RAISE EXCEPTION 'V1002 needs a Period containing today from V21';
+    END IF;
+END $$;
+
 INSERT INTO grant_plan (team_id, period_id, amount, created_by)
 SELECT team.id, period.id, g.amount, (SELECT id FROM member WHERE username = 'erin')
 FROM (VALUES ('Platform', 5000.00), ('Research', 600.00), ('Operations', 1000.00)) AS g(team_name, amount)
 JOIN team ON team.name = g.team_name
-JOIN period ON period.starts_on = DATE '2026-10-01'
+JOIN period ON (now() AT TIME ZONE '${zone}')::date BETWEEN period.starts_on AND period.ends_on
 ORDER BY team.id;
 
 INSERT INTO transaction (team_id, kind, amount, granted_part, earned_part, period_id, posted_at)
-SELECT g.team_id, 'GRANT', g.amount, g.amount, 0, g.period_id, TIMESTAMP '2026-10-01 00:00' AT TIME ZONE 'America/New_York'
+SELECT g.team_id, 'GRANT', g.amount, g.amount, 0, g.period_id, period.starts_on::timestamp AT TIME ZONE '${zone}'
 FROM grant_plan g JOIN period ON period.id = g.period_id
-WHERE period.starts_on = DATE '2026-10-01'
 ORDER BY g.team_id;
 
 INSERT INTO account (team_id, granted, earned, held)
 SELECT g.team_id, g.amount, 0, 0
-FROM grant_plan g JOIN period ON period.id = g.period_id
-WHERE period.starts_on = DATE '2026-10-01'
+FROM grant_plan g
 ORDER BY g.team_id;

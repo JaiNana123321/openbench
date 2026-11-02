@@ -33,6 +33,8 @@ mvn spring-boot:run -Dspring-boot.run.profiles=demo
 
 Spring Boot starts the database from `compose.yaml`, Flyway migrates it, and the `demo` profile adds the demo world's seed data (`src/main/resources/db/demo`). The application listens on [http://localhost:8080](http://localhost:8080); the API is under `/api`, and its OpenAPI document is at `/api/docs` (browsable at `/api/docs/ui` once signed in). Stopping the application stops the database container and keeps its data; `docker compose down` removes it.
 
+The seed posts each Team's Grant for the Period containing the day the database is created, and there is no Period rollover yet, so run `docker compose down` after a Period (a calendar month) ends to start the next one with fresh Grants. A database created before 2026-11-07 also needs `docker compose down` once: the seed changed, and Flyway refuses to start on a migration whose checksum differs from the one it applied.
+
 A quick check from the command line:
 
 ```sh

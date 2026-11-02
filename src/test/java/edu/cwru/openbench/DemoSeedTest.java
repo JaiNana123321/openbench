@@ -10,8 +10,11 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.IntStream;
 import org.flywaydb.core.Flyway;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -29,7 +32,13 @@ class DemoSeedTest {
 
     private static final String DATABASE = "demo_seed";
 
+    /** The company zone of application.yaml, given to the migrations as the placeholder {@code zone}. */
+    private static final ZoneId ZONE = ZoneId.of("America/New_York");
+
     private static JdbcTemplate demo;
+
+    /** The first day of the Period the seed treats as current: the month the database was created. */
+    private static LocalDate currentPeriodStart;
 
     @BeforeAll
     static void migrateASeparateDatabaseWithTheDemoSeeds() throws SQLException {
@@ -43,13 +52,16 @@ class DemoSeedTest {
                 PostgresTest.POSTGRES.getHost(), PostgresTest.POSTGRES.getMappedPort(5432), DATABASE);
         SimpleDriverDataSource dataSource = new SimpleDriverDataSource(
                 new Driver(), url, PostgresTest.POSTGRES.getUsername(), PostgresTest.POSTGRES.getPassword());
-        // The same settings as application-demo.yaml.
+        // The same settings as application.yaml and application-demo.yaml.
         Flyway.configure().dataSource(dataSource)
                 .locations("classpath:db/migration", "classpath:db/demo")
                 .outOfOrder(true)
+                .placeholders(Map.of("zone", ZONE.getId()))
                 .load()
                 .migrate();
         demo = new JdbcTemplate(dataSource);
+        currentPeriodStart = demo.queryForObject(
+                "SELECT date_trunc('month', now() AT TIME ZONE ?)::date", LocalDate.class, ZONE.getId());
     }
 
     @Test
@@ -122,8 +134,13 @@ class DemoSeedTest {
 
     @Test
     void seedsThePeriodsAndPlannerSettingsOfTheDemoWorld() {
+        // V21: ten years of calendar months from the month the database was created.
+        List<String> expected = IntStream.range(0, 120)
+                .mapToObj(n -> currentPeriodStart.plusMonths(n))
+                .map(start -> start + " to " + start.plusMonths(1).minusDays(1))
+                .toList();
         assertThat(demo.queryForList("SELECT starts_on || ' to ' || ends_on FROM period ORDER BY starts_on", String.class))
-                .containsExactly("2026-10-01 to 2026-10-31", "2026-11-01 to 2026-11-30");
+                .containsExactlyElementsOf(expected);
         assertThat(demo.queryForList("SELECT key || '=' || value FROM planner_setting ORDER BY key", String.class))
                 .containsExactly("day_rate=400.00", "objection_window_working_days=2", "period_months=1", "priority_premium=2.0");
     }
@@ -160,20 +177,21 @@ class DemoSeedTest {
     }
 
     @Test
-    void seedsTheOctoberGrantsWithMatchingAccounts() {
+    void seedsTheCurrentPeriodsGrantsWithMatchingAccounts() {
+        String start = currentPeriodStart.toString();
         assertThat(demo.queryForList("""
                 SELECT team.name || ' ' || g.amount || ' from ' || p.starts_on
                 FROM grant_plan g JOIN team ON team.id = g.team_id JOIN period p ON p.id = g.period_id ORDER BY team.id""", String.class))
-                .containsExactly("Platform 5000.00 from 2026-10-01", "Research 600.00 from 2026-10-01", "Operations 1000.00 from 2026-10-01");
+                .containsExactly("Platform 5000.00 from " + start, "Research 600.00 from " + start, "Operations 1000.00 from " + start);
         assertThat(demo.queryForList("""
                 SELECT team.name || ' ' || x.kind || ' ' || x.amount || ' (' || x.granted_part || ' granted, ' || x.earned_part
                        || ' earned) in ' || p.starts_on || ' at ' || to_char(x.posted_at AT TIME ZONE 'America/New_York', 'YYYY-MM-DD HH24:MI')
                        || ' by ' || coalesce(x.actor_id::text, 'the system')
                 FROM transaction x JOIN team ON team.id = x.team_id JOIN period p ON p.id = x.period_id ORDER BY team.id""", String.class))
                 .containsExactly(
-                        "Platform GRANT 5000.00 (5000.00 granted, 0.00 earned) in 2026-10-01 at 2026-10-01 00:00 by the system",
-                        "Research GRANT 600.00 (600.00 granted, 0.00 earned) in 2026-10-01 at 2026-10-01 00:00 by the system",
-                        "Operations GRANT 1000.00 (1000.00 granted, 0.00 earned) in 2026-10-01 at 2026-10-01 00:00 by the system");
+                        "Platform GRANT 5000.00 (5000.00 granted, 0.00 earned) in " + start + " at " + start + " 00:00 by the system",
+                        "Research GRANT 600.00 (600.00 granted, 0.00 earned) in " + start + " at " + start + " 00:00 by the system",
+                        "Operations GRANT 1000.00 (1000.00 granted, 0.00 earned) in " + start + " at " + start + " 00:00 by the system");
         assertThat(demo.queryForList("""
                 SELECT team.name || ' ' || a.granted || ' ' || a.earned || ' ' || a.held
                 FROM account a JOIN team ON team.id = a.team_id ORDER BY team.id""", String.class))
