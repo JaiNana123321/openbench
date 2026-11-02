@@ -27,7 +27,10 @@ class RequestRow {
     /** Set at submission, cleared only by reopening for edit. */
     private Instant submittedAt;
 
-    /** The end of the Objection Window, set when the Request first enters Pending. */
+    /**
+     * The end of the Objection Window, set at submission when any line needs approval
+     * (Lifecycle.Window.Start); an Optional Matched line can need one without the Request entering Pending.
+     */
     private Instant windowEndsAt;
 
     private Instant createdAt;

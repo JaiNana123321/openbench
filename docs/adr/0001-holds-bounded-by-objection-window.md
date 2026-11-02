@@ -1,6 +1,6 @@
 # ADR-0001: Holds bounded by the Objection Window
 
-Status: Accepted
+Status: Accepted (amended 2026-11-07)
 Date: 2026-09-19
 Deciders: Jai Nana, Brian Lujan, Fotih Turopov, Yerassyl Shnazbayev
 
@@ -22,6 +22,10 @@ We chose policy 4.
 - A Hold lives at most until the Request's Objection Window lapses. It commits when the Request is Allocated (Holds commit and Charges post in one transaction) and releases whenever the Request leaves Pending without being Allocated.
 - The Objection Window starts when the Request first enters Pending, belongs to the Request, and does not restart when a Candidate is replaced. When it lapses, outstanding approvals escalate to the Capacity Planner and no further Hold is placed for that Request; it is Allocated only at a moment when every Required line can be satisfied at once.
 - A Request Line is atomic in every class. A Manager who will accept less splits the line and marks part Optional; there is no per-line partial-acceptance flag.
+
+### Amendment, 2026-11-07 (SRS 0.4)
+
+The Objection Window starts when a Request is submitted with any line that needs approval, not when it first enters Pending. Only Required approvals put a Request in Pending: an Optional Matched line that needs approval stays open while the Request is Allocated or Waiting on its Required lines, forms its Loan when its last approval arrives, and escalates at lapse like any other outstanding approval. Holds are unchanged: they exist only while the Request is Pending. Without this, almost every Optional Matched line would be dropped, because a Request whose Required lines fit allocates at submission, before any lending Manager can answer.
 
 ## Consequences
 

@@ -16,10 +16,10 @@ hide empty description
 [*] --> Draft : Manager creates
 Draft --> Draft : edit lines,\naccept Suggestions
 Draft --> Submitted : submit (Required\nlines affordable)
-Submitted --> Allocated : no approval needed,\nall Required satisfiable
-Submitted --> Pending : approvals needed;\nHolds placed, Window starts
+Submitted --> Allocated : no Required approval,\nall Required satisfiable
+Submitted --> Pending : Required approvals\nneeded; Holds placed
 Submitted --> Waiting : a Required line\nunsatisfiable; waitlisted
-Pending --> Allocated : last approval; Holds\ncommit, Charges post
+Pending --> Allocated : last Required approval;\nHolds commit, Charges post
 Pending --> Waiting : refusal or Window\nlapses; Holds release
 Pending --> Refused : refused, no\nCandidate left
 Waiting --> Pending : replacement picked\n(Window still running)
@@ -27,6 +27,6 @@ Waiting --> Allocated : all Required\nsatisfiable at once
 Waiting --> Draft : edit
 Waiting --> Refused : escalated approval\nrefused, no Candidate left
 Allocated --> Waiting : Required line\nBumped (full Refund)
-Allocated --> Allocated : Release (Refund)
+Allocated --> Allocated : Release (Refund);\nlate Optional approval (Loan)
 Draft --> Withdrawn : withdraw (also from\nPending and Waiting)
 @enduml

@@ -61,11 +61,11 @@ note over Alloc, Ledger
 end note
 loop each waiting Request in order, until one is placed
   RLS -> RLS : evaluateAll
-  alt all its Required lines fit now, no approval needed
+  alt all its Required lines fit now, no Required approval outstanding
     RLS -> RLS : allocate (S2)
     RLS -> Alloc : leave(line)
     RLS -> Notifier : notify(that Request's Manager)
-  else it needs approvals and its Objection Window runs
+  else it needs Required approvals and its Objection Window runs
     RLS -> RLS : placeHolds
     note over Lock, Alloc : Waiting -> Pending
   end

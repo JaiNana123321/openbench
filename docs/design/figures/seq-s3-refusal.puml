@@ -53,7 +53,7 @@ opt the refused line is Required
   RLS -> Alloc : cancel(line), each held line
   RLS -> Ledger : releaseCredits(team, line)
 end
-note over Lock, Ledger : a refused Optional line leaves the Request Pending with its Holds
+note over Lock, Ledger : a refused Optional line leaves the Request in its state (Pending with its Holds, or Allocated)
 alt a Candidate is left on the Shortlist
   RLS -> RLS : toWaiting (Required line)
   RLS -> RLS : record(event)

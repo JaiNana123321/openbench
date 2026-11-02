@@ -42,7 +42,7 @@ participant Notifier
 
 note over Job, Ledger
   every 60 s the job calls lapsedWindows(now), then onWindowLapse per returned Request
-  (Pending or Waiting with an approval still Outstanding and not yet escalated); one transaction each
+  (Pending, Waiting, or Allocated with an approval still Outstanding and not yet escalated); one transaction each
 end note
 Job -> RLS : lapsedWindows(now)
 RLS --> Job : List<RequestId>
@@ -54,7 +54,7 @@ loop each returned Request
     RLS -> Alloc : cancel(line), each held line
     RLS -> Ledger : releaseCredits(team, line)
     RLS -> Notifier : notify(Manager, Holds released)
-  else Waiting: escalate only
+  else Waiting or Allocated: escalate only
   end
   RLS -> MA : escalate(r)
   MA -> Notifier : notify(PLANNER,\nescalated Request)

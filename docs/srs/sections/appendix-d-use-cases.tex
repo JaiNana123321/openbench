@@ -142,7 +142,9 @@ Each use case records its actors, trigger, preconditions, postconditions, flows,
 \ucflow{4.6}{Withdraw}
 \begin{enumerate}\item The Manager withdraws a Draft, Pending, or Waiting Request; system releases Holds and held credits and marks it Withdrawn.\end{enumerate}
 \ucflow{4.7}{Edit a Waiting Request}
-\begin{enumerate}\item The Manager edits a Waiting Request; system returns it to Draft, removes its lines from waitlists, and recomputes Quotes on resubmission.\end{enumerate}}
+\begin{enumerate}\item The Manager edits a Waiting Request; system returns it to Draft, removes its lines from waitlists, and recomputes Quotes on resubmission.\end{enumerate}
+\ucflow{4.8}{Only Optional lines need approval}
+\begin{enumerate}\item The Matched line is Optional and every Required line is satisfiable; system allocates the Request at once, posts the Charges, starts the Objection Window, and asks the Manager to select Candidates for the Optional line, whose Loan forms when it is approved (\UC{approve} 6.3).\end{enumerate}}
 \ucfield{Exceptions}{\ucflow{4.0.E.1}{Unaffordable}
 \begin{enumerate}\item The Required total exceeds the Available Balance; system refuses submission, shows the shortfall, and the Request stays in Draft.\end{enumerate}
 \ucflow{4.0.E.2}{Invalid line}
@@ -160,8 +162,8 @@ Each use case records its actors, trigger, preconditions, postconditions, flows,
 \ucfield{Created By}{J.\ Nana, B.\ Lujan, F.\ Turopov, Y.\ Shnazbayev, \SRScreated}
 \ucfield{Actors}{Manager (requesting, primary)}
 \ucfield{Description}{For a skill-based Matched line the system shows the Candidates who hold every listed skill, are available for the whole window, and have no Loan overlapping it, ordered by fewest person-days lent in the current Period, and the requesting Manager picks the line's quantity of them. Each pick becomes an approval request to that Candidate's Manager.}
-\ucfield{Trigger}{A Request with a skill-based Matched line enters Pending, or a refusal calls for a replacement.}
-\ucfield{Preconditions}{\begin{enumerate}\item The Request is Pending or Waiting and the Manager is signed in.\end{enumerate}}
+\ucfield{Trigger}{A Request with a skill-based Matched line is submitted, or a refusal calls for a replacement.}
+\ucfield{Preconditions}{\begin{enumerate}\item The Request is Pending or Waiting, or Allocated with an Optional Matched line still open, and the Manager is signed in.\end{enumerate}}
 \ucfield{Postconditions}{\begin{enumerate}\item The selected Candidates are recorded; one approval request has been sent per Candidate to their Manager; each Candidate has been notified.\end{enumerate}}
 \ucfield{Normal Flow}{\ucflow{5.0}{Select}
 \begin{enumerate}
@@ -170,7 +172,7 @@ Each use case records its actors, trigger, preconditions, postconditions, flows,
 \item System records the selection, sends one approval request to each Candidate's Manager with the window and the Earning, and notifies the Candidates.
 \end{enumerate}}
 \ucfield{Alternative Flows}{\ucflow{5.1}{Named Person}
-\begin{enumerate}\item The line names a Person; system skips the Shortlist, checks availability and that the Person has no overlapping Loan, and sends the approval request on entering Pending.\end{enumerate}
+\begin{enumerate}\item The line names a Person; system skips the Shortlist, checks availability and that the Person has no overlapping Loan, and sends the approval request on submission.\end{enumerate}
 \ucflow{5.2}{Replacement after refusal}
 \begin{enumerate}\item An approval was refused; system asks the Manager to select a replacement from the Shortlist; the Objection Window keeps running; if it is still running the Request returns to Pending with Holds re-placed.\end{enumerate}}
 \ucfield{Exceptions}{\ucflow{5.0.E.1}{Too few Candidates}
@@ -191,8 +193,8 @@ Each use case records its actors, trigger, preconditions, postconditions, flows,
 \ucfield{Actors}{Manager (lending, primary); Manager (requesting) and Person (secondary)}
 \ucfield{Description}{The Manager of a selected Candidate approves or refuses lending that Member for the window. Approval of the last outstanding Required approval allocates the Request: Holds commit, Charges post to the requesting Team, Earnings post to the lending Teams, and the Loans form. A refusal releases every Hold and sends the requesting Manager back to the Shortlist.}
 \ucfield{Trigger}{An approval request arrives in the lending Manager's Approvals list.}
-\ucfield{Preconditions}{\begin{enumerate}\item The Request is Pending and its Objection Window is running.\item The signed-in Manager leads the Candidate's Team, which is not the requesting Team.\end{enumerate}}
-\ucfield{Postconditions}{\begin{enumerate}\item The decision is recorded with actor, timestamp, and reason.\item On approval of the last Required approval: the Request is Allocated, the Loans exist, and the Charges and Earnings are posted in one transaction.\item On refusal: no Hold remains, held credits are zero for this Request, and the Request is Waiting.\end{enumerate}}
+\ucfield{Preconditions}{\begin{enumerate}\item The Request is Pending, or the approval is for an Optional line of a Waiting or Allocated Request; the Objection Window is running.\item The signed-in Manager leads the Candidate's Team, which is not the requesting Team.\end{enumerate}}
+\ucfield{Postconditions}{\begin{enumerate}\item The decision is recorded with actor, timestamp, and reason.\item On approval of the last Required approval: the Request is Allocated, the Loans exist, and the Charges and Earnings are posted in one transaction.\item On refusal of a Required approval: no Hold remains, held credits are zero for this Request, and the Request is Waiting.\item On approval of the last approval of an Optional line of an Allocated Request: its Loan exists and its Earning is posted.\end{enumerate}}
 \ucfield{Normal Flow}{\ucflow{6.0}{Approve}
 \begin{enumerate}
 \item Lending Manager opens Approvals; system lists the request with requesting Team, Person, window, Earning, and time left.
@@ -208,7 +210,7 @@ Each use case records its actors, trigger, preconditions, postconditions, flows,
 \ucflow{6.2}{Not the last approval}
 \begin{enumerate}\item Other Required approvals are outstanding; the Request stays Pending with its Holds.\end{enumerate}
 \ucflow{6.3}{Optional line approved after allocation}
-\begin{enumerate}\item The Request is already Allocated; system forms the Loan and posts the Earning now.\end{enumerate}}
+\begin{enumerate}\item The line is Optional and the Request is already Allocated; system forms the Loan and posts the Earning now, in one transaction, and notifies the Person and both Managers.\end{enumerate}}
 \ucfield{Exceptions}{\ucflow{6.0.E.1}{Objection Window lapsed}
 \begin{enumerate}\item The approval arrives after the lapse; system shows the request as escalated and routes the decision to the Capacity Planner (\UC{escalate}).\end{enumerate}
 \ucflow{6.0.E.2}{Own Team}

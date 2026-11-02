@@ -1,6 +1,6 @@
 # OpenBench documentation (snapshot)
 
-These files are copied from the documentation repository [`swe_csds393`](https://github.com/JaiNana123321/swe_csds393) at commit `e03bcc9` on 2026-10-20: SRS version 0.3 and Software Design Document version 1.0, both dated 2026-10-05. They are the specification this code implements. Change a requirement, a design decision, or a term in `swe_csds393` first, then copy the changed file here; do not edit the copies in place.
+These files are copied from the documentation repository [`swe_csds393`](https://github.com/JaiNana123321/swe_csds393) at commit `e03bcc9` on 2026-10-20, then updated on 2026-11-07 from commit `5567792` to SRS version 0.4, Software Design Document version 1.1, and an amended ADR-0001. That update lets an Optional Matched line outlive allocation and starts the Objection Window at submission (design RC-4). They are the specification this code implements. Change a requirement, a design decision, or a term in `swe_csds393` first, then copy the changed file here; do not edit the copies in place.
 
 | Path | Contents |
 |---|---|

@@ -78,9 +78,9 @@ From & Event (operation) & Guard & To & Side effects \\
 (start) & \code{RequestService.create} & Caller is the Team's Manager & Draft & Nothing locked or held. \\
 Draft & Line edits; a Suggestion accepted & Window in the future; type not retired & Draft & Quotes shown (\code{Pricing.quote}). \\
 Draft & \code{submit} & Required sum $\le$ Available Balance & Submitted & Quotes locked; \code{submitted\_at} set; types, then account locked. \\
-Submitted & \code{evaluateAll} & No approval needed; every Required line satisfiable & Allocated & \code{allocate}: unfit Optional lines Dropped, rows written as ALLOCATED, \code{commitCharges}. \\
-Submitted & \code{evaluateAll} & Some line needs approval & Pending & \code{placeHolds}; Shortlists built; unfit Required lines waitlisted; \code{routeApprovals}; Objection Window starts. \\
-Submitted & \code{evaluateAll} & No approval needed; a Required line unsatisfiable & Waiting & \code{toWaiting}: unfit Required lines join the Waitlist; nothing held. \\
+Submitted & \code{evaluateAll} & No Required approval needed; every Required line satisfiable & Allocated & \code{allocate}: unfit Optional lines Dropped, rows written as ALLOCATED, \code{commitCharges}; an Optional line needing approval gets \code{routeApprovals} and the Objection Window starts. \\
+Submitted & \code{evaluateAll} & Some Required line needs approval & Pending & \code{placeHolds}; Shortlists built; unfit Required lines waitlisted; \code{routeApprovals}; Objection Window starts. \\
+Submitted & \code{evaluateAll} & No Required approval needed; a Required line unsatisfiable & Waiting & \code{toWaiting}: unfit Required lines join the Waitlist; nothing held; Optional approvals as for Allocated. \\
 Pending & \code{decideApproval} (approve), or a waitlist fill & Every Required line satisfied; Candidate re-check passes & Allocated & \code{allocate}: Holds committed, \code{commitCharges}, Loans formed, \code{postEarning}. \\
 Pending & Refusal with a Candidate left; \code{onWindowLapse}; a Required held line Bumped; re-check fails; Balance short at \code{allocate} & A Required line no longer satisfied, or the Balance short of the Required Charges & Waiting & \code{toWaiting}: Holds and held credits released, Required lines waitlisted, capacity offered; on refusal a replacement asked; on lapse \code{escalate}. \\
 Pending & \code{decideApproval} (refuse) & No Candidate left, or a named Person & Refused & \code{Allocator.cancel} on every line; capacity offered. \\
@@ -91,12 +91,13 @@ Waiting & \code{decideApproval} (refuse) & No Candidate left, or a named Person 
 Waiting & \code{onWindowLapse} & An Outstanding approval not yet escalated & Waiting & \code{escalate} only; nothing held or released. \\
 Allocated & \code{applyBump} & The Bumped line is Required & Waiting & Full Refund; line at the head of the Waitlist; other lines stay allocated. \\
 Allocated & \code{releaseLine}, \code{endLoanEarly} & Part not yet consumed & Allocated & Refund (\code{Pricing.refund}) or Earning correction; capacity offered. \\
+Allocated & \code{decideApproval}, \code{onWindowLapse} on an open Optional Matched line & None & Allocated & Last approval: Loan formed, \code{postEarning}; refusal: replacement asked, or the line Dropped if no Candidate is left; lapse: \code{escalate} only. \\
 Draft & \code{withdraw} & None & Withdrawn & Nothing to release. \\
 Pending & \code{withdraw} & None & Withdrawn & \code{Allocator.cancel} on every line; capacity offered. \\
 Waiting & \code{withdraw} & None & Withdrawn & Lines leave the Waitlist; open approvals canceled. \\
 \end{longtable}}
 
-\paragraph{Request Line.} Each line has its own state (\figref{fig:state-line}). A line is Draft until submission and Evaluated at once. An Exclusive or Metered line becomes Held, Allocated, or Waiting; a Held line becomes Allocated when the Request allocates or Waiting when its Hold is released, and a Waiting line becomes Held or Allocated when capacity frees. An Allocated line can be Released, PartlyReleased, or Bumped, and a Bumped line is Waiting at the head of its Waitlist. A Matched line is AwaitingApproval, then Approved, then Loaned when the Request allocates; a Refused line returns to AwaitingApproval when a replacement is selected. An Optional line can be Dropped, and every line is Canceled when its Request is withdrawn (the lines of a Refused Request likewise). Allocation rows have a smaller state: HELD, ALLOCATED, RELEASED, BUMPED, or EXPIRED, and only HELD and ALLOCATED rows count against capacity.
+\paragraph{Request Line.} Each line has its own state (\figref{fig:state-line}). A line is Draft until submission and Evaluated at once. An Exclusive or Metered line becomes Held, Allocated, or Waiting; a Held line becomes Allocated when the Request allocates or Waiting when its Hold is released, and a Waiting line becomes Held or Allocated when capacity frees. An Allocated line can be Released, PartlyReleased, or Bumped, and a Bumped line is Waiting at the head of its Waitlist. A Matched line is AwaitingApproval, then Approved, then Loaned when the Request allocates, or at its last approval if it is an open Optional line of an Allocated Request; a Refused line returns to AwaitingApproval when a replacement is selected. An Optional line can be Dropped, and every line is Canceled when its Request is withdrawn (the lines of a Refused Request likewise). Allocation rows have a smaller state: HELD, ALLOCATED, RELEASED, BUMPED, or EXPIRED, and only HELD and ALLOCATED rows count against capacity.
 % NOTE: the row states RELEASED, BUMPED, EXPIRED follow the research note; the brief names only HELD and ALLOCATED.
 
 \begin{figure}[htbp]\centering
@@ -124,15 +125,15 @@ Each scenario has one sequence diagram with numbered messages named after the op
 \item The web client posts \code{/api/\allowbreak requests/\allowbreak \{id\}/\allowbreak submit}; the controller calls \code{RequestLifecycleService.\allowbreak submit}.
 \item \code{submit} calls \code{LedgerService.requireAffordable}, an early check that takes no lock, with the Required lines' Quotes, locks every Quote, records \code{submitted\_at}, and moves the Request to Submitted.
 \item \code{AllocationLock.lockTypes} locks the lines' types; \code{evaluateAll} calls \code{Allocator.evaluate} on each line's allocator (\code{AllocatorRegistry.forClass}), which answers SATISFIABLE, NEEDS\_APPROVAL, or UNSATISFIABLE.
-\item If no line needs approval and every Required line is satisfiable, \code{allocate} Drops unfit Optional lines, writes the rows as ALLOCATED at once, and calls \code{commitCharges}; the Request is Allocated.
-\item If a line needs approval, \code{placeHolds} calls \code{Allocator.hold} and \code{LedgerService.holdCredits} for each satisfiable Exclusive and Metered line; \code{buildShortlist} computes each skill-based Shortlist on read; nothing is stored until \code{select} writes \code{candidate} rows; \code{routeApprovals} creates named-Person approvals now and skill-based ones when the Manager picks Candidates (\code{selectCandidates}, \code{ApprovalDriven.select}), each notifying the Candidate's Manager; the Objection Window starts (\code{window\_ends\_at} is the instant the Request enters Pending plus \code{objectionWindowWorkingDays} Monday-to-Friday days) and the Request is Pending.
-\item Otherwise \code{toWaiting} puts the unfit Required lines on the Waitlist and the Request is Waiting. \code{record} logs every change and the transaction commits.
+\item If no Required line needs approval and every Required line is satisfiable, \code{allocate} Drops unfit Optional lines, writes the rows as ALLOCATED at once, and calls \code{commitCharges}; the Request is Allocated.
+\item If a Required line needs approval, \code{placeHolds} calls \code{Allocator.hold} and \code{LedgerService.holdCredits} for each satisfiable Exclusive and Metered line; \code{buildShortlist} computes each skill-based Shortlist on read; nothing is stored until \code{select} writes \code{candidate} rows; \code{routeApprovals} creates named-Person approvals now and skill-based ones when the Manager picks Candidates (\code{selectCandidates}, \code{ApprovalDriven.select}), each notifying the Candidate's Manager; the Objection Window starts (\code{window\_ends\_at} is the instant the Request enters Pending plus \code{objectionWindowWorkingDays} Monday-to-Friday days) and the Request is Pending.
+\item Otherwise \code{toWaiting} puts the unfit Required lines on the Waitlist and the Request is Waiting. In this step and step~4, an Optional Matched line that needs approval still gets \code{routeApprovals} and starts the Objection Window; it stays open and does not change the Request's state (\req{Lifecycle.Evaluate}). \code{record} logs every change and the transaction commits.
 \end{enumerate}
 \par\textbf{Failure branches.}
 \begin{itemize}
 \item The Required sum exceeds the Available Balance: \code{RuleViolation(\allowbreak"INSUFFICIENT\_BALANCE")}; nothing is locked or written and the Request stays Draft. The same code comes from \code{holdCredits} or \code{commitCharges} if a concurrent action of the Team spent the credits first.
 \item A window no longer starts in the future, or a type was retired: \code{RuleViolation}; the Request stays Draft.
-\item A Required Exclusive or Metered line is unsatisfiable: it joins the Waitlist, and the Request is Waiting, or Pending if another line needs approval. An unsatisfiable Optional line is never waitlisted and is Dropped at allocation.
+\item A Required Exclusive or Metered line is unsatisfiable: it joins the Waitlist, and the Request is Waiting, or Pending if a Required line needs approval. An unsatisfiable Optional line is never waitlisted and is Dropped at allocation.
 \item A skill-based Matched line has fewer eligible Members than its quantity: it is unsatisfied; a later profile change rebuilds its Shortlist.
 \item A Priority line finds no free instance: S5 runs inside this transaction.
 \end{itemize}
@@ -149,14 +150,15 @@ Each scenario has one sequence diagram with numbered messages named after the op
 \item The lending Manager approves; \code{decideApproval} with \code{APPROVE} locks the Request's types.
 \item \code{ApprovalDriven.decide} checks the actor (the Candidate's Manager, or after escalation a Capacity Planner), re-checks the Candidate's eligibility, and records Approved.
 \item If a Required line is still unsatisfied, the Request stays Pending. Otherwise \code{allocate} re-runs \code{evaluateAll} under the locks; an approved Candidate who is no longer eligible (unavailable on a day, or in an overlapping Loan) makes the line UNSATISFIABLE(NOT\_A\_CANDIDATE).
-\item Unfit, refused, or unaffordable Optional lines are Dropped with a reason; \code{Allocator.commit} turns HELD rows into ALLOCATED; \code{LedgerService.commitCharges} turns held credits into Charges equal to the locked Quotes, granted credits first.
-\item \code{MatchedAllocator.commit} forms the Loans, and \code{LedgerService.postEarning} credits each lending Team the Day Rate times the person-days, once per Loan from \code{AllocationQueries.loansFor(line)}; the Request is Allocated, \code{record} logs it, and \code{Notifier} tells the Manager, the Persons, and the lending Managers.
+\item Unfit or unaffordable Optional lines, and Optional Matched lines refused with no Candidate left, are Dropped with a reason; an Optional Matched line still awaiting approval stays open; \code{Allocator.commit} turns HELD rows into ALLOCATED; \code{LedgerService.commitCharges} turns held credits into Charges equal to the locked Quotes, granted credits first.
+\item \code{MatchedAllocator.commit} forms the Loans of the approved Matched lines, and \code{LedgerService.postEarning} credits each lending Team the Day Rate times the person-days, once per Loan from \code{AllocationQueries.loansFor(line)}; the Request is Allocated, \code{record} logs it, and \code{Notifier} tells the Manager, the Persons, and the lending Managers.
 \end{enumerate}
 \par\textbf{Failure branches.}
 \begin{itemize}
 \item The Candidate became ineligible before approval: \code{decide} refuses the approval with a \code{RuleViolation} whose code is \code{NOT\_A\_CANDIDATE}; the lending Manager can refuse instead (S3).
 \item A Candidate fails the re-check: \code{evaluateAll}, re-run at the start of \code{allocate}, answers UNSATISFIABLE(NOT\_A\_CANDIDATE), so a Required line goes to \code{toWaiting} before any commit and a replacement is asked (S3); an Optional line is Dropped and allocation continues. \code{MatchedAllocator.commit} repeats the check only as a guard that throws \code{ALLOCATION\_CONFLICT} and rolls back.
 \item The Balance no longer covers the Required Charges (after a rollover or an Earning correction while Pending): \code{toWaiting} runs instead with reason \code{INSUFFICIENT\_BALANCE}; the approval is kept.
+\item The approval is the last of an open Optional line of an Allocated Request: \code{decideApproval} calls \code{MatchedAllocator.commit} and \code{postEarning} for that line alone, in this transaction; nothing else changes (\req{Matched.Loan.Form}).
 \item The actor may not decide this approval: \code{ForbiddenException}.
 \item A Required line is still waitlisted: the Request stays Pending until the line is filled (S6) or the window lapses (S4).
 \end{itemize}
@@ -172,14 +174,14 @@ Each scenario has one sequence diagram with numbered messages named after the op
 \begin{enumerate}
 \item The lending Manager refuses; \code{decideApproval} with \code{REFUSE} locks the types, and \code{ApprovalDriven.decide} records Refused.
 \item If the refused line is Required, it is no longer satisfied, so \code{toWaiting} calls \code{Allocator.cancel} on each held line and \code{LedgerService.releaseCredits}, puts the Required lines on the Waitlist, and offers the freed capacity (\code{onCapacityFreed}). A refused Optional line releases nothing. Other approvals stay Outstanding.
-\item \code{Notifier} asks the requesting Manager for a replacement; the Request is Waiting, or still Pending with its Holds if the refused line is Optional.
+\item \code{Notifier} asks the requesting Manager for a replacement; the Request is Waiting, or, if the refused line is Optional, keeps its state (Pending with its Holds, Waiting, or Allocated).
 \item The Manager picks from the Shortlist; \code{selectCandidates} calls \code{ApprovalDriven.select}, which notifies that Candidate's Manager.
 \item The window still runs, so \code{placeHolds} holds every satisfiable line again and the Request is Pending; \code{window\_ends\_at} is unchanged.
 \end{enumerate}
 \par\textbf{Failure branches.}
 \begin{itemize}
 \item No Candidate is left on a Required line, or it named a Person: the Request is Refused and every line canceled (\req{Matched.Refuse.Replace}). On an Optional line, the line is Dropped.
-\item The refused line is Optional and Candidates remain: a replacement is asked, but the Request stays Pending with its Holds.
+\item The refused line is Optional and Candidates remain: a replacement is asked, but the Request keeps its state, Pending with its Holds or Allocated.
 \item The replacement comes after the window lapsed: no Hold is placed (\adr{0001}); the approval goes to the Capacity Planner (S4).
 \item A line no longer fits when Holds are placed again: it joins the Waitlist and the Request is Pending with that line waiting.
 \end{itemize}
@@ -191,13 +193,13 @@ Each scenario has one sequence diagram with numbered messages named after the op
 
 \begin{figure}[htbp]\centering
 \includegraphics[width=\textwidth,height=0.8\textheight,keepaspectratio]{seq-s4-lapse.pdf}
-\caption{S4, the Objection Window lapses (UC-7). For a Pending Request the job releases every Hold and the Request moves to Waiting; for a Pending or Waiting one its Outstanding approvals escalate to the Capacity Planner, whose decision continues as S2 or S3.}\label{fig:seq-s4-lapse}
+\caption{S4, the Objection Window lapses (UC-7). For a Pending Request the job releases every Hold and the Request moves to Waiting; for a Pending, Waiting, or Allocated one its Outstanding approvals escalate to the Capacity Planner, whose decision continues as S2 or S3.}\label{fig:seq-s4-lapse}
 \end{figure}
 
 \begin{enumerate}
-\item Every 60~s \code{DueWorkJob.run} calls \code{lapsedWindows(now)}, which returns the Requests, Pending or Waiting, whose \code{window\_ends\_at} has passed with an approval still Outstanding and not yet escalated, and calls \code{onWindowLapse} for each, one transaction per Request.
-\item \code{onWindowLapse} locks the types, reads the Request again, and does nothing unless it is still Pending or Waiting with an Outstanding approval not yet escalated (a last approval may have committed first, or an earlier run escalated it), so a repeated call is harmless.
-\item For a Pending Request, \code{toWaiting} releases every Hold (rows HELD to EXPIRED) and its held credits, waitlists the Required lines, and offers the capacity; the Request is Waiting. A Waiting Request holds nothing, so this step is skipped.
+\item Every 60~s \code{DueWorkJob.run} calls \code{lapsedWindows(now)}, which returns the Requests, Pending, Waiting, or Allocated, whose \code{window\_ends\_at} has passed with an approval still Outstanding and not yet escalated, and calls \code{onWindowLapse} for each, one transaction per Request.
+\item \code{onWindowLapse} locks the types, reads the Request again, and does nothing unless it is still Pending, Waiting, or Allocated with an Outstanding approval not yet escalated (a last approval may have committed first, or an earlier run escalated it), so a repeated call is harmless.
+\item For a Pending Request, \code{toWaiting} releases every Hold (rows HELD to EXPIRED) and its held credits, waitlists the Required lines, and offers the capacity; the Request is Waiting. A Waiting or Allocated Request holds nothing for its open approvals, so this step is skipped.
 \item \code{ApprovalDriven.escalate} sets \code{escalated} on every Outstanding approval, and \code{Notifier} tells the Manager and every Capacity Planner, found with \code{MemberService.\allowbreak withRole}.
 \item The Capacity Planner decides each from \code{escalations()} through \code{decideApproval} (S2 or S3). No Hold is placed again: the Request allocates only when every Required line fits at one moment (\req{Lifecycle.Waiting.Reevaluate}).
 \item The same run calls \code{expireWaitingLines(now)}, which takes lines whose window start has passed off the Waitlist.

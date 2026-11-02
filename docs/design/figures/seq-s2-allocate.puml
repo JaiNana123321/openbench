@@ -52,7 +52,7 @@ RLS -> Lock : lockTypes(types)
 RLS -> MA : decide(a, APPROVE, reason, actor)
 MA --> RLS : ApprovalOutcome, or RuleViolation\nNOT_A_CANDIDATE (re-checked)
 RLS -> MA : outstanding(request)
-alt no Required approval outstanding
+alt Request Pending or Waiting, no Required approval outstanding
   RLS -> RLS : allocate:\nevaluateAll
   alt a Candidate is no longer eligible: UNSATISFIABLE(NOT_A_CANDIDATE)
     RLS -> RLS : toWaiting
@@ -61,12 +61,12 @@ alt no Required approval outstanding
     RLS -> RLS : record(event)
     RLS -> Notifier : notify(Manager, replacement needed)
   else every Required line still satisfiable
-    opt drop unfit, refused, or unaffordable Optional lines
+    opt drop unfit or unaffordable Optional lines, and Optional\nMatched lines refused with no Candidate left (lines awaiting approval stay open)
       RLS -> Alloc : cancel(line): Dropped
     end
     RLS -> Alloc : commit(line), each Exclusive and\nMetered line: HELD -> ALLOCATED
     RLS -> Ledger : commitCharges(request, charges): locks account\nrow; held -> Charge, granted first, then earned
-    RLS -> MA : commit(line), each Matched line:\nforms the Loans (INSERT loan); its\nre-check is only a guard (throws)
+    RLS -> MA : commit(line), each approved Matched line:\nforms the Loans (INSERT loan); its\nre-check is only a guard (throws)
     RLS -> AQ : loansFor(line)
     AQ --> RLS : List<Loan>
     loop each Loan
@@ -75,6 +75,11 @@ alt no Required approval outstanding
     RLS -> RLS : record(event):\nAllocated
     RLS -> Notifier : notify(Manager and each Person)
   end
+else Request Allocated: last approval of an open Optional line
+  RLS -> MA : commit(line): forms its Loan
+  RLS -> Ledger : postEarning(lendingTeam, loan, amount)
+  RLS -> RLS : record(event)
+  RLS -> Notifier : notify(Manager and the Person)
 else Required approvals still outstanding (Request stays Pending)
   RLS -> RLS : record(event)
 end

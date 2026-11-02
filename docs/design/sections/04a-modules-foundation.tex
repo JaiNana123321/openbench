@@ -215,13 +215,13 @@ record RefundSchedule(List<RefundStep> steps) {}      record RefundStep(Duration
 \code{UnitPrice}, \code{PriceBands} & type Exclusive or Metered (\code{CLASS\_MISMATCH}); each band has weekdays, start before end, multiplier $> 0$ (\code{BAND\_INVALID}); no hour in two bands (\code{BANDS\_OVERLAP}) & Quotes computed after the commit; a locked Quote never changes \\
 \code{Refunds} & type Exclusive or Metered; every fraction in $[0, 1)$ (\code{REFUND\_STEP\_TOO\_HIGH}) & Releases after the change \\
 \code{BumpCutoff}, \code{Quota} & Exclusive, respectively Metered, type (\code{CLASS\_MISMATCH}); cutoff $\ge 0$, Quota $\ge 1$ or empty (\code{VALUE\_OUT\_OF\_RANGE}) & Bumps planned and lines evaluated after the change; existing allocations stand \\
-\code{DayRate}, \code{PriorityPremium}, \code{ObjectionWindow} & rate $\ge 0$, premium $\ge 1$, window $\ge 1$ working day (\code{VALUE\_OUT\_OF\_RANGE}) & Loans formed, Quotes computed, and Requests entering Pending after the change \\
+\code{DayRate}, \code{PriorityPremium}, \code{ObjectionWindow} & rate $\ge 0$, premium $\ge 1$, window $\ge 1$ working day (\code{VALUE\_OUT\_OF\_RANGE}) & Loans formed, Quotes computed, and Requests submitted after the change \\
 \bottomrule
 \end{tabularx}\par}
 
 Periods are rows. When the length is set (first by the installation migration, with the default of one calendar month), Settings writes the \code{period} rows ten years ahead, each starting the day after the previous one ends; \code{current()} returns the row containing today by the injected \code{Clock}. A Team's Grant for a Period is that Period's \code{grant\_plan} row or else the Team's most recent earlier one, so a Grant set once recurs until changed.
 
-The Objection Window is counted in working days. The setting is \code{objection\_window\_working\_days} (the SRS example default is 2), and \code{window\_ends\_at} is the instant the Request first enters Pending, usually its submission, plus that many Monday-to-Friday days. With the default, the window of a Request submitted on a Friday at 10:00 ends on the next Tuesday at 10:00.
+The Objection Window is counted in working days. The setting is \code{objection\_window\_working\_days} (the SRS example default is 2), and \code{window\_ends\_at} is the instant of submission, when any line needs approval, plus that many Monday-to-Friday days. With the default, the window of a Request submitted on a Friday at 10:00 ends on the next Tuesday at 10:00.
 
 \field{Required interfaces}
 \module{Inventory}: \code{InventoryQueries.type}, to check that a type exists and has the Allocation Class the setting requires. \module{Members}: no call; \code{team\_id} and \code{actor\_id} are read-only foreign keys to \code{team} and \code{member}.

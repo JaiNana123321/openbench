@@ -55,9 +55,12 @@ loop evaluateAll: each Request Line
   RLS -> Alloc : evaluate(line)
   Alloc --> RLS : Evaluation
 end
-alt every Required line SATISFIABLE, no approval needed
+alt every Required line SATISFIABLE, no Required approval needed
   RLS -> RLS : allocate (S2)
-else a line NEEDS_APPROVAL (unfit Required lines join the Waitlist)
+  opt an Optional line NEEDS_APPROVAL
+    RLS -> RLS : routeApprovals (line stays open)
+  end
+else a Required line NEEDS_APPROVAL (unfit Required lines join the Waitlist)
   RLS -> RLS : placeHolds
   RLS -> Alloc : hold(line)
   Alloc -> DB : INSERT rows in state HELD
@@ -66,16 +69,19 @@ else a line NEEDS_APPROVAL (unfit Required lines join the Waitlist)
   RLS -> RLS : routeApprovals
   RLS -> AD : buildShortlist(line), or select(line, [person])
   AD -> Notifier : notify(lending Manager)
-else no approval needed, a Required line UNSATISFIABLE
+else no Required approval needed, a Required line UNSATISFIABLE
   RLS -> RLS : toWaiting
   RLS -> Alloc : join(line)
+  opt an Optional line NEEDS_APPROVAL
+    RLS -> RLS : routeApprovals (line stays open)
+  end
 end
 RLS -> RLS : record(event)
 RLS -> Notifier : notify(Manager, outcome)
 RLS --> Web : SubmitOutcome
 deactivate RLS
 note over Alloc, Notifier
-  Pending starts the Objection Window. For a skill-based Matched line,
+  Any line needing approval starts the Objection Window. For a skill-based Matched line,
   select runs when the Manager picks from the Shortlist (S3).
 end note
 @enduml
