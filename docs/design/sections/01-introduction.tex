@@ -9,7 +9,7 @@ The design covers every Release~1 requirement of the SRS: the 41 functional requ
 
 \subsection{Requirements Baseline and Changes}
 
-The baseline is the \SRSproduct{} Software Requirements Specification, version~\SRSversion{} of \SRSdate{}. Identifiers are those of its short edition: 41 Release~1 and 6 Stretch functional requirements in dot notation (for example \req{Lifecycle.Hold.Place}), twelve use cases UC-1 to UC-12, and the CO, UI, SI, CI, PE, SE, QA, UD, AS, and DE identifiers. The full edition uses the same functional identifiers. Version~\SRSversion{} differs from version~0.2, the edition that was graded, by the four requirements changes below. Each is recorded in the revision history of the SRS.
+The baseline is the \SRSproduct{} Software Requirements Specification, version~\SRSversion{} of \SRSdate{}. Identifiers are those of its short edition: 41 Release~1 and 6 Stretch functional requirements in dot notation (for example \req{Lifecycle.Hold.Place}), twelve use cases UC-1 to UC-12, and the CO, UI, SI, CI, PE, SE, QA, UD, AS, and DE identifiers. The full edition uses the same functional identifiers. Version~\SRSversion{} differs from version~0.2, the edition that was graded, by the five requirements changes below. Each is recorded in the revision history of the SRS.
 
 {\small\renewcommand{\arraystretch}{1.1}
 \begin{tabularx}{\textwidth}{@{}L{2.3cm}YYL{3.4cm}@{}}
@@ -35,6 +35,11 @@ Design decision. The design enforces correctness with PostgreSQL features that H
 An Optional Matched line that needs approval no longer holds the Request in Pending: the Request is Allocated or Waiting on its Required lines, the Optional line stays open, and its Loan forms and its Earning posts when its last approval arrives. It is dropped only when refused with no Candidate left. The Objection Window and the Shortlist start at submission (\req{Lifecycle.Evaluate}, \req{Lifecycle.Allocate}, \req{Matched.Loan.Form}). &
 Version~0.3 contradicted itself: allocation dropped ``unapproved'' Optional lines, yet a late approval was to form its Loan. Dropping them would drop almost every Optional person, because a Request whose Required lines fit allocates at once, before any lending Manager can answer. &
 \code{evaluateAll} outcomes and \code{allocate} (Section~\ref{mod:requests}); S1, S2, S3, S4 (Section~\ref{sec:runtime}). \\
+\addlinespace
+\rc{5} Refund lead time &
+A Refund's lead time is measured to the start of the occurrence the released part belongs to, so giving back the rest of an occurrence already under way returns nothing (\req{Release.Refund}). &
+Version~0.3 measured it to the released part's own start, which never lies in the past, so its 0\% step could not apply. The design already priced by occurrence. &
+\code{releaseLine} and \code{Pricing.refund} (Section~\ref{mod:requests}). \\
 \bottomrule
 \end{tabularx}
 }
@@ -92,7 +97,7 @@ The figures are UML~2 diagrams drawn with PlantUML from sources kept with this d
 \begin{itemize}
   \item \textbf{Vocabulary.} Capitalized words such as Request, Hold, Loan, Shortlist, Waitlist, and Refund have the meaning given in the glossary (Appendix~\ref{app:glossary}), taken from the project vocabulary file. Credits are for showback only, so no money words are used.
   \item \textbf{Requirement identifiers} are set in bold. Functional requirements keep their dot notation, for example \req{Matched.Shortlist.Build}. Other identifiers print with the numbers the SRS gives them, for example \req{QA-correct}; the table below gives the key each number stands for in the sources (\req{QA-correct} is \code{QA-correct}).
-  \item \textbf{Design identifiers.} Responsibilities are \rid{1} to \rid{34} (Section~\ref{sec:decomp}), requirements changes \rc{1} to \rc{4} (above), architecture decisions D-A to D-L and their records \adr{0001} to \adr{0007} (Section~\ref{sec:arch}).
+  \item \textbf{Design identifiers.} Responsibilities are \rid{1} to \rid{34} (Section~\ref{sec:decomp}), requirements changes \rc{1} to \rc{5} (above), architecture decisions D-A to D-L and their records \adr{0001} to \adr{0007} (Section~\ref{sec:arch}).
   \item \textbf{Code.} Identifiers are set in \code{monospace}, module names in \module{bold sans-serif}. Each module is one Java package \code{edu.cwru.openbench.<module>}; signatures are Java~17; every application-service method runs in one transaction unless marked \emph{(read-only)}. Tables and columns are \code{snake\_case}.
   \item \textbf{Time.} Instants are \code{timestamptz}; windows are half-open, $[\mathit{start}, \mathit{end})$; Loan days and availability ranges are inclusive dates. All windows, Price Bands, and Periods are in the company's one time zone.
 \end{itemize}

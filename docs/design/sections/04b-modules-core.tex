@@ -207,7 +207,7 @@ interface LedgerService {
 \end{lstlisting}
 \code{Pricing} is pure. \module{Requests} calls \code{quote} while drafting and at submission, when the result is locked on the line. \code{LineSpec} gives the quantity (instances or units), the occurrences in the firm's time zone, and the Priority mark. With $q$ the quantity, $p$ the Unit Price, $b(h)$ the multiplier of the Price Band containing hour $h$ (1.0 if none), and $\pi$ the priority premium for a Priority line (1 otherwise):
 \[ \textit{Quote} = \pi \cdot \textstyle\sum_{\mbox{\scriptsize occurrence } o}\ \sum_{\mbox{\scriptsize hour } h \in o}\ q \cdot p \cdot b(h). \]
-Credits carry two decimals; a Quote is rounded half-up once per line. \code{refund} takes the step with the largest lead time not above \code{leadTime} and returns that fraction of \code{charge}, rounded down; a part already started returns 0. \module{Settings} refuses any step of 100\% or more and \code{refund} asserts it.
+Credits carry two decimals; a Quote is rounded half-up once per line. \code{refund} takes the step with the largest lead time not above \code{leadTime} and returns that fraction of \code{charge}, rounded down; a part of an occurrence already started returns 0. \module{Settings} refuses any step of 100\% or more and \code{refund} asserts it.
 % NOTE: brief section 4 calls Credits "integer credits" while section 7 stores numeric(12,2). We use two decimals so that
 % a 25% Refund of 45 credits is exact; with integers the rule would be "round Refunds down to whole credits".
 
@@ -231,7 +231,7 @@ Operation & Preconditions and effect & Errors \\
 \code{commitCharges} & Each amount is the locked Quote and fits the Balance; releases its held amount and posts a Charge with \code{granted\_part} $=\min(\mbox{granted}, \mbox{amount})$, \code{earned\_part} the rest & \code{INSUFFICIENT\_BALANCE} \\
 \code{postEarning}, \code{correctEarning} & One Earning per Loan (Day Rate $\times$ \code{days\_lent}); a correction is an Earning with a negative amount and \code{corrects\_id}, and may take the Balance below zero & none \\
 \code{refund} & The line's Refunds stay within its Charge; split in the Charge's proportions & \code{REFUND\_EXCEEDS\_CHARGE} \\
-\code{postGrant}, \code{rollover} & Grant: amount positive, reason kept, Manager notified mid-Period. Rollover, idempotent: per Team \code{period\_close} records expired granted credits, granted set to 0, planned Grant posted, Manager notified; earned untouched & \code{INVALID\_AMOUNT} \\
+\code{postGrant}, \code{rollover} & Grant: amount positive, a mid-Period Grant has a reason (\code{REASON\_REQUIRED}), Manager notified mid-Period. Rollover, idempotent: per Team \code{period\_close} records expired granted credits, granted set to 0, planned Grant posted, Manager notified; earned untouched & \code{INVALID\_AMOUNT}, \code{REASON\_REQUIRED} \\
 \code{account}, \code{statement} & Read-only; a Statement (opening, Transactions, expired, closing) for its own Manager or a Capacity Planner; outside that scope it is not found & \code{NotFoundException} (404) \\
 \end{longtable}}
 
@@ -333,7 +333,7 @@ Operation & Preconditions & Errors \\
 \endhead
 \bottomrule
 \endlastfoot
-line edits, Suggestion \code{create} & Request in Draft; line valid as above & \code{WRONG\_STATE}, \code{WINDOW\_NOT\_FUTURE}, \code{WINDOW\_INVALID}, \code{TYPE\_RETIRED}, \code{OWN\_TEAM}, \code{PRIORITY\_NOT\_OFFERED} \\
+line edits, Suggestion \code{create} & Request in Draft; line valid as above & \code{WRONG\_STATE}, \code{WINDOW\_NOT\_FUTURE}, \code{WINDOW\_INVALID}, \code{TYPE\_RETIRED}, \code{OWN\_TEAM}, \code{PRIORITY\_NOT\_OFFERED}, \code{QUANTITY\_INVALID} (quantity below 1, or above 1 for a named Resource or Person), \code{NAMED\_RESOURCE\_NOT\_OFFERED} (a Metered line naming a Resource) \\
 \code{splitLine}; accept, decline & $1 \le$ \code{quantityForNewLine} $<$ quantity; Suggestion Open, target line in a Draft, same type & \code{LINE\_NOT\_ATOMIC}; \code{SUGGESTION\_CLOSED}, \code{TYPE\_MISMATCH} \\
 \code{submit} & Draft with a line; lines valid now; Required Quotes within Available Balance & line errors, \code{EMPTY\_REQUEST}, \code{INSUFFICIENT\_BALANCE} (with shortfall) \\
 \code{selectCandidates}, \code{decideApproval} & As \code{select} and \code{decide} & codes of Table~\ref{tab:allocation-ops} \\

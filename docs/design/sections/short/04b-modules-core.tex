@@ -111,7 +111,7 @@ interface LedgerService {
 \end{lstlisting}
 With $q$ the quantity, $p$ the Unit Price, $b(h)$ the multiplier of the Price Band containing hour $h$ (1.0 if none), and $\pi$ the priority premium for a Priority line (1 otherwise):
 \[ \textit{Quote} = \pi \cdot \textstyle\sum_{\mbox{\scriptsize occurrence } o}\ \sum_{\mbox{\scriptsize hour } h \in o}\ q \cdot p \cdot b(h). \]
-Credits carry two decimals; a Quote is rounded half-up once per line. \code{refund} takes the step with the largest lead time not above \code{leadTime} and returns that fraction of \code{charge}, rounded down; a part already started returns 0.
+Credits carry two decimals; a Quote is rounded half-up once per line. \code{refund} takes the step with the largest lead time not above \code{leadTime} and returns that fraction of \code{charge}, rounded down; a part of an occurrence already started returns 0.
 
 \field{Required interfaces}
 \module{Settings}: \code{SettingsService.current}. \module{Members}: a Team's Manager, for Statement scoping. \module{Notifications}: \code{Notifier.notify}.
@@ -129,7 +129,7 @@ Credits carry two decimals; a Quote is rounded half-up once per line. \code{refu
 \end{itemize}
 
 \field{Failure behavior}
-{\sloppy \code{INSUFFICIENT\_BALANCE} is the refusal a Manager sees, with the shortfall; the other codes are \code{REFUND\_EXCEEDS\_CHARGE} and \code{INVALID\_AMOUNT}. The methods join the caller's transaction, so a failed Charge rolls back the commit of every Hold (\req{CO-tx}).\par}
+{\sloppy \code{INSUFFICIENT\_BALANCE} is the refusal a Manager sees, with the shortfall; the other codes are \code{REFUND\_EXCEEDS\_CHARGE}, \code{INVALID\_AMOUNT}, and \code{REASON\_REQUIRED} (a mid-Period Grant without a reason). The methods join the caller's transaction, so a failed Charge rolls back the commit of every Hold (\req{CO-tx}).\par}
 
 % ============================================================================================ Requests
 \modulespec{Requests}{requests}{requests}
@@ -207,5 +207,5 @@ interface RequestLifecycleService {                          // one transaction 
 \end{itemize}
 
 \field{Failure behavior}
-{\sloppy Any exception rolls back the whole transition, notifications included. A \code{RuleViolation} becomes \code{problem+json} with its \code{code} (409 state conflict, 422 invalid input), one of \code{WRONG\_STATE}, \code{WINDOW\_NOT\_FUTURE}, \code{WINDOW\_INVALID}, \code{TYPE\_RETIRED}, \code{OWN\_TEAM}, \code{PRIORITY\_NOT\_OFFERED}, \code{LINE\_NOT\_ATOMIC}, \code{SUGGESTION\_CLOSED}, \code{TYPE\_MISMATCH}, \code{EMPTY\_REQUEST}, \code{INSUFFICIENT\_BALANCE}, \code{NOT\_ALLOCATED}, \code{LOAN\_END\_INVALID}, or a code of \module{Allocation}; a deadlock or lock timeout, after one retry, \code{ConcurrencyRetryException} (503).\par}
+{\sloppy Any exception rolls back the whole transition, notifications included. A \code{RuleViolation} becomes \code{problem+json} with its \code{code} (409 state conflict, 422 invalid input), one of \code{WRONG\_STATE}, \code{WINDOW\_NOT\_FUTURE}, \code{WINDOW\_INVALID}, \code{TYPE\_RETIRED}, \code{OWN\_TEAM}, \code{PRIORITY\_NOT\_OFFERED}, \code{QUANTITY\_INVALID}, \code{NAMED\_RESOURCE\_NOT\_OFFERED}, \code{LINE\_NOT\_ATOMIC}, \code{SUGGESTION\_CLOSED}, \code{TYPE\_MISMATCH}, \code{EMPTY\_REQUEST}, \code{INSUFFICIENT\_BALANCE}, \code{NOT\_ALLOCATED}, \code{LOAN\_END\_INVALID}, or a code of \module{Allocation}; a deadlock or lock timeout, after one retry, \code{ConcurrencyRetryException} (503).\par}
 

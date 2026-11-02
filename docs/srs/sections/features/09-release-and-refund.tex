@@ -11,7 +11,7 @@ A Manager who no longer needs an allocated Exclusive or Metered line, or part of
 
 \subsubsection{Functional Requirements}
 \fr{Release.Line}{The system shall let the Manager of the owning Team Release an allocated Exclusive or Metered line in whole or in part before it is consumed. A partial Release shortens the window, removes occurrences, or reduces units; the remaining part keeps its allocation, its instance, and its locked unit prices.}
-\fr{Release.Refund}{On Release the system shall post one Refund equal to the Charge attributable to the released part multiplied by the fraction from the Resource Type's Refund Schedule for the lead time between the Release and the start of the released part (\BR{refund-schedule}).}
+\fr{Release.Refund}{On Release the system shall post one Refund equal to the Charge attributable to the released part multiplied by the fraction from the Resource Type's Refund Schedule for the lead time between the Release and the start of the occurrence the released part belongs to (\BR{refund-schedule}).}
 \fr{Release.Schedule.Form}{A Refund Schedule shall be a list of steps, each a minimum lead time and a fraction; the fraction for a Release is that of the largest step whose minimum lead time is not exceeded by the actual lead time. Example default: 75\% at seven or more days ahead, 25\% at less than seven days but before the window starts, 0\% once the window has started.}
 \fr{Release.Schedule.Cap}{The system shall refuse a Refund Schedule containing a fraction of 100\% or more (\BR{refund-schedule}).}
 \fr{Release.Bucket}{A Refund shall return credits to the same part of the Account, granted or earned, from which the Charge was drawn, in the same proportions (\BR{spend-order}).}

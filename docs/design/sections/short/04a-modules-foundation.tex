@@ -92,7 +92,7 @@ interface ReductionGuard {                                   // port declared he
 \end{itemize}
 
 \field{Failure behavior}
-{\sloppy A refusal is a \code{RuleViolation} with one of the codes \code{TYPE\_NAME\_TAKEN}, \code{ATTRIBUTE\_INVALID}, \code{CLASS\_FIXED}, \code{PERSON\_TYPE\_FIXED}, \code{ATTRIBUTE\_IN\_USE}, \code{TYPE\_RETIRED}, \code{MATCHED\_HAS\_NO\_RESOURCES}, \code{UNITS\_INVALID}, \code{NOT\_A\_RESOURCE\_OWNER}, \code{NOT\_METERED}, \code{UNITS\_BELOW\_USAGE}, or \code{RESOURCE\_IN\_USE}, and nothing is written; the two guard refusals carry an \code{earliestHour} property so the screen names the blocking hour. A lock conflict surfaces as \code{ConcurrencyRetryException} after one retry.\par}
+{\sloppy A refusal is a \code{RuleViolation} with one of the codes \code{TYPE\_NAME\_TAKEN}, \code{ATTRIBUTE\_INVALID}, \code{CLASS\_FIXED}, \code{PERSON\_TYPE\_FIXED}, \code{ATTRIBUTE\_IN\_USE}, \code{TYPE\_RETIRED}, \code{MATCHED\_HAS\_NO\_RESOURCES}, \code{RESOURCE\_NAME\_TAKEN}, \code{UNITS\_INVALID}, \code{NOT\_A\_RESOURCE\_OWNER}, \code{NOT\_METERED}, \code{UNITS\_BELOW\_USAGE}, or \code{RESOURCE\_IN\_USE}, and nothing is written; the two guard refusals carry an \code{earliestHour} property so the screen names the blocking hour. A lock conflict surfaces as \code{ConcurrencyRetryException} after one retry.\par}
 
 % =====================================================================================================
 \modulespec{Settings}{settings}{settings}
