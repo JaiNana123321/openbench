@@ -22,7 +22,7 @@ Issues, bugs, and work briefs live in GitHub Issues on `JaiNana123321/openbench`
 
 ### Triage labels
 
-One workflow label per open issue: `status: planned`, `status: ready`, `status: in progress`, `status: in review`, `status: blocked`, `status: to discuss` (merged locally, waiting for Jai to close it); plus `wontfix`. See `docs/agents/triage-labels.md`.
+One workflow label per open issue: `status: planned`, `status: ready`, `status: in progress`, `status: in review`, `status: blocked`; plus `wontfix`. Merged work leaves its issue's label as it is; Jai discusses the issue and closes it. See `docs/agents/triage-labels.md`.
 
 ### Domain docs
 
