@@ -1,0 +1,33 @@
+% OpenBench: Functional Test Case Descriptions, full edition (every test case). The short edition is main-short.tex.
+% Every test case traces to a functional requirement of the SRS short edition by identifier; the traceability
+% matrix in Appendix A is generated from the test cases themselves. Build: nix develop path:nix -c make -C docs/test-cases
+\documentclass[10pt,letterpaper]{article}
+\input{macros}
+\geometry{margin=0.8in}
+\setlength{\parskip}{3pt plus 1pt}
+\usepackage[compact]{titlesec}
+\setlist{nosep}
+\setcounter{tocdepth}{3}   % test cases are listed in the contents under their feature
+
+\hypersetup{
+  pdftitle={OpenBench Functional Test Case Descriptions},
+  pdfauthor={Jai Nana, Brian Lujan, Fotih Turopov, Yerassyl Shnazbayev},
+  pdfsubject={CSDS 393 Software Engineering},
+}
+
+\begin{document}
+
+\input{sections/00-front-matter}
+\newcommand{\sectionbreak}{\clearpage}   % every section and appendix starts on a new page
+\setlength{\emergencystretch}{1.5em}
+
+\input{sections/01-introduction}
+\input{sections/02-environment}
+\input{sections/03-approach}
+\input{sections/04-test-cases}
+
+\appendix
+\input{sections/appendix-a-traceability}
+\input{sections/appendix-b-glossary}
+
+\end{document}

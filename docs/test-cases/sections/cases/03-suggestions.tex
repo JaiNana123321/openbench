@@ -1,0 +1,50 @@
+\subsection{Suggestions}\label{cases:suggestions}
+\tcarea{SUG}
+These cases establish that a Member can propose one line to their Manager, that the proposal has no effect until the Manager submits it as part of a Request, and that accepting or declining it is recorded without ever losing the original ask.
+
+% Requirements of this feature in the SRS short edition (cover each with at least one test case):
+%   Suggest.Create
+%   Suggest.Accept.Existing
+
+\begin{testcase}{sug-create}{A Member creates a Suggestion that has no effect until submitted}{Suggest.Create}
+\tcfield{Actor}{\code{ben} (Member, Platform); \code{alice} where named}
+\tcfield{Priority}{High}
+\tcfield{Preconditions}{Test world.}
+\tcfield{Test data}{Suggestion S1: Meeting room, quantity 1, D 10:00--12:00, note ``Design review''.}
+\tcsteps
+\tcstep{Open Suggestions and create a Suggestion.}{S1}{S1 is listed as Open, addressed to Alice Chen, his Manager; the form allowed one line only and offered no choice of addressee.}
+\tcstep{Open Room A and Room B in the Inventory for D 10:00--12:00.}{None}{Both are free: no Hold was placed.}
+\tcstep{As \code{alice}, open the Statement and the Suggestions list.}{None}{Available Balance still 5000.00 and no new Transaction; S1 is listed first as Open, with Ben as its author.}
+\tcstep{As \code{ben}, try to create a Suggestion with two lines through the API.}{Two lines}{Refused with \code{VALIDATION\_FAILED}.}
+\tcfield{Pass criteria}{S1 exists as Open and the Inventory, Holds, and Ledger are unchanged.}
+\tcfield{Automated by}{None yet}
+\end{testcase}
+
+\begin{testcase}{sug-accept}{The Manager accepts Suggestions as a new line and into an existing line}{Suggest.Accept.Existing}
+\tcfield{Actor}{\code{alice} (Manager, Platform); \code{ben} where named}
+\tcfield{Priority}{High}
+\tcfield{Preconditions}{\code{ben} has created S1 (\TC{sug-create}) and S2: Meeting room, quantity 1, D 10:00--12:00, note ``Second room''. S3: GPU, 2 units, D 10:00--12:00. All are Open.}
+\tcfield{Test data}{A new Draft R1 of Platform.}
+\tcsteps
+\tcstep{Accept S1 into R1 as a new line.}{S1, Draft R1}{R1 has line L1 pre-filled from S1 (Meeting room, quantity 1, D 10:00--12:00) with its Quote 30.00 (Q1). S1 is Accepted and links to L1.}
+\tcstep{Accept S2 into the existing line L1.}{S2, line L1}{S2 is Accepted and links to L1; L1 lists both S1 and S2.}
+\tcstep{Try to accept S3 into L1.}{S3, line L1}{Refused with \code{TYPE\_MISMATCH}: GPU is not Meeting room; S3 stays Open.}
+\tcstep{Edit L1.}{Quantity 2}{L1 now asks for 2 rooms; S1 and S2 still show their original ask of quantity 1 and still link to L1.}
+\tcstep{Try to accept S1 again.}{S1}{Refused with \code{SUGGESTION\_CLOSED}: only Open Suggestions change state.}
+\tcstep{As \code{ben}, open Suggestions.}{None}{S1 and S2 Accepted, S3 Open.}
+\tcfield{Pass criteria}{Every Accepted Suggestion records its line, and the original asks are unchanged.}
+\tcfield{Automated by}{None yet}
+\end{testcase}
+
+\begin{testcase}{sug-decline}{The Manager declines a Suggestion with a reason; it is kept}{Suggest.Accept.Existing}
+\tcfield{Actor}{\code{alice} (Manager, Platform); \code{ben} where named}
+\tcfield{Priority}{Medium}
+\tcfield{Preconditions}{\code{ben} has an Open Suggestion S3: GPU, 2 units, D 10:00--12:00.}
+\tcfield{Test data}{Reason ``Use the shared node''.}
+\tcsteps
+\tcstep{Decline S3 with a reason.}{Reason}{S3 is Declined with the reason, actor Alice Chen, and timestamp.}
+\tcstep{As \code{ben}, open the notifications and Suggestions.}{None}{A notification that S3 was declined, with the reason; S3 listed as Declined.}
+\tcstep{As \code{alice}, try to accept S3, and try to delete it through the API.}{S3}{Accept refused with \code{SUGGESTION\_CLOSED}. No delete action is offered, and a DELETE call answers 405 Method Not Allowed. S3 is still listed.}
+\tcfield{Pass criteria}{S3 remains, Declined, with its original ask and the reason.}
+\tcfield{Automated by}{None yet}
+\end{testcase}

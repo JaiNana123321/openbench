@@ -1,0 +1,89 @@
+\subsection{Release and Refund}\label{cases:release}
+\tcarea{REL}
+These cases establish that a Manager can give back an allocated Exclusive or Metered line, in whole or in part, for a Refund set by the Refund Schedule and returned to the part of the Account it came from; and that ending a Loan early corrects the lending Team's Earning, the only Transaction that may take a Balance below zero.
+
+% Requirements of this feature in the SRS short edition (cover each with at least one test case):
+%   Release.Line
+%   Release.Refund
+%   Release.Loan.Prorate
+
+\begin{testcase}{rel-whole}{Release a whole line seven or more days ahead for a 75\% Refund}{Release.Line, Release.Refund}
+\tcfield{Actor}{\code{alice} (Manager, Platform); \code{bob} where named}
+\tcfield{Priority}{High}
+\tcfield{Preconditions}{\code{alice} has an Allocated Request A1 with L1: Room A, D 10:00--12:00, charged 30.00 (Balance 4970.00).}
+\tcfield{Test data}{Lead time from now to D 10:00: at least seven days.}
+\tcsteps
+\tcstep{Open A1 and Release L1 in whole.}{L1}{L1 is Released; the Release is recorded with the released part, the lead time, the fraction 75\%, the Refund, the actor, and the timestamp.}
+\tcstep{Open the Statement.}{None}{One Refund of 22.50 ($30.00 \times 0.75$) referencing L1's Charge; Balance 4992.50.}
+\tcstep{Open Room A's timeline for D.}{None}{10:00--12:00 is free.}
+\tcstep{As \code{bob}, call the API to Release L1.}{L1's id}{Refused with \code{NOT\_FOUND}: only the owning Team's Manager may Release.}
+\tcfield{Pass criteria}{One Refund of 22.50 and Room A free.}
+\tcfield{Automated by}{\code{PricingTest}: ``Release.Refund: the step function'' (fraction only)}
+\end{testcase}
+
+\begin{testcase}{rel-partial}{Partial Release shortens the window, reduces units, or removes occurrences}{Release.Line, Release.Refund}
+\tcfield{Actor}{\code{alice} (Manager, Platform)}
+\tcfield{Priority}{High}
+\tcfield{Preconditions}{\code{alice} has an Allocated Request A1 with: L1 GPU, 4 units, D 10:00--14:00 (charged 120.00); L2 Meeting room, weekly on D, D+7, D+14 10:00--12:00 on Room B (charged 90.00).}
+\tcfield{Test data}{All released parts start seven or more days ahead (75\%).}
+\tcsteps
+\tcstep{Release L1's hours 12:00--14:00.}{New window D 10:00--12:00}{L1 keeps 4 units for D 10:00--12:00 at its locked prices. Refund 45.00 ($60.00$ attributable $\times$ 0.75).}
+\tcstep{Release 2 of L1's units.}{New units 2}{L1 keeps 2 units for D 10:00--12:00. Refund 22.50 ($30.00 \times 0.75$).}
+\tcstep{Release L2's occurrence on D+14.}{Occurrence D+14}{L2 keeps D and D+7 on Room B. Refund 22.50.}
+\tcstep{Open the GPU and Room B timelines.}{None}{GPU: 2 units for Platform on D 10:00--12:00. Room B: Platform on D and D+7 only.}
+\tcfield{Pass criteria}{Three Refunds totaling 90.00; every remaining part kept its instance and prices.}
+\tcfield{Automated by}{None yet}
+\end{testcase}
+
+\begin{testcase}{rel-schedule}{The Refund fraction follows the lead time: 25\% under seven days, 0\% once started}{Release.Refund}
+\tcfield{Actor}{\code{alice} (Manager, Platform)}
+\tcfield{Priority}{High}
+\tcfield{Preconditions}{\code{alice} has Allocated Requests with L1: Room A, E 10:00--12:00 (charged 30.00), and L2: Room B, from H for 3 hours (charged $c$, its Quote).}
+\tcfield{Test data}{None.}
+\tcsteps
+\tcstep{Release L1 in whole.}{L1}{Refund 7.50 ($30.00 \times 0.25$): the lead time is under seven days.}
+\tcstep{[clock] After H, Release L2's remaining hours.}{Hours from H+1}{The released hours free on Room B. No credits return: the window has started, so the fraction is 0\%.}
+\tcfield{Pass criteria}{The Statement shows a Refund of 7.50 and no other credit for L2.}
+\tcfield{Automated by}{\code{PricingTest}: ``Release.Refund: the step function''}
+\end{testcase}
+
+\begin{testcase}{rel-bucket}{A Refund returns to the granted and earned parts in the Charge's proportions}{Release.Refund, Ledger.Grant.Period}
+\tcfield{Actor}{\code{bob} (Manager, Research)}
+\tcfield{Priority}{Medium}
+\tcfield{Preconditions}{Research holds granted 600.00 and earned 800.00 (Rita Gomez lent to Platform for D to D+1). \code{bob} has an Allocated Request B1 with L1: Microscope 1, D+7 09:00--17:00 (480.00), and L2: Microscope 1, D+8 09:00--17:00 (480.00), charged in that order.}
+\tcfield{Test data}{L1 drew 480.00 granted; L2 drew 120.00 granted and 360.00 earned.}
+\tcsteps
+\tcstep{Open the Statement.}{None}{L1's Charge split 480.00 granted; L2's split 120.00 granted and 360.00 earned. Granted 0.00, earned 440.00.}
+\tcstep{Release L2 in whole.}{L2}{One Refund of 360.00 ($480.00 \times 0.75$), split 90.00 granted and 270.00 earned.}
+\tcstep{Open the Account.}{None}{Granted 90.00, earned 710.00, Balance 800.00.}
+\tcfield{Pass criteria}{The Refund's split has the Charge's proportions (25\% granted, 75\% earned).}
+\tcfield{Automated by}{\code{LedgerServiceTest}: ``Ledger.SpendOrder: a Charge draws granted credits first, then earned, and records the split'' (Charge part)}
+\end{testcase}
+
+\begin{testcase}{rel-loan-prorate}{Ending a Loan early corrects the lending Team's Earning}{Release.Loan.Prorate, Ledger.Transaction.Kinds}
+\tcfield{Actor}{\code{bob} (Manager, Research); \code{oscar} where named}
+\tcfield{Priority}{High}
+\tcfield{Preconditions}{\code{bob} has an Allocated Request with a Loan of Dave Kim for days D to D+2 (Wednesday to Friday); Operations received an Earning of 1200.00.}
+\tcfield{Test data}{New last day: D.}
+\tcsteps
+\tcstep{End the Loan early.}{Last day D}{The Loan covers D only. Oscar is notified.}
+\tcstep{As \code{oscar}, open the Statement.}{None}{An Earning correction of $-800.00$ (2 person-days no longer lent) referencing the original Earning; net Earning for the Loan 400.00. The original Earning is unchanged.}
+\tcstep{As \code{bob}, open the Statement.}{None}{No Refund or Charge was posted to Research for the Loan.}
+\tcfield{Pass criteria}{Operations' Earning for the Loan equals 400.00, the Day Rate times one day lent.}
+\tcfield{Automated by}{None yet}
+\end{testcase}
+
+\begin{testcase}{rel-loan-negative}{An Earning correction may take a Balance below zero, and then blocks Exclusive and Metered Requests}{Release.Loan.Prorate, Ledger.Grant.Period}
+\tcfield{Actor}{\code{oscar} (Manager, Operations); \code{bob} and \code{erin} where named}
+\tcfield{Priority}{Medium}
+\tcfield{Preconditions}{As in \TC{rel-loan-prorate} before step 1. \code{oscar} then has Allocated Microscope 1 for D+7, D+8, and D+9, 09:00--17:00 each (1440.00), so Operations' Balance is 760.00.}
+\tcfield{Test data}{O1: Room A, D+12 (a Monday) 10:00--12:00, Required (30.00). O2: Person, skill Java, quantity 1, days D+14 to D+15, the Request's only line. Mid-Period Grant: 100.00, reason ``Correction cover''.}
+\tcsteps
+\tcstep{As \code{bob}, end the Loan early with last day D.}{Last day D}{Operations' Balance is $-40.00$.}
+\tcstep{Submit a Request with O1.}{O1}{Refused with \code{INSUFFICIENT\_BALANCE}: no Required Exclusive or Metered line while the Balance is below zero.}
+\tcstep{Submit a Request with O2.}{O2}{Accepted: a Request with only Matched lines costs nothing.}
+\tcstep{As \code{erin}, post a mid-Period Grant to Operations.}{100.00 and reason}{Balance 60.00.}
+\tcstep{Submit a Request with O1.}{O1}{Allocated; Balance 30.00.}
+\tcfield{Pass criteria}{Only the Earning correction took the Balance below zero.}
+\tcfield{Automated by}{None yet}
+\end{testcase}

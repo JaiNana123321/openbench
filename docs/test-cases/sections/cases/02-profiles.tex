@@ -1,0 +1,65 @@
+\subsection{Member Profiles}\label{cases:profiles}
+\tcarea{PRF}
+These cases establish that a Member's skills come only from the Administrator's list, that availability and Loans together decide when a Member can be lent, and that profiles are visible only to the Member and their own Manager.
+
+% Requirements of this feature in the SRS short edition (cover each with at least one test case):
+%   Profile.Skills
+%   Profile.Availability
+
+\begin{testcase}{prf-skills}{A Member maintains their own skills from the skill list}{Profile.Skills}
+\tcfield{Actor}{\code{ben} (Member)}
+\tcfield{Priority}{High}
+\tcfield{Preconditions}{Test world with the Matched data: Ben holds Java.}
+\tcfield{Test data}{Skill list: Statistics, Java, Microscopy.}
+\tcsteps
+\tcstep{Open My profile.}{None}{Shows name Ben Ortiz, email, Team Platform, skill Java, and his availability range.}
+\tcstep{Add a skill.}{Statistics (chosen from the list)}{Skills Java and Statistics.}
+\tcstep{Try to add a skill that is not on the list.}{``Kotlin'' typed as free text}{No free text is accepted: the field offers only the list's skills, and the API refuses an unknown skill with \code{VALIDATION\_FAILED}.}
+\tcstep{Try to change the Team on the profile.}{Team Research}{The Team is shown but not editable; the API refuses the change with \code{FORBIDDEN}.}
+\tcstep{As \code{alice}, open a Draft line for Person with skill Statistics, quantity 1, days D to D+1, and submit.}{None}{Ben is not on the Shortlist: he is in the requesting Team (see \TC{mat-shortlist-build}).}
+\tcfield{Pass criteria}{Ben's skills are exactly Java and Statistics, and his Team is Platform.}
+\tcfield{Automated by}{None yet}
+\end{testcase}
+
+\begin{testcase}{prf-availability}{Availability ranges decide whether a Member is available for a window}{Profile.Availability, Matched.Shortlist.Build}
+\tcfield{Actor}{\code{dave} (Member); \code{alice} where named}
+\tcfield{Priority}{High}
+\tcfield{Preconditions}{Test world with the Matched data.}
+\tcfield{Test data}{Dave's availability replaced by two ranges: day of execution to D, and D+2 to D+60. Line M1: Person, skill Statistics, quantity 1, days D to D+1. Line M2: same, days D+2 to D+3.}
+\tcsteps
+\tcstep{On My profile, replace the availability range by the two ranges.}{The two ranges}{Both ranges are listed.}
+\tcstep{As \code{alice}, submit a Request with M1 and open its Shortlist.}{M1}{Rita Gomez only: D+1 is outside Dave's ranges, so he is not available for the whole window.}
+\tcstep{As \code{alice}, submit a second Request with M2 and open its Shortlist.}{M2}{Dave Kim, then Rita Gomez: every day of M2 lies inside a range.}
+\tcfield{Pass criteria}{A Member is a Candidate only when every day of the window lies inside one of their ranges.}
+\tcfield{Automated by}{None yet}
+\end{testcase}
+
+\begin{testcase}{prf-loan-overlap}{A Member with an overlapping Loan is not a Candidate, and a Loan leaves availability unchanged}{Profile.Availability, Matched.Shortlist.Build, Release.Loan.Prorate}
+\tcfield{Actor}{\code{alice} (Manager, Platform); \code{dave} where named}
+\tcfield{Priority}{High}
+\tcfield{Preconditions}{\code{bob} has an Allocated Request B1 in which Dave Kim is lent to Research for days D to D+1, formed as in \TC{mat-loan-form}.}
+\tcfield{Test data}{Line M1: Person, skill Statistics, quantity 1, days D+1 to D+2. Line M2: same, days D+2 to D+3.}
+\tcsteps
+\tcstep{As \code{dave}, open My profile.}{None}{The availability range is unchanged (day of execution to D+60) and the Loan to Research for D to D+1 is listed.}
+\tcstep{Submit a Request with M1 and open its Shortlist.}{M1}{Rita Gomez only: Dave's Loan overlaps D+1.}
+\tcstep{Submit a Request with M2 and open its Shortlist.}{M2}{Dave Kim and Rita Gomez are both Candidates: the Loan does not touch D+2 or D+3. (Their order is checked in \TC{mat-shortlist-order}.)}
+\tcstep{As \code{bob}, end Dave's Loan early with last day D.}{New last day D}{The Loan now covers D only; Dave's availability is still unchanged.}
+\tcstep{Submit a new Request with M1 and open its Shortlist.}{M1}{Dave Kim is a Candidate again: he is free from D+1, the day after the Loan's new last day.}
+\tcfield{Pass criteria}{A Person is never in two overlapping Loans, and Loans never change availability ranges.}
+\tcfield{Automated by}{None yet}
+\end{testcase}
+
+\begin{testcase}{prf-visibility}{Profiles are seen by the Member and their own Manager only}{Profile.Availability}
+\tcfield{Actor}{\code{alice} (Manager, Platform); \code{ben} and \code{bob} where named}
+\tcfield{Priority}{Medium}
+\tcfield{Preconditions}{Test world with the Matched data.}
+\tcfield{Test data}{New range for Ben: D+70 to D+80.}
+\tcsteps
+\tcstep{Open the Team view and Ben's profile.}{None}{Ben's name, email, Team, skills, availability, and Loans are shown. No other personal data field (address, phone, date of birth) exists.}
+\tcstep{Add an availability range for Ben on his behalf.}{D+70 to D+80}{Saved; as \code{ben}, My profile shows the new range.}
+\tcstep{Call the API for Rita's profile (Research).}{GET Rita's profile}{Refused with \code{NOT\_FOUND}: Rita is not in Alice's Team.}
+\tcstep{As \code{ben}, call the API for Dave's profile.}{GET Dave's profile}{Refused with \code{NOT\_FOUND}: a Member sees only their own profile.}
+\tcstep{As \code{bob}, try to edit Ben's availability.}{Any range}{Refused with \code{NOT\_FOUND}; Ben's ranges are unchanged.}
+\tcfield{Pass criteria}{Only Ben and Alice saw or changed Ben's profile.}
+\tcfield{Automated by}{None yet}
+\end{testcase}

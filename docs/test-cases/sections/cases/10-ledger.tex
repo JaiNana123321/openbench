@@ -1,0 +1,120 @@
+\subsection{Ledger and Pricing}\label{cases:ledger}
+\tcarea{LED}
+These cases establish that each Team's Account and Statement add up from its Transactions; that Transactions are of four kinds and never change; that Grants post and expire at the Period boundaries; that Quotes follow the price formula and its bands; and that Earnings count only working days.
+
+% Requirements of this feature in the SRS short edition (cover each with at least one test case):
+%   Ledger.Account
+%   Ledger.Transaction.Kinds
+%   Ledger.Grant.Period
+%   Ledger.Price.Formula
+%   Ledger.Earning.Post
+%   Ledger.Surcharge   [Stretch]
+
+\begin{testcase}{led-account}{Balance, held credits, and Available Balance}{Ledger.Account, Ledger.Grant.Period}
+\tcfield{Actor}{\code{alice} (Manager, Platform)}
+\tcfield{Priority}{High}
+\tcfield{Preconditions}{Test world with the Matched data. \code{alice} has an Allocated Request A1 with Room A, D 10:00--12:00 (charged 30.00), and a Pending Request A2 with M1 (Statistics, days D to D+1, Dave Kim selected) and GPU, 4 units, D 10:00--12:00 on Hold (60.00).}
+\tcfield{Test data}{None.}
+\tcsteps
+\tcstep{Open the Statement for the current Period.}{None}{Granted 4970.00 (5000.00 less the Charge, drawn from granted credits first), earned 0.00, held 60.00; Balance 4970.00; Available Balance 4910.00. A2 has no Charge yet.}
+\tcstep{Have \code{oscar} approve Dave Kim for A2.}{None}{A2 is Allocated; a Charge of 60.00 posts; held 0.00; Balance and Available Balance 4910.00.}
+\tcfield{Pass criteria}{Balance = granted + earned and Available Balance = Balance $-$ held after each step.}
+\tcfield{Automated by}{\code{LedgerServiceTest}: ``Ledger.Account: \ldots'', ``The account row equals the fold of the Team's Transactions and Period closes''}
+\end{testcase}
+
+\begin{testcase}{led-statement}{The Statement lists the Period's Transactions, and each Team sees only its own}{Ledger.Account, Ledger.Transaction.Kinds}
+\tcfield{Actor}{\code{alice} (Manager, Platform); \code{bob}, \code{ben}, and \code{erin} where named}
+\tcfield{Priority}{High}
+\tcfield{Preconditions}{\code{alice} has an Allocated Request A1 with Room A, D 10:00--12:00 (30.00) and has Released nothing.}
+\tcfield{Test data}{The current Period's id and Platform's Team id.}
+\tcsteps
+\tcstep{Open Statement.}{None}{Opening granted 0.00 and earned 0.00; a Grant of 5000.00 and a Charge of 30.00, each with its Team, amount, Period, timestamp, actor or job, and (for the Charge) its Request Line; expired 0.00; closing granted 4970.00, earned 0.00.}
+\tcstep{As \code{bob}, call the API for Platform's Statement.}{Platform's Team id}{\code{NOT\_FOUND}.}
+\tcstep{As \code{ben}, call the API for Platform's Statement.}{Platform's Team id}{\code{FORBIDDEN}: a Member who is not a Manager or the Capacity Planner sees no Statement.}
+\tcstep{As \code{erin}, open the Statement of each Team.}{Platform, Research, Operations}{All three are shown.}
+\tcfield{Pass criteria}{The Statement's closing balances equal its opening balances plus its Transactions.}
+\tcfield{Automated by}{\code{LedgerControllerTest}: ``Ledger.Statement: opening, totals, closing, the Account, and every Transaction of the Period'', ``A Manager asking for another Team's Statement gets 404 NOT\_FOUND'', ``A Member who is neither Manager nor Planner gets 403 FORBIDDEN \ldots''}
+\end{testcase}
+
+\begin{testcase}{led-immutable}{Transactions are never updated or deleted; a correction is a new Transaction}{Ledger.Transaction.Kinds}
+\tcfield{Actor}{\code{erin} (Capacity Planner)}
+\tcfield{Priority}{High}
+\tcfield{Preconditions}{The state after \TC{rel-whole}: Platform has a Charge of 30.00 and a Refund of 22.50.}
+\tcfield{Test data}{None.}
+\tcsteps
+\tcstep{Open Platform's Statement.}{None}{Every Transaction is a Grant, Charge, Earning, or Refund; the Refund references the Charge it corrects.}
+\tcstep{Look for an edit or delete action on any Transaction, in the client and in the API document at \path{/api/docs/ui}.}{None}{None exists.}
+\tcstep{Run the automated test that updates and deletes a Transaction row as the application's database role.}{\code{mvn verify}}{Both statements are refused by the database.}
+\tcfield{Pass criteria}{The Charge still reads 30.00 and the Refund 22.50.}
+\tcfield{Automated by}{\code{AppRoleGrantsTest}: ``Ledger.Transaction.Kinds, QA-audit: the application role cannot change history''}
+\end{testcase}
+
+\begin{testcase}{led-grant-mid}{The Capacity Planner posts a mid-Period Grant with a reason}{Ledger.Grant.Period, Planner.Settings}
+\tcfield{Actor}{\code{erin} (Capacity Planner); \code{alice} where named}
+\tcfield{Priority}{Medium}
+\tcfield{Preconditions}{Test world.}
+\tcfield{Test data}{Grant G1: Research, 200.00, reason ``Extra imaging time''.}
+\tcsteps
+\tcstep{Post a Grant without a reason.}{Research, 200.00, no reason}{Refused with \code{REASON\_REQUIRED}.}
+\tcstep{Post a Grant of zero.}{Research, 0.00, reason}{Refused with \code{INVALID\_AMOUNT}.}
+\tcstep{Post G1.}{G1}{Research's Statement shows the Grant with Erin Walsh as actor and the reason; Balance 800.00.}
+\tcstep{As \code{alice}, call the Grant endpoint.}{Research, 200.00, reason}{\code{FORBIDDEN}.}
+\tcfield{Pass criteria}{Exactly one mid-Period Grant was posted.}
+\tcfield{Automated by}{\code{LedgerControllerTest}: ``REASON\_REQUIRED and INVALID\_AMOUNT: a mid-Period Grant needs a reason and a positive amount''}
+\end{testcase}
+
+\begin{testcase}{led-period-boundary}{At the Period boundary, granted credits expire, earned credits stay, and the new Grant posts}{Ledger.Grant.Period}
+\tcfield{Actor}{\code{oscar} (Manager, Operations); \code{erin} where named}
+\tcfield{Priority}{High}
+\tcfield{Preconditions}{Operations has granted 970.00 (after a Charge of 30.00) and earned 800.00 (Dave Kim's Loan, \TC{mat-loan-form}). Erin has set Operations' Grant for the next Period to 1000.00.}
+\tcfield{Test data}{None.}
+\tcsteps
+\tcstep{[clock] Let the current Period end.}{Period boundary}{Within fifteen minutes the rollover job has run.}
+\tcstep{Open the Statement of the ended Period.}{None}{Expired 970.00; closing granted 0.00, earned 800.00.}
+\tcstep{Open the Statement of the new Period.}{None}{Opening granted 0.00, earned 800.00; a Grant of 1000.00 posted by the job; Balance 1800.00.}
+\tcfield{Pass criteria}{Earned credits survived the boundary and only granted credits expired.}
+\tcfield{Automated by}{None yet}
+\end{testcase}
+
+\begin{testcase}{led-price-bands}{Quotes follow the price formula with its bands and the priority premium}{Ledger.Price.Formula}
+\tcfield{Actor}{\code{alice} (Manager, Platform)}
+\tcfield{Priority}{High}
+\tcfield{Preconditions}{\code{alice} has an empty Draft.}
+\tcfield{Test data}{The lines of each step; the expected Quotes are those of Table~\ref{tab:quotes}.}
+\tcsteps
+\tcstep{Add a line inside the weekday band.}{Meeting room, 1, D 10:00--12:00}{30.00 (Q1).}
+\tcstep{Add a line across the band's end.}{Meeting room, 1, D 16:00--18:00}{25.00 (Q2).}
+\tcstep{Add a line outside any band on a weekday evening.}{Meeting room, 1, D 18:00--20:00}{20.00 ($2 \times 10.00 \times 1.0$).}
+\tcstep{Add a weekend line.}{Meeting room, 1, D+3 10:00--12:00}{10.00 (Q3).}
+\tcstep{Add a Priority line.}{Meeting room, 1, D 10:00--12:00, Priority}{60.00 (Q4).}
+\tcstep{Add a weekly line.}{Meeting room, 1, D 10:00--12:00 on D, D+7, D+14}{90.00 (Q5).}
+\tcstep{Add a Metered line across the band's end.}{GPU, 4 units, D 16:00--18:00}{50.00 (Q8).}
+\tcfield{Pass criteria}{Every Quote equals the stated value to the cent.}
+\tcfield{Automated by}{\code{PricingTest}: ``Ledger.Price.Formula: the demo story's Quotes'', ``Ledger.Price.Band: which band an hour falls in'', ``Ledger.Price.Premium and rounding''}
+\end{testcase}
+
+\begin{testcase}{led-earning}{An Earning counts only Monday-to-Friday days of the Loan}{Ledger.Earning.Post, Matched.Loan.Form}
+\tcfield{Actor}{\code{bob} (Manager, Research); \code{oscar} where named}
+\tcfield{Priority}{High}
+\tcfield{Preconditions}{Test world with the Matched data.}
+\tcfield{Test data}{M1: Person, skill Statistics, quantity 1, days D+2 (Friday) to D+5 (Monday).}
+\tcsteps
+\tcstep{Submit a Request with M1 and select Dave Kim; as \code{oscar}, approve.}{M1, Dave Kim}{Allocated; a Loan for D+2 to D+5.}
+\tcstep{As \code{oscar}, open the Statement.}{None}{An Earning of 800.00: 2 person-days (Friday and Monday) $\times$ 400.00; Saturday and Sunday do not count.}
+\tcfield{Pass criteria}{The Earning is 800.00, not 1600.00.}
+\tcfield{Automated by}{None yet}
+\end{testcase}
+
+\begin{testcase}{led-surcharge}{[Stretch] A demand surcharge raises the Quote with the share of capacity taken and is locked}{Ledger.Surcharge}
+\tcfield{Actor}{\code{erin} (Capacity Planner); \code{alice} and \code{oscar} where named}
+\tcfield{Priority}{Low}
+\tcfield{Preconditions}{Test world.}
+\tcfield{Test data}{L1: GPU, 4 units, D 10:00--12:00. O1: GPU, 8 units, D 10:00--12:00, for \code{oscar}.}
+\tcsteps
+\tcstep{Enable the demand surcharge for GPU.}{Enable}{Saved and recorded.}
+\tcstep{As \code{alice}, add L1 to a Draft.}{L1}{Quote 60.00: nothing is allocated or held in the window, so no surcharge applies.}
+\tcstep{As \code{oscar}, submit O1. As \code{alice}, reopen the Draft.}{O1}{L1's Quote is now above 60.00: half of the pool is taken in the window.}
+\tcstep{As \code{alice}, submit, then have \code{oscar} Release O1.}{None}{L1's locked Quote and Charge do not change.}
+\tcfield{Pass criteria}{The surcharge depends on the share taken at quote time and is fixed once locked.}
+\tcfield{Automated by}{None yet}
+\end{testcase}

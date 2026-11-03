@@ -1,0 +1,155 @@
+\subsection{Matched Allocation}\label{cases:matched}
+\tcarea{MAT}
+These cases establish that the Shortlist contains exactly the Members of other Teams who have the skills, the availability, and no overlapping Loan, in the stated order; that the requesting Manager selects Candidates and each lending Manager decides; that refusals and silence are handled without restarting the Objection Window; and that an approved Candidate becomes a Loan with its Earning.
+
+% Requirements of this feature in the SRS short edition (cover each with at least one test case):
+%   Matched.Shortlist.Build
+%   Matched.Approve.Route
+%   Matched.Refuse.Replace
+%   Matched.Escalate
+%   Matched.Loan.Form
+
+\begin{testcase}{mat-shortlist-build}{The Shortlist holds the qualified Members of other Teams}{Matched.Shortlist.Build, Lifecycle.Evaluate}
+\tcfield{Actor}{\code{alice} (Manager, Platform)}
+\tcfield{Priority}{High}
+\tcfield{Preconditions}{Test world with the Matched data.}
+\tcfield{Test data}{M1: Person, skill Statistics, quantity 1, days D to D+1, Required.}
+\tcsteps
+\tcstep{Create a Draft with M1 and submit it.}{M1}{The Request is Pending: M1 needs an approval.}
+\tcstep{Open M1's Shortlist.}{None}{Dave Kim (Operations, Statistics, 0 person-days lent), then Rita Gomez (Research, Statistics and Microscopy, 0). Ben Ortiz is absent: he is in Platform and lacks Statistics. No Candidate is selected yet.}
+\tcstep{Check what each row shows.}{None}{Name, Team, skills, and person-days lent only; no link to the Candidate's other Requests or Statements.}
+\tcfield{Pass criteria}{The Shortlist has exactly two Candidates in the stated order, and nothing was selected automatically.}
+\tcfield{Automated by}{None yet}
+\end{testcase}
+
+\begin{testcase}{mat-shortlist-order}{The Shortlist is ordered by person-days lent in the current Period, then by name}{Matched.Shortlist.Build}
+\tcfield{Actor}{\code{alice} (Manager, Platform)}
+\tcfield{Priority}{Medium}
+\tcfield{Preconditions}{Dave Kim has a formed Loan to Platform for days E to E+1, two weekdays inside the current Period (if the current Period ends within the next week, run the case after its boundary).}
+\tcfield{Test data}{M1: Person, skill Statistics, quantity 1, days D to D+1.}
+\tcsteps
+\tcstep{Submit a Request with M1 and open its Shortlist.}{M1}{Rita Gomez (0 person-days lent) first, then Dave Kim (2 person-days lent).}
+\tcfield{Pass criteria}{The Candidate with fewer person-days lent comes first, overriding the order by name.}
+\tcfield{Automated by}{None yet}
+\end{testcase}
+
+\begin{testcase}{mat-select}{The Manager selects exactly the line's quantity; a short Shortlist leaves the Request Waiting}{Matched.Shortlist.Build, Matched.Approve.Route}
+\tcfield{Actor}{\code{bob} (Manager, Research); \code{alice} where named}
+\tcfield{Priority}{High}
+\tcfield{Preconditions}{Test world with the Matched data.}
+\tcfield{Test data}{M2: Person, skill Statistics, quantity 2, days D to D+1, Required. M1: Person, skill Statistics, quantity 1, days D to D+1 (for \code{alice}).}
+\tcsteps
+\tcstep{Submit a Request with M2 and open its Shortlist.}{M2}{Dave Kim only, since Rita is in Research. The Request is Waiting: M2 is Required and has fewer Candidates than its quantity.}
+\tcstep{As \code{alice}, submit a Request with M1 and try to select both Candidates.}{Dave Kim and Rita Gomez}{Refused with \code{LINE\_NOT\_ATOMIC}: exactly one Candidate must be selected.}
+\tcstep{As \code{alice}, try to select a Member who is not on the Shortlist through the API.}{Carol Davis (Operations, no skills)}{Refused with \code{NOT\_A\_CANDIDATE}.}
+\tcstep{As \code{alice}, select one Candidate.}{Dave Kim}{Dave is selected and an approval request is sent; Dave receives a notification that he was selected.}
+\tcfield{Pass criteria}{No Candidate was selected without the Manager's action.}
+\tcfield{Automated by}{None yet}
+\end{testcase}
+
+\begin{testcase}{mat-approve-route}{The approval request goes to the Candidate's Manager, who decides}{Matched.Approve.Route}
+\tcfield{Actor}{\code{oscar} (Manager, Operations); \code{alice} where named}
+\tcfield{Priority}{High}
+\tcfield{Preconditions}{\code{alice} has a Pending Request A1 with M1 (Statistics, quantity 1, days D to D+1) and Dave Kim selected.}
+\tcfield{Test data}{Reason ``Dave is free that week''.}
+\tcsteps
+\tcstep{Open Approvals.}{None}{One approval request: Candidate Dave Kim, requesting Team Platform, days D to D+1, Earning 800.00 (EA).}
+\tcstep{As \code{alice}, try to decide the approval through the API.}{Approve}{Refused with \code{FORBIDDEN}: the requesting Manager cannot decide.}
+\tcstep{Approve with a reason.}{Reason}{The decision is recorded with actor Oscar Reed, the reason, and the timestamp. A1 becomes Allocated (its only line is approved).}
+\tcstep{Try to decide it again.}{Refuse}{Refused with \code{ALREADY\_DECIDED}.}
+\tcfield{Pass criteria}{Exactly one approval request was sent, to Oscar, and only his decision counted.}
+\tcfield{Automated by}{None yet}
+\end{testcase}
+
+\begin{testcase}{mat-own-team}{No approval is routed to the requesting Manager for their own Team}{Matched.Approve.Route}
+\tcfield{Actor}{\code{alice} (Manager, Platform)}
+\tcfield{Priority}{Medium}
+\tcfield{Preconditions}{Test world with the Matched data.}
+\tcfield{Test data}{M3: Person, named Person Ben Ortiz (Platform), quantity 1, days D to D+1.}
+\tcsteps
+\tcstep{Add M3 to a Draft.}{M3}{Refused with \code{OWN\_TEAM}: a Member of the requesting Team cannot be lent to it.}
+\tcstep{Open Approvals.}{None}{No approval request exists.}
+\tcfield{Pass criteria}{No line, approval request, or Loan of Ben for Platform exists.}
+\tcfield{Automated by}{None yet}
+\end{testcase}
+
+\begin{testcase}{mat-refuse-replace}{A refusal asks for a replacement without restarting the Objection Window}{Matched.Refuse.Replace, Lifecycle.Waiting.Reevaluate, Lifecycle.Window.Start}
+\tcfield{Actor}{\code{alice} (Manager, Platform); \code{oscar} and \code{bob} where named}
+\tcfield{Priority}{High}
+\tcfield{Preconditions}{\code{alice} has a Pending Request A1 with M1 (Statistics, quantity 1, days D to D+1, Required, Dave Kim selected) and L1: Room A, D 10:00--12:00, on Hold (30.00 held). A1's Objection Window deadline is shown on A1, say W.}
+\tcfield{Test data}{Reason ``Dave is on another project''.}
+\tcsteps
+\tcstep{As \code{oscar}, refuse the approval with a reason.}{Reason}{Recorded with actor, reason, and timestamp.}
+\tcstep{Open A1.}{None}{A1 is Waiting; L1's Hold is released and the 30.00 is no longer held; A1 asks Alice to select a replacement for M1; the deadline is still W.}
+\tcstep{Open M1's Shortlist and select a replacement.}{Rita Gomez}{A1 returns to Pending; L1 is on Hold again; an approval request goes to Bob Patel; the deadline is still W.}
+\tcstep{As \code{bob}, approve.}{None}{A1 is Allocated; Rita has a Loan to Platform for D to D+1.}
+\tcfield{Pass criteria}{The Objection Window never restarted, and Dave Kim has no Loan.}
+\tcfield{Automated by}{None yet}
+\end{testcase}
+
+\begin{testcase}{mat-refuse-none}{A refusal with no Candidate left refuses a Required line and drops an Optional one}{Matched.Refuse.Replace, Lifecycle.States, Lifecycle.Evaluate}
+\tcfield{Actor}{\code{bob} (Manager, Research); \code{oscar} and \code{alice} where named}
+\tcfield{Priority}{High}
+\tcfield{Preconditions}{Test world with the Matched data.}
+\tcfield{Test data}{Request B1: M4 Person, named Person Dave Kim, quantity 1, days D to D+1, Required; L1 Room A, D 10:00--12:00, Required. Request B2: L2 Room B, D 10:00--12:00, Required; M5 Person, skill Statistics, quantity 1, days D to D+1, Optional.}
+\tcsteps
+\tcstep{Submit B1. As \code{oscar}, refuse the approval for Dave.}{None}{B1 is Refused: the line named a Person, so no replacement is possible. L1's Hold is released; nothing is charged; Bob is notified.}
+\tcstep{Submit B2.}{None}{B2 is Allocated at once: no Required line needs approval. L2 is Allocated and charged; M5 stays open, awaiting a Candidate.}
+\tcstep{Select Dave Kim for M5. As \code{oscar}, refuse.}{Dave Kim}{The Shortlist has no other Candidate, so M5 is Dropped with its reason; B2 stays Allocated with L2 only.}
+\tcstep{Open Research's Statement.}{None}{One Charge of 30.00 for L2; nothing for B1.}
+\tcfield{Pass criteria}{B1 is final in Refused; B2 was Allocated at submission, and M5 was Dropped only when it was refused with no Candidate left.}
+\tcfield{Automated by}{None yet}
+\end{testcase}
+
+\begin{testcase}{mat-escalate}{A silent Manager's approval escalates to the Capacity Planner}{Matched.Escalate, Lifecycle.Window.Start, Planner.Settings}
+\tcfield{Actor}{\code{erin} (Capacity Planner); \code{alice} and \code{oscar} where named}
+\tcfield{Priority}{High}
+\tcfield{Preconditions}{\code{alice} has a Pending Request A1 with M1 (Statistics, quantity 1, days D to D+1, Dave Kim selected) and L1: Room A, D 10:00--12:00, on Hold. Oscar has not decided.}
+\tcfield{Test data}{Objection Window two working days from A1's submission.}
+\tcsteps
+\tcstep{[clock] Let the Objection Window lapse.}{Two working days}{Within five minutes: A1 is Waiting, L1's Hold is released, and A1 is escalated; Alice and Erin are notified.}
+\tcstep{Open Escalations.}{None}{A1 is listed with its outstanding approval (Dave Kim), the silent Manager Oscar Reed, and the time since the lapse.}
+\tcstep{Approve on Oscar's behalf.}{Approve}{Recorded with actor Erin Walsh. A1 is re-evaluated: Room A is still free, so A1 is Allocated at its locked Quotes. Oscar is notified of the outcome.}
+\tcstep{As \code{oscar}, open Approvals.}{None}{The request is no longer open there; it shows as decided by the Capacity Planner.}
+\tcfield{Pass criteria}{Exactly one decision was recorded, by Erin, and A1 is Allocated.}
+\tcfield{Automated by}{None yet}
+\end{testcase}
+
+\begin{testcase}{mat-escalate-later}{After the lapse, a later approval goes straight to the Capacity Planner}{Matched.Escalate}
+\tcfield{Actor}{\code{alice} (Manager, Platform); \code{erin} where named}
+\tcfield{Priority}{Medium}
+\tcfield{Preconditions}{A1 as in \TC{mat-escalate} after step 2. Erin refuses Dave on Oscar's behalf.}
+\tcfield{Test data}{Replacement Rita Gomez.}
+\tcsteps
+\tcstep{Select a replacement for M1.}{Rita Gomez}{An approval request is created and sent to Erin Walsh, not to Bob Patel. No Hold is placed: the window has lapsed.}
+\tcstep{As \code{erin}, approve it from Escalations.}{Approve}{Room A is still free, so A1 is Allocated at its locked Quotes; Rita has a Loan to Platform.}
+\tcfield{Pass criteria}{Bob never received an approval request for A1.}
+\tcfield{Automated by}{None yet}
+\end{testcase}
+
+\begin{testcase}{mat-loan-form}{An approved Candidate becomes a Loan and the lending Team earns}{Matched.Loan.Form, Ledger.Earning.Post}
+\tcfield{Actor}{\code{bob} (Manager, Research); \code{oscar} and \code{dave} where named}
+\tcfield{Priority}{High}
+\tcfield{Preconditions}{Test world with the Matched data.}
+\tcfield{Test data}{M1: Person, skill Statistics, quantity 1, days D to D+1, Required.}
+\tcsteps
+\tcstep{Submit a Request B1 with M1 and select Dave Kim.}{Dave Kim}{B1 is Pending. Dave is notified that he was selected.}
+\tcstep{As \code{oscar}, approve.}{None}{B1 is Allocated; a Loan of Dave Kim to Research for D to D+1 is formed.}
+\tcstep{Open the Statements of Operations (as \code{oscar}) and Research (as \code{bob}).}{None}{Operations: an Earning of 800.00 (2 person-days $\times$ 400.00) for B1's line, earned credits 800.00. Research: no Charge for M1.}
+\tcstep{As \code{dave}, open the notifications and My profile.}{None}{A notification that the Loan formed; the Loan to Research for D to D+1 is listed; there is no action to accept or decline it.}
+\tcfield{Pass criteria}{One Loan and one Earning of 800.00 exist for B1.}
+\tcfield{Automated by}{None yet}
+\end{testcase}
+
+\begin{testcase}{mat-loan-optional-later}{An Optional Matched line approved after allocation forms its Loan then}{Matched.Loan.Form, Lifecycle.Allocate}
+\tcfield{Actor}{\code{bob} (Manager, Research); \code{oscar} and \code{alice} where named}
+\tcfield{Priority}{Medium}
+\tcfield{Preconditions}{Test world with the Matched data.}
+\tcfield{Test data}{Request B1: M1 Person, skill Statistics, quantity 1, days D to D+1, Required; M6 Person, named Person Ben Ortiz, quantity 1, days D to D+1, Optional.}
+\tcsteps
+\tcstep{Submit B1 and select Dave Kim for M1.}{Dave Kim}{B1 is Pending; approval requests go to Oscar (Dave) and Alice (Ben).}
+\tcstep{As \code{oscar}, approve Dave.}{None}{Every Required line is satisfied: B1 is Allocated, Dave's Loan forms, and Operations earns 800.00. M6 is still awaiting approval.}
+\tcstep{As \code{alice}, approve Ben.}{None}{Ben's Loan to Research for D to D+1 forms now, and Platform earns 800.00.}
+\tcfield{Pass criteria}{Each Earning posted when its Loan formed, not before.}
+\tcfield{Automated by}{None yet}
+\end{testcase}

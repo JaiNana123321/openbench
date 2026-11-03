@@ -1,0 +1,58 @@
+\subsection{Showback Dashboard}\label{cases:dashboard}
+\tcarea{DSH}
+These cases establish that the dashboard reports utilization, idle capacity, and waiting lines per Resource Type, and credits and Loans per Team, computed from the allocations and Transactions completed before the page was requested, and that each role sees only its scope.
+
+% Requirements of this feature in the SRS short edition (cover each with at least one test case):
+%   Dashboard.Utilization
+%   Dashboard.Credits
+%   Dashboard.Usage   [Stretch]
+
+\begin{testcase}{dsh-utilization}{Utilization, idle capacity, and waiting lines per Resource Type}{Dashboard.Utilization, Release.Line}
+\tcfield{Actor}{\code{erin} (Capacity Planner)}
+\tcfield{Priority}{High}
+\tcfield{Preconditions}{E falls in the current Period. Allocated: \code{alice}'s Room A, E 10:00--14:00 (4 instance-hours) and GPU, 4 units, E 10:00--12:00 (8 unit-hours). Waiting: \code{bob}'s Room A (named), E 11:00--12:00. Let $h$ be the number of hours in the current Period.}
+\tcfield{Test data}{None.}
+\tcsteps
+\tcstep{Open the dashboard for the current Period.}{None}{Meeting room: utilization $4 \div (2 \times h) \times 100\%$ (for a 30-day Period, $h = 720$: 0.28\%); 1 line waiting. GPU: utilization $8 \div (16 \times h) \times 100\%$ (0.07\% for $h = 720$); 0 lines waiting. Confocal microscope: 0\%.}
+\tcstep{Read idle capacity for the coming seven days.}{None}{Meeting room $2 \times 168 - 4 = 332$ instance-hours; GPU $16 \times 168 - 8 = 2680$ unit-hours; Confocal microscope 168.}
+\tcstep{Have \code{alice} Release the GPU line, then reload the dashboard.}{None}{GPU utilization 0\% and idle capacity 2688 unit-hours: the Release completed before the page was requested.}
+\tcfield{Pass criteria}{Every figure matches the formula to the stated rounding; the room allocated but not Released stays counted as allocated.}
+\tcfield{Automated by}{None yet}
+\end{testcase}
+
+\begin{testcase}{dsh-credits}{Credits and Loans per Team and Period}{Dashboard.Credits}
+\tcfield{Actor}{\code{erin} (Capacity Planner)}
+\tcfield{Priority}{High}
+\tcfield{Preconditions}{In the current Period: Platform charged 30.00 (Room A, D 10:00--12:00) and refunded 22.50 (its Release, \TC{rel-whole}); Research borrowed Dave Kim for days E to E+1, two weekdays inside the current Period (formed as in \TC{mat-loan-form}), so Operations earned 800.00.}
+\tcfield{Test data}{None.}
+\tcsteps
+\tcstep{Open the dashboard's Team figures for the current Period.}{None}{Platform: Grants 5000.00, Charges 30.00, Earnings 0.00, Refunds 22.50, expired 0.00, Balance and Available Balance 4992.50. Research: Grants 600.00; Charges, Earnings, Refunds, and expired 0.00; Balance and Available Balance 600.00; person-days borrowed 2. Operations: Grants 1000.00, Earnings 800.00, Balance and Available Balance 1800.00, person-days lent 2.}
+\tcstep{Follow Platform's link to its Statement.}{None}{The Statement of Platform for the Period opens and agrees with the figures.}
+\tcfield{Pass criteria}{Each Team's figures equal the sums of its Transactions and Loans in the Period.}
+\tcfield{Automated by}{None yet}
+\end{testcase}
+
+\begin{testcase}{dsh-scope}{Each role sees the dashboard in its own scope}{Dashboard.Credits, Dashboard.Utilization}
+\tcfield{Actor}{\code{alice}, \code{dave}, and \code{ben} as named}
+\tcfield{Priority}{Medium}
+\tcfield{Preconditions}{The state of \TC{dsh-credits}.}
+\tcfield{Test data}{None.}
+\tcsteps
+\tcstep{As \code{alice}, open the dashboard.}{None}{Company-wide utilization and idle capacity; credits and Loans for Platform only. Calling the API for Research's figures answers \code{NOT\_FOUND}.}
+\tcstep{As \code{dave}, open the dashboard.}{None}{Utilization and idle capacity of the Resources he owns; no Team credit figures.}
+\tcstep{As \code{ben}, open the dashboard.}{None}{Company-wide utilization and idle capacity only.}
+\tcfield{Pass criteria}{No viewer saw another Team's credits except the Capacity Planner.}
+\tcfield{Automated by}{None yet}
+\end{testcase}
+
+\begin{testcase}{dsh-usage}{[Stretch] Requested versus used units per Team and Metered type}{Dashboard.Usage, Metered.Usage.Compare}
+\tcfield{Actor}{\code{erin} (Capacity Planner)}
+\tcfield{Priority}{Low}
+\tcfield{Preconditions}{The state after \TC{met-usage-record}: Platform requested 4 GPU units for E 10:00--12:00 and 3 were recorded as used.}
+\tcfield{Test data}{The ended Period.}
+\tcsteps
+\tcstep{Open the dashboard for the ended Period.}{The Period}{GPU, Platform: requested 8 unit-hours, used 6 unit-hours.}
+\tcstep{Open Platform's Statement for the Period.}{None}{Unchanged: the Charge is 60.00.}
+\tcfield{Pass criteria}{Usage is shown and has no Ledger effect.}
+\tcfield{Automated by}{None yet}
+\end{testcase}

@@ -1,0 +1,69 @@
+\section{Introduction}\label{sec:intro}
+
+\subsection{Purpose}
+This document describes the functional test cases for Release~1 of \SRSproduct. Each test case checks one behavior that a functional requirement of the Software Requirements Specification (SRS) states, from the point of view of the person using the system: what is set up beforehand, what the tester does, what data is entered, and what must be observed for the case to pass. The document is used by the team to run the tests and record their results, and by a reviewer to check that every requirement is tested.
+
+\subsection{Product Under Test}\label{sec:product}
+\SRSproduct{} is an internal resource marketplace. A Team's Manager posts one Request that can combine people (Matched lines, lent by other Teams), Exclusive resources such as meeting rooms and instruments, and Metered capacity such as GPU units. The system allocates each line under the policy of its Allocation Class, places Holds while lending Managers approve, keeps Requests that cannot be met yet on waitlists, and settles everything in credits: Teams receive a Grant each Period, pay a Charge for Exclusive and Metered capacity, and receive an Earning when they lend a Member.
+
+The product is a single web application: a Spring Boot server with a PostgreSQL database and a React client in the browser, which talks to the server only through a REST API. The build under test is the \code{openbench} repository; the requirements are those of SRS version \SRSversion, and the product follows Software Design Document (SDD) version \SDDversion.
+
+The product is being built in increments while this document is written. At commit \code{237dab0} (2026-11-07) the build implements Inventory and Resource Types, sign-in and roles, the Ledger with Statements, Draft Requests with Quotes, submission and withdrawal, and Exclusive and Metered allocation with waitlist entry. Matched allocation, Pending Requests with Holds across approvals, the Objection Window, Release and Refund, Bumps, Suggestions, the dashboard, notifications, and the Administrator and Capacity Planner screens are designed but not yet built. This document specifies the test cases for the whole of Release~1 regardless; Section~\ref{sec:special} explains how the cases for features not yet built are treated.
+
+\subsection{Scope}\label{sec:scope}
+\textbf{In scope.} All 47 functional requirements of the SRS short edition, Section~4: the 41 Release~1 requirements and the 6 marked Stretch, which have their own test cases marked as such. Appendix~\ref{app:trace} lists every requirement with the test cases that cover it.
+
+\textbf{Out of scope.} The non-functional requirements of SRS Section~6 (performance, availability, usability) are not tested here, except where a functional test case also exercises a security rule such as role checks or Team scoping. Unit tests, the architecture test, and the client's component tests are described in the SDD's testing strategy and are referred to here only where an automated test runs a test case.
+
+\subsection{References}
+\begin{itemize}
+  \item \SRSproduct{} Software Requirements Specification, version \SRSversion, 2026-11-07 (short edition: the requirements tested here).
+  \item \SRSproduct{} Software Design Document, version \SDDversion, 2026-11-07 (screens, API conventions, error codes, testing strategy).
+  \item Architecture decision records ADR-0001 to ADR-0007, in particular ADR-0001 (Holds bounded by the Objection Window) and ADR-0006 (allocation correctness in the database).
+  \item The \code{openbench} repository \code{README.md}: building, running with the demo data, and the demo logins.
+\end{itemize}
+
+\subsection{Conventions}\label{sec:conventions}
+Each test case has an identifier \textbf{TC-}\textit{area}\textbf{-}\textit{nn}, where the area is the SRS feature it belongs to (Table~\ref{tab:areas}), and is written in the template of Table~\ref{tab:fields}. Requirement identifiers such as \req{Draft.Quote.Line} are those of the SRS and link to the requirement's row of the traceability matrix. Capitalized words such as Request, Hold, and Quote have the meaning given in the glossary, Appendix~\ref{app:glossary}. Credits are shown with two decimals. Dates and times use the names of Section~\ref{sec:dates}, such as ``D 10:00--12:00'', and are in the company time zone; a window includes its start hour and excludes its end hour. Error codes such as \code{INSUFFICIENT\_BALANCE} are the \code{code} field of the API's problem detail; the client shows the problem's message with it.
+
+\begin{table}[h]
+\centering\small
+\caption{Test case areas, in the order of the SRS features.}\label{tab:areas}
+\begin{tabular}{@{}llL{8cm}@{}}
+\toprule
+\textbf{Code} & \textbf{Section} & \textbf{SRS feature} \\
+\midrule
+INV & \ref{cases:inventory} & Inventory and Resource Types \\
+PRF & \ref{cases:profiles} & Member Profiles \\
+SUG & \ref{cases:suggestions} & Suggestions \\
+DRF & \ref{cases:draft} & Draft and Submit a Request \\
+MAT & \ref{cases:matched} & Matched Allocation \\
+EXC & \ref{cases:exclusive} & Exclusive Allocation \\
+MET & \ref{cases:metered} & Metered Allocation \\
+LIF & \ref{cases:lifecycle} & Request Lifecycle and Holds \\
+REL & \ref{cases:release} & Release and Refund \\
+LED & \ref{cases:ledger} & Ledger and Pricing \\
+DSH & \ref{cases:dashboard} & Showback Dashboard \\
+ADM & \ref{cases:admin} & Administration \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{table}[h]
+\centering\small
+\caption{Fields of the test case template.}\label{tab:fields}
+\begin{tabular}{@{}lL{12.5cm}@{}}
+\toprule
+\textbf{Field} & \textbf{Content} \\
+\midrule
+Requirements & The SRS identifiers the test case verifies. \\
+Actor & The login, from Table~\ref{tab:accounts}, that performs the steps; a step performed by someone else names them. \\
+Priority & High for the main behavior of a Release~1 requirement, Medium for a secondary rule or refusal, Low for a Stretch requirement. \\
+Preconditions & The state the system must be in before step 1, beyond the test world of Section~\ref{sec:world}. \\
+Test data & The lines, values, and amounts the steps use, named so the steps can refer to them. \\
+Steps & Numbered rows: the Action the tester takes, its Input, and the Expected result that decides pass or fail. \\
+Pass criteria & What must hold at the end, beyond the expected result of each step. \\
+Automated by & The automated test that also runs the case, as test class and display name, or ``None yet''. \\
+\bottomrule
+\end{tabular}
+\end{table}

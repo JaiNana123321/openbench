@@ -1,0 +1,178 @@
+\subsection{Request Lifecycle and Holds}\label{cases:lifecycle}
+\tcarea{LIF}
+These cases establish that a submitted Request moves to Allocated, Pending, or Waiting by the stated rule, all or nothing; that Holds block capacity and reserve credits only while the Objection Window runs; that allocation commits everything in one step; and that a Waiting Request is allocated only when all its Required lines can be satisfied at once.
+
+% Requirements of this feature in the SRS short edition (cover each with at least one test case):
+%   Lifecycle.States
+%   Lifecycle.Evaluate
+%   Lifecycle.Hold.Place
+%   Lifecycle.Window.Start
+%   Lifecycle.Allocate
+%   Lifecycle.Waiting.Reevaluate
+
+\begin{testcase}{lif-direct}{A Request without Matched lines goes from Submitted straight to Allocated}{Lifecycle.Evaluate, Lifecycle.States, Lifecycle.Allocate}
+\tcfield{Actor}{\code{alice} (Manager, Platform)}
+\tcfield{Priority}{High}
+\tcfield{Preconditions}{Test world.}
+\tcfield{Test data}{L1: Room A, D 10:00--12:00 (Q1 = 30.00). L2: GPU, 4 units, D 10:00--12:00 (Q7 = 60.00).}
+\tcsteps
+\tcstep{Submit a Request A1 with L1 and L2.}{L1, L2}{A1 is Allocated; it never enters Pending.}
+\tcstep{Open A1's history.}{None}{Created, Submitted, and Allocated in that order, each with actor Alice Chen and a timestamp; both lines Allocated.}
+\tcstep{Open the Statement of Platform.}{None}{Charges of 30.00 and 60.00, each equal to its locked Quote; Balance 4910.00.}
+\tcstep{Open the notifications.}{None}{A notification that A1 was Allocated.}
+\tcfield{Pass criteria}{A1 and both lines are Allocated and charged exactly once.}
+\tcfield{Automated by}{\code{RequestLifecycleTest}: ``Lifecycle.Allocate: every Required line fits, so the lines are allocated and charged their locked Quotes''; \code{SubmitEndToEndTest}}
+\end{testcase}
+
+\begin{testcase}{lif-atomic-waiting}{If one Required line cannot be satisfied, nothing is held, allocated, or charged}{Lifecycle.Evaluate, Lifecycle.States}
+\tcfield{Actor}{\code{bob} (Manager, Research)}
+\tcfield{Priority}{High}
+\tcfield{Preconditions}{\code{alice} has an Allocated Request with Room A, D 10:00--12:00.}
+\tcfield{Test data}{L1: Room A (named), D 10:00--12:00. L2: GPU, 4 units, D 10:00--12:00 (fits).}
+\tcsteps
+\tcstep{Submit a Request B1 with L1 and L2, both Required.}{L1, L2}{B1 is Waiting. L1 is waitlisted with its reason; L2 is not held or allocated, although it would fit.}
+\tcstep{Open the GPU timeline and Research's Statement.}{None}{No GPU units for Research on D; no Charge and no held credits.}
+\tcfield{Pass criteria}{B1 left no partial effect.}
+\tcfield{Automated by}{\code{RequestLifecycleTest}: ``QA-atomic: when one Required line misfits, the fitting one is not held, allocated, or charged either''}
+\end{testcase}
+
+\begin{testcase}{lif-pending-holds}{A Request that needs an approval is Pending with Holds and held credits}{Lifecycle.Evaluate, Lifecycle.Hold.Place, Ledger.Account}
+\tcfield{Actor}{\code{alice} (Manager, Platform)}
+\tcfield{Priority}{High}
+\tcfield{Preconditions}{Test world with the Matched data.}
+\tcfield{Test data}{M1: Person, Statistics, quantity 1, days D to D+1. L1: Room A, D 10:00--12:00 (30.00). L2: GPU, 4 units, D 10:00--12:00 (60.00).}
+\tcsteps
+\tcstep{Submit a Request A1 with M1, L1, and L2.}{M1, L1, L2}{A1 is Pending; L1 and L2 are Held; M1 is awaiting a Candidate's selection; Alice is notified that A1 is Pending.}
+\tcstep{Open the Statement and Account of Platform.}{None}{No Charge; held credits 90.00; Balance 5000.00; Available Balance 4910.00.}
+\tcstep{Open Room A's timeline for D.}{None}{10:00--12:00 on Hold for Platform, A1.}
+\tcfield{Pass criteria}{The Holds exist and nothing is charged.}
+\tcfield{Automated by}{\code{LedgerServiceTest}: ``Ledger.Account: Balance is granted plus earned, Available Balance is Balance minus held'' (credits part)}
+\end{testcase}
+
+\begin{testcase}{lif-hold-blocks}{A Hold blocks other Requests exactly as an allocation does}{Lifecycle.Hold.Place, Metered.Pool.Check}
+\tcfield{Actor}{\code{oscar} (Manager, Operations)}
+\tcfield{Priority}{High}
+\tcfield{Preconditions}{A1 as in \TC{lif-pending-holds}: Room A and 4 GPU units on Hold for D 10:00--12:00.}
+\tcfield{Test data}{O1: Room A (named), D 11:00--12:00. O2: GPU, 13 units, D 10:00--12:00.}
+\tcsteps
+\tcstep{Submit a Request with O1.}{O1}{Waiting: Room A is on Hold.}
+\tcstep{Submit a Request with O2.}{O2}{Waiting with \code{POOL\_FULL}: $4 + 13 = 17$ units exceed 16.}
+\tcfield{Pass criteria}{Neither line was allocated against the held capacity.}
+\tcfield{Automated by}{\code{ExclusiveAllocatorTest}: ``A Hold blocks like an allocation \ldots''; \code{MeteredAllocatorTest}: ``A Hold blocks exactly like an allocation; cancel frees it''}
+\end{testcase}
+
+\begin{testcase}{lif-held-credits}{Held credits stop concurrent Pending Requests from exceeding the Balance}{Lifecycle.Hold.Place, Draft.Quote.Line}
+\tcfield{Actor}{\code{bob} (Manager, Research)}
+\tcfield{Priority}{High}
+\tcfield{Preconditions}{Test world with the Matched data: Research's Available Balance is 600.00.}
+\tcfield{Test data}{B1: M1 Person, Java, quantity 1, days D to D+1, and L1 Microscope 1, D 09:00--17:00 (480.00). B2: L2 Microscope 1, D+1 09:00--12:00 (180.00).}
+\tcsteps
+\tcstep{Submit B1.}{B1}{B1 is Pending; 480.00 held; Available Balance 120.00.}
+\tcstep{Create B2 and submit it.}{B2}{The Draft shows a shortfall of 60.00; submission is refused with \code{INSUFFICIENT\_BALANCE}.}
+\tcfield{Pass criteria}{The Research Account never commits more than its Balance.}
+\tcfield{Automated by}{\code{LedgerServiceTest}: ``Two concurrent Holds on one Account cannot together exceed the Available Balance'', ``INSUFFICIENT\_BALANCE: a Hold above the Available Balance is refused and holds nothing''}
+\end{testcase}
+
+\begin{testcase}{lif-window-start}{The Objection Window starts at submission and lasts two working days}{Lifecycle.Window.Start}
+\tcfield{Actor}{\code{alice} (Manager, Platform)}
+\tcfield{Priority}{High}
+\tcfield{Preconditions}{Test world with the Matched data. The case is run on a Thursday.}
+\tcfield{Test data}{A1 as in \TC{lif-pending-holds}, submitted on the Thursday at time $t$.}
+\tcsteps
+\tcstep{Submit A1 and open it.}{A1}{A1 is Pending and shows its Objection Window ending on the following Monday at $t$: two working days, skipping Saturday and Sunday.}
+\tcstep{Select Dave Kim; have \code{oscar} refuse; select Rita Gomez (\TC{mat-refuse-replace}).}{None}{A1 re-enters Pending; the window still ends on Monday at $t$.}
+\tcfield{Pass criteria}{The window did not restart.}
+\tcfield{Automated by}{None yet}
+\end{testcase}
+
+\begin{testcase}{lif-window-lapse}{On lapse, every Hold is released and no Hold is placed afterwards}{Lifecycle.Window.Start, Lifecycle.Hold.Place}
+\tcfield{Actor}{\code{alice} (Manager, Platform); \code{oscar} where named}
+\tcfield{Priority}{High}
+\tcfield{Preconditions}{A1 as in \TC{lif-pending-holds}, with Dave Kim selected and Oscar silent.}
+\tcfield{Test data}{O1: Room A (named), D 10:00--12:00, for \code{oscar} after the lapse.}
+\tcsteps
+\tcstep{[clock] Let the Objection Window lapse.}{Two working days}{Within five minutes: A1 is Waiting, its Holds are released, held credits 0.00, Available Balance 5000.00, and A1 is escalated.}
+\tcstep{As \code{oscar}, submit a Request with O1.}{O1}{Allocated: the released Hold no longer blocks Room A.}
+\tcstep{Open A1.}{None}{A1 is Waiting and holds nothing; Room A's timeline shows O1 only. No Hold was placed for A1 after the lapse.}
+\tcfield{Pass criteria}{No Hold of A1 outlived its Objection Window.}
+\tcfield{Automated by}{None yet}
+\end{testcase}
+
+\begin{testcase}{lif-allocate}{When the last approval arrives, everything commits in one step}{Lifecycle.Allocate, Matched.Loan.Form, Draft.Submit.Lock}
+\tcfield{Actor}{\code{oscar} (Manager, Operations); \code{alice} where named}
+\tcfield{Priority}{High}
+\tcfield{Preconditions}{A1 as in \TC{lif-pending-holds}, with Dave Kim selected.}
+\tcfield{Test data}{None.}
+\tcsteps
+\tcstep{Approve Dave Kim.}{None}{A1 is Allocated.}
+\tcstep{As \code{alice}, open A1 and the Statement.}{None}{L1 and L2 Allocated; Charges 30.00 and 60.00; held credits 0.00; Balance 4910.00; Alice notified.}
+\tcstep{Open the Statement of Operations.}{None}{An Earning of 800.00; Dave's Loan to Platform for D to D+1 exists.}
+\tcfield{Pass criteria}{The Holds, Charges, Loan, Earning, and state change all appear together; none is missing.}
+\tcfield{Automated by}{None yet (the Exclusive and Metered part: \code{RequestLifecycleTest})}
+\end{testcase}
+
+\begin{testcase}{lif-optional-drop}{At allocation, Optional lines that cannot be met are dropped with their reason}{Lifecycle.Allocate, Draft.Line.Required}
+\tcfield{Actor}{\code{bob} (Manager, Research)}
+\tcfield{Priority}{High}
+\tcfield{Preconditions}{\code{alice} has an Allocated Request with Room A, D 10:00--12:00. Research's Available Balance is 600.00.}
+\tcfield{Test data}{L1: Microscope 1, D 09:00--17:00 (480.00), Required. L2: Room A (named), D 10:00--12:00, Optional (unsatisfiable). L3: Microscope 1, D+1 09:00--12:00 (180.00), Optional (not affordable after L1).}
+\tcsteps
+\tcstep{Submit a Request B1 with L1, L2, and L3.}{L1, L2, L3}{B1 is Allocated with L1 only.}
+\tcstep{Open B1 and the notifications.}{None}{L2 Dropped, reason ``no free instance''; L3 Dropped, reason ``not affordable''; neither is waitlisted; Bob is told which lines were dropped and why.}
+\tcstep{Open the Statement of Research.}{None}{One Charge of 480.00.}
+\tcfield{Pass criteria}{Dropped lines have no Hold, waitlist entry, or Charge.}
+\tcfield{Automated by}{\code{RequestLifecycleTest}: ``Draft.Line.Required: an Optional line that does not fit is Dropped with its reason; the Request is still Allocated''}
+\end{testcase}
+
+\begin{testcase}{lif-optional-open}{An Optional line's approval never holds a Request in Pending}{Lifecycle.Evaluate, Lifecycle.Allocate, Lifecycle.Window.Start, Matched.Escalate}
+\tcfield{Actor}{\code{bob} (Manager, Research); \code{alice} and \code{erin} where named}
+\tcfield{Priority}{High}
+\tcfield{Preconditions}{Test world with the Matched data.}
+\tcfield{Test data}{L1: Room A, D 10:00--12:00 (Q1 = 30.00), Required. M6: Person, named Person Ben Ortiz, quantity 1, days D to D+1, Optional.}
+\tcsteps
+\tcstep{Submit a Request B1 with L1 and M6.}{L1, M6}{B1 is Allocated at once; it never enters Pending. L1 is Allocated; M6 is awaiting approval, and an approval request for Ben goes to Alice. B1 shows its Objection Window ending two working days after submission.}
+\tcstep{Open Room A's timeline for D and the Statement of Research.}{None}{10:00--12:00 allocated to Research, B1, not on Hold. One Charge of 30.00; held credits 0.00.}
+\tcstep{[clock] Let the Objection Window lapse with Alice silent.}{Two working days}{Within five minutes M6's approval is escalated and Erin is notified. B1 stays Allocated and L1 keeps its allocation.}
+\tcstep{As \code{erin}, approve Ben from Escalations.}{Approve}{Ben's Loan to Research for D to D+1 forms now; Platform earns 800.00; Ben and Bob are notified.}
+\tcfield{Pass criteria}{L1 was never held or delayed, and M6 was neither dropped at allocation nor lost at the lapse.}
+\tcfield{Automated by}{None yet}
+\end{testcase}
+
+\begin{testcase}{lif-reevaluate}{A Waiting Request is allocated only when every Required line fits at once}{Lifecycle.Waiting.Reevaluate, Exclusive.Waitlist.Join}
+\tcfield{Actor}{\code{bob} (Manager, Research); \code{alice} and \code{oscar} where named}
+\tcfield{Priority}{High}
+\tcfield{Preconditions}{Allocated: \code{alice}'s A1 with Room A, D 10:00--12:00; \code{oscar}'s O1 with GPU, 16 units, D 10:00--12:00. Waiting: \code{bob}'s B1 with L1 Room A (named), D 10:00--12:00 (position 1) and L2 GPU, 6 units, D 10:00--12:00, both Required; then \code{oscar}'s O2 with Room A (named), D 10:00--12:00 (position 2).}
+\tcfield{Test data}{None.}
+\tcsteps
+\tcstep{As \code{alice}, Release A1's line.}{None}{Room A frees. B1 cannot have L2, so B1 stays Waiting; the room passes to O2, which is Allocated.}
+\tcstep{Open B1.}{None}{B1 Waiting; L1 still at position 1 for Room A; L2 still waiting.}
+\tcstep{As \code{oscar}, Release O1's line and then O2's line.}{None}{After O1: L2 would fit, but Room A is O2's, so B1 waits. After O2: both fit, and B1 is Allocated at its locked Quotes (30.00 and 90.00).}
+\tcfield{Pass criteria}{B1 was never partly allocated.}
+\tcfield{Automated by}{None yet}
+\end{testcase}
+
+\begin{testcase}{lif-states-rules}{Only the transitions of the state machine are allowed, and each is recorded}{Lifecycle.States}
+\tcfield{Actor}{\code{alice} (Manager, Platform)}
+\tcfield{Priority}{Medium}
+\tcfield{Preconditions}{\code{alice} has an Allocated Request A1, a Withdrawn Request A2, and an empty Draft A3.}
+\tcfield{Test data}{The ids of A1 to A3.}
+\tcsteps
+\tcstep{Submit A1 again through the API.}{A1}{Refused with \code{WRONG\_STATE}.}
+\tcstep{Submit or edit A2.}{A2}{Refused with \code{WRONG\_STATE}: Withdrawn is final.}
+\tcstep{Submit A3.}{A3}{Refused with \code{EMPTY\_REQUEST}.}
+\tcstep{Open the history of A1 and A2.}{None}{Every state change is listed with its actor (a Member, or the system for timed events) and a timestamp.}
+\tcfield{Pass criteria}{No Request changed state in steps 1 to 3.}
+\tcfield{Automated by}{\code{RequestStateTest}; \code{RequestLifecycleTest}: ``WRONG\_STATE: \ldots'', ``EMPTY\_REQUEST: a Draft without lines cannot be submitted''}
+\end{testcase}
+
+\begin{testcase}{lif-race}{Two Managers submitting for the last room at once: exactly one is allocated}{Lifecycle.Evaluate, Exclusive.Conflict}
+\tcfield{Actor}{\code{alice} and \code{bob} (Managers), at the same moment}
+\tcfield{Priority}{High}
+\tcfield{Preconditions}{Room B is allocated for D 10:00--12:00, so Room A is the last free Meeting room.}
+\tcfield{Test data}{Each submits a Request with Meeting room, quantity 1, D 10:00--12:00.}
+\tcsteps
+\tcstep{Submit both Requests at the same moment.}{Both Requests}{Exactly one is Allocated on Room A; the other is Waiting at position 1.}
+\tcstep{Open both Statements.}{None}{One Charge of 30.00 in total; each Account equals the sum of its Transactions.}
+\tcfield{Pass criteria}{Room A is never allocated twice.}
+\tcfield{Automated by}{\code{SubmitConcurrencyTest}: ``exactly one Request is Allocated, the other Waiting at position 1, and both Accounts fold''; \code{AllocationConcurrencyTest}}
+\end{testcase}

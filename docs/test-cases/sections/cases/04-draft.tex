@@ -1,0 +1,168 @@
+\subsection{Draft and Submit a Request}\label{cases:draft}
+\tcarea{DRF}
+These cases establish that only a Manager drafts, submits, and withdraws their own Team's Requests; that every line is checked as it is added and priced while drafting; that a Request the Team cannot afford is refused at submission with its shortfall; and that submission locks every Quote.
+
+% Requirements of this feature in the SRS short edition (cover each with at least one test case):
+%   Draft.Create
+%   Draft.Line.Add
+%   Draft.Line.Required
+%   Draft.Quote.Line
+%   Draft.Submit.Lock
+
+\begin{testcase}{drf-create}{A Manager creates a Draft for their own Team}{Draft.Create, Lifecycle.States}
+\tcfield{Actor}{\code{alice} (Manager, Platform); \code{ben} where named}
+\tcfield{Priority}{High}
+\tcfield{Preconditions}{Test world.}
+\tcfield{Test data}{None.}
+\tcsteps
+\tcstep{Open Requests and create a Request.}{None}{The Draft editor opens for a new Request of Team Platform in state Draft; its history shows ``Created'' by Alice Chen with a timestamp.}
+\tcstep{Return to Requests.}{None}{The new Draft is listed with Team Platform and state Draft.}
+\tcstep{Sign in as \code{ben} and look for Requests.}{None}{The menu has no Requests entry, and opening \code{/requests} shows the not-allowed page.}
+\tcstep{As \code{ben}, create a Request through the API.}{POST \path{/api/requests}}{Refused with \code{FORBIDDEN}; no Request is created.}
+\tcfield{Pass criteria}{Exactly one Request exists, a Draft of Platform created by Alice.}
+\tcfield{Automated by}{\code{DraftRequestTest}: ``Draft.Create: a Manager's new Draft belongs to their Team and is recorded in its history''; \code{MembersControllerTest}: ``SE-roles: a caller without the role a service needs gets 403 FORBIDDEN''}
+\end{testcase}
+
+\begin{testcase}{drf-scope}{Another Team's Request is not found}{Draft.Create}
+\tcfield{Actor}{\code{bob} (Manager, Research)}
+\tcfield{Priority}{High}
+\tcfield{Preconditions}{\code{oscar} has an Allocated Request O1 with Room A, D 10:00--12:00. \code{alice} has a Draft A1 with one line, Meeting room, D 14:00--16:00, and a Waiting Request A2 whose line for Room A, D 10:00--12:00 waits behind O1.}
+\tcfield{Test data}{The ids of A1 and A2.}
+\tcsteps
+\tcstep{Open Requests.}{None}{Neither A1 nor A2 is listed.}
+\tcstep{Open A1's detail, add a line to A1, and submit A1 through the API.}{A1's id}{Each answers \code{NOT\_FOUND}.}
+\tcstep{Withdraw A2 through the API.}{A2's id}{\code{NOT\_FOUND}; A2 stays Waiting.}
+\tcfield{Pass criteria}{A1 and A2 are unchanged and nothing reveals that they exist.}
+\tcfield{Automated by}{\code{RequestLifecycleTest}: ``Another Team's Request is not found: submit, withdraw, and the detail all answer 404''}
+\end{testcase}
+
+\begin{testcase}{drf-lines-quotes}{Exclusive and Metered lines show their Quotes and the Draft its sums}{Draft.Line.Add, Draft.Quote.Line, Ledger.Price.Formula}
+\tcfield{Actor}{\code{alice} (Manager, Platform)}
+\tcfield{Priority}{High}
+\tcfield{Preconditions}{\code{alice} has an empty Draft.}
+\tcfield{Test data}{L1: Meeting room, quantity 1, D 10:00--12:00 (Q1 = 30.00). L2: GPU, 4 units, D 16:00--18:00 (Q8 = 50.00). L3: Person, skill Statistics, quantity 1, days D to D+1.}
+\tcsteps
+\tcstep{Add L1.}{L1}{L1 listed as Required with Allocation Class Exclusive (from the type) and Quote 30.00.}
+\tcstep{Add L2.}{L2}{L2 listed as Required, Metered, Quote 50.00. The form offered no Specific Resource and no Priority mark for GPU.}
+\tcstep{Add L3.}{L3}{L3 listed as Required, Matched, with no Quote.}
+\tcstep{Read the totals panel.}{None}{Required lines 80.00; Optional lines 0.00; Available Balance 5000.00; no shortfall.}
+\tcfield{Pass criteria}{Each Quote equals its reference Quote, and Matched lines cost nothing.}
+\tcfield{Automated by}{\code{DraftRequestTest}: ``Draft.Quote.Line and Draft.Quote.Totals: \ldots''; \code{RequestPage.test.tsx}}
+\end{testcase}
+
+\begin{testcase}{drf-line-options}{Line options by Allocation Class}{Draft.Line.Add}
+\tcfield{Actor}{\code{alice} (Manager, Platform)}
+\tcfield{Priority}{Medium}
+\tcfield{Preconditions}{\code{alice} has an empty Draft.}
+\tcfield{Test data}{L1: Meeting room, Specific Resource Room B, quantity 1, D 10:00--12:00. L2: Meeting room, quantity 1, D 10:00--12:00, weekly on D, D+7, D+14, Priority. L3: Person, named Person Dave Kim, quantity 1, days D to D+1.}
+\tcsteps
+\tcstep{Add L1.}{L1}{Accepted, naming Room B; Quote 30.00.}
+\tcstep{Add L1 again with quantity 2.}{Room B, quantity 2}{Refused with \code{QUANTITY\_INVALID}: a line naming one Resource asks for one instance.}
+\tcstep{Add L2.}{L2}{Accepted with three occurrences and the Priority mark; Quote 180.00 ($3 \times$ Q4).}
+\tcstep{Add L3.}{L3}{Accepted as a named-Person line, quantity 1, no Quote.}
+\tcstep{Add L3 again with quantity 2.}{Dave Kim, quantity 2}{Refused with \code{QUANTITY\_INVALID}.}
+\tcstep{Try to mark a GPU line or a Person line as Priority through the API.}{GPU, 4 units, Priority}{Refused with \code{PRIORITY\_NOT\_OFFERED}: Priority is offered for Exclusive lines only.}
+\tcfield{Pass criteria}{The Draft holds L1, L2, and L3 only.}
+\tcfield{Automated by}{\code{DraftRequestTest}: ``A line naming one Resource asks for 1 instance, else 422 QUANTITY\_INVALID'' (Exclusive part)}
+\end{testcase}
+
+\begin{testcase}{drf-line-refusals}{Invalid lines are refused as they are added}{Draft.Line.Add}
+\tcfield{Actor}{\code{alice} (Manager, Platform)}
+\tcfield{Priority}{High}
+\tcfield{Preconditions}{\code{alice} has an empty Draft. The Resource Type 3D printer exists and is retired (\TC{inv-retire-type}).}
+\tcfield{Test data}{As in each step.}
+\tcsteps
+\tcstep{Add a line whose window starts in the past.}{Meeting room, 1, yesterday 10:00--12:00}{Refused with \code{WINDOW\_NOT\_FUTURE}.}
+\tcstep{Add a line whose window ends before it starts.}{Meeting room, 1, D 12:00--10:00}{Refused with \code{WINDOW\_INVALID}.}
+\tcstep{Add a line with quantity zero.}{Meeting room, 0, D 10:00--12:00}{Refused with \code{QUANTITY\_INVALID}.}
+\tcstep{Add a line of a retired type.}{3D printer, 1, D 10:00--12:00}{Refused with \code{TYPE\_RETIRED}.}
+\tcstep{Add a Metered line naming a Resource.}{GPU, gpu-node-a, 4 units}{Refused with \code{NAMED\_RESOURCE\_NOT\_OFFERED}.}
+\tcstep{Add an Exclusive line naming a Resource of another type.}{Meeting room, Microscope 1}{Refused with \code{TYPE\_MISMATCH}.}
+\tcfield{Pass criteria}{The Draft is still empty, and each refusal shows its message beside the field it concerns.}
+\tcfield{Automated by}{\code{DraftRequestTest}: the ``Draft.Line.Validate'' tests, ``A window that ends before it starts \ldots WINDOW\_INVALID'', ``A named Resource of another type \ldots TYPE\_MISMATCH'', ``A Metered line cannot name a Resource \ldots''}
+\end{testcase}
+
+\begin{testcase}{drf-required-optional}{Lines are Required by default and may be split to make a part Optional}{Draft.Line.Required, Draft.Quote.Line}
+\tcfield{Actor}{\code{alice} (Manager, Platform)}
+\tcfield{Priority}{High}
+\tcfield{Preconditions}{\code{alice} has an empty Draft.}
+\tcfield{Test data}{L1: Meeting room, quantity 2, D 10:00--12:00 (Quote 60.00). L2: GPU, 6 units, D 10:00--12:00 (Q11 = 90.00).}
+\tcsteps
+\tcstep{Add L1 and L2.}{L1, L2}{Both Required; Required lines 150.00; Optional lines 0.00.}
+\tcstep{Split L1, moving one room to a new line.}{1 of 2}{L1 has quantity 1 and Quote 30.00, Required; a new line L1b of the same type and window has quantity 1, Quote 30.00, Optional. Required 120.00; Optional 30.00.}
+\tcstep{Split L2, moving 2 units.}{2 of 6}{L2 keeps 4 units (60.00), Required; L2b has 2 units (30.00), Optional. Required 90.00; Optional 60.00.}
+\tcstep{Try to split L1 again, moving its only room.}{1 of 1}{Refused with \code{LINE\_NOT\_ATOMIC}: both parts must keep at least one.}
+\tcstep{Mark L1b Required.}{Required}{Required 120.00; Optional 30.00.}
+\tcfield{Pass criteria}{No line offers a partial-acceptance setting; only whole lines are Required or Optional.}
+\tcfield{Automated by}{\code{DraftRequestTest}: ``Draft.Line.Split: \ldots'' (both), ``Split refuses with 422 LINE\_NOT\_ATOMIC unless both parts keep at least 1''}
+\end{testcase}
+
+\begin{testcase}{drf-shortfall}{Submission refused while the Required sum exceeds the Available Balance}{Draft.Quote.Line, Ledger.Account}
+\tcfield{Actor}{\code{bob} (Manager, Research)}
+\tcfield{Priority}{High}
+\tcfield{Preconditions}{Test world: Research's Available Balance is 600.00. \code{bob} has an empty Draft R1.}
+\tcfield{Test data}{L1: Confocal microscope, quantity 1, D 09:00--17:00 (Q9 = 480.00), Required. L2: Confocal microscope, quantity 1, D+1 09:00--12:00 (Q10 = 180.00), Required.}
+\tcsteps
+\tcstep{Add L1 and L2.}{L1, L2}{Required lines 660.00; Available Balance 600.00; shortfall 60.00 shown.}
+\tcstep{Submit R1.}{None}{Refused with \code{INSUFFICIENT\_BALANCE} and the message ``short by 60.00 credits''; R1 stays a Draft.}
+\tcstep{Mark L2 Optional and submit R1.}{L2 Optional}{Required 480.00 is within 600.00, so submission is accepted; the Optional line does not count toward the refusal.}
+\tcstep{Open the Statement of Research.}{None}{One Charge of 480.00 for L1. L2 was not affordable after L1 was charged, so it is Dropped and charged nothing (\TC{lif-optional-drop}).}
+\tcfield{Pass criteria}{After step 2 the Statement and Inventory were unchanged; after step 4 Research's Balance is 120.00.}
+\tcfield{Automated by}{\code{RequestLifecycleTest}: ``INSUFFICIENT\_BALANCE: a Request costing more than the Available Balance is refused with the shortfall \ldots''; \code{DraftRequestTest}: ``Draft.Quote.Totals: the shortfall is the Required sum above the Available Balance; Optional lines do not count''}
+\end{testcase}
+
+\begin{testcase}{drf-balance-boundary}{A Required sum equal to the Available Balance is accepted}{Draft.Quote.Line, Ledger.Grant.Period}
+\tcfield{Actor}{\code{bob} (Manager, Research)}
+\tcfield{Priority}{Medium}
+\tcfield{Preconditions}{Test world: Research's Available Balance is 600.00. \code{bob} has an empty Draft.}
+\tcfield{Test data}{L1: Confocal microscope, quantity 1, D 09:00--17:00 (480.00). L2: Meeting room, quantity 1, D 09:00--17:00 (Q6 = 120.00).}
+\tcsteps
+\tcstep{Add L1 and L2.}{L1, L2}{Required 600.00; Available Balance 600.00; no shortfall.}
+\tcstep{Submit.}{None}{Accepted; the Request is Allocated.}
+\tcstep{Open the Statement of Research.}{None}{Charges 480.00 and 120.00; Balance 0.00, not below zero.}
+\tcfield{Pass criteria}{The Balance is exactly zero.}
+\tcfield{Automated by}{None yet}
+\end{testcase}
+
+\begin{testcase}{drf-submit-lock}{Submission locks every Quote and records the submission time}{Draft.Submit.Lock, Planner.Settings}
+\tcfield{Actor}{\code{alice} (Manager, Platform); \code{erin} where named}
+\tcfield{Priority}{High}
+\tcfield{Preconditions}{\code{alice} has a Draft R1 with L1: Room A, D 10:00--12:00 (30.00), and a Draft R2 with L2: Room B, D 14:00--16:00 (30.00).}
+\tcfield{Test data}{New Unit Price for Meeting room: 20.00.}
+\tcsteps
+\tcstep{Submit R1.}{None}{R1 is Allocated; its history shows Submitted with the submission time, then Allocated. L1's Quote 30.00 is shown as locked.}
+\tcstep{As \code{erin}, set the Unit Price of Meeting room.}{20.00}{Saved, and recorded with actor, old value 10.00, new value 20.00, and timestamp.}
+\tcstep{Open R1 and the Statement.}{None}{L1's locked Quote is still 30.00; the Charge for L1 is 30.00.}
+\tcstep{Open R2.}{None}{L2's Quote is now 60.00, since R2 is still a Draft.}
+\tcfield{Pass criteria}{A locked Quote never changed, and the Charge equals it.}
+\tcfield{Automated by}{\code{RequestLifecycleTest}: ``Draft.Submit.Lock: the Quotes are locked at submission and do not follow a later price change''}
+\end{testcase}
+
+\begin{testcase}{drf-withdraw}{Withdrawing from Draft, Waiting, or Pending releases everything held}{Draft.Create, Lifecycle.Hold.Place}
+\tcfield{Actor}{\code{bob} (Manager, Research)}
+\tcfield{Priority}{High}
+\tcfield{Preconditions}{\code{alice} has an Allocated Request with Room A, D 10:00--12:00. \code{bob} has: a Draft B1 (any line); a Waiting Request B2 with Room A, quantity 1, Specific Resource Room A, D 10:00--12:00 at waitlist position 1; a Pending Request B3 with a Matched line (Java, quantity 1, days D to D+1) and Microscope 1, D 09:00--17:00 on Hold (held credits 480.00).}
+\tcfield{Test data}{None.}
+\tcsteps
+\tcstep{Withdraw B1.}{None}{B1 is Withdrawn; editing or submitting it is refused with \code{WRONG\_STATE}.}
+\tcstep{Withdraw B2.}{None}{B2 is Withdrawn; its line leaves the waitlist for Room A.}
+\tcstep{Open the Statement before and after withdrawing B3.}{None}{Before: Available Balance 120.00 (480.00 held). After: B3 Withdrawn, Available Balance 600.00, no Transaction posted.}
+\tcstep{Open Microscope 1's timeline for D.}{D 09:00--17:00}{Free: the Hold has been released.}
+\tcstep{Try to withdraw \code{alice}'s Allocated Request through the API as \code{alice}.}{Its id}{Refused with \code{WRONG\_STATE}: an Allocated Request is released line by line, not withdrawn.}
+\tcfield{Pass criteria}{No Hold, held credit, or waitlist entry of B1 to B3 remains.}
+\tcfield{Automated by}{\code{RequestLifecycleTest}: ``Draft.Create: withdrawing a Waiting Request cancels its lines \ldots'', ``Draft.Create: a Draft can be withdrawn \ldots'', ``WRONG\_STATE: \ldots an Allocated one cannot be withdrawn'' (Pending part: none yet)}
+\end{testcase}
+
+\begin{testcase}{drf-edit-waiting}{Editing a Waiting Request returns it to Draft and requotes it}{Draft.Create, Exclusive.Waitlist.Join}
+\tcfield{Actor}{\code{bob} (Manager, Research); \code{erin} where named}
+\tcfield{Priority}{Medium}
+\tcfield{Preconditions}{\code{alice} has an Allocated Request with Room A and Room B, each D 10:00--12:00. \code{bob} has a Waiting Request B1 with L1: Meeting room, quantity 1, D 10:00--12:00 (locked Quote 30.00) at waitlist position 1.}
+\tcfield{Test data}{New Unit Price for Meeting room: 20.00, set by \code{erin} while B1 is Waiting.}
+\tcsteps
+\tcstep{As \code{erin}, set the Unit Price.}{20.00}{Saved; B1's locked Quote stays 30.00.}
+\tcstep{Open B1 and choose Edit.}{None}{B1 returns to Draft; its history records the change; L1 leaves the waitlist.}
+\tcstep{Change L1's window.}{D 14:00--16:00}{L1's Quote is recomputed at the current price: 60.00.}
+\tcstep{Submit B1.}{None}{B1 is Allocated with L1's Quote locked at 60.00.}
+\tcfield{Pass criteria}{B1's earlier waitlist entry is gone and the Charge is 60.00.}
+\tcfield{Automated by}{None yet}
+\end{testcase}

@@ -1,0 +1,119 @@
+\subsection{Inventory and Resource Types}\label{cases:inventory}
+\tcarea{INV}
+These cases establish that Resource Types are data an Administrator defines without a code change; that a Resource Owner adds, changes, and retires Resources, and cannot cut capacity below what is already booked; and that any Member can see which Resources are free and who holds the others.
+
+% Requirements of this feature in the SRS short edition (cover each with at least one test case):
+%   Inventory.Type.Define
+%   Inventory.Resource.Add
+%   Inventory.View.Holder
+
+\begin{testcase}{inv-define-type}{Define a new Exclusive Resource Type without a code change}{Inventory.Type.Define}
+\tcfield{Actor}{\code{carol} (Administrator); \code{dave} and \code{alice} where named}
+\tcfield{Priority}{High}
+\tcfield{Preconditions}{Test world. No type named ``3D printer'' exists.}
+\tcfield{Test data}{Type T1: name ``3D printer'', class Exclusive, attributes \code{material} (list: PLA, ABS) and \code{volume} (number).}
+\tcsteps
+\tcstep{Open Resource Types and choose to define a type.}{T1}{The form offers the classes Matched, Exclusive, and Metered and the attribute kinds text, number, date, and list.}
+\tcstep{Save the type.}{None}{T1 is listed at once with its class and both attributes. The server is not restarted or redeployed.}
+\tcstep{As \code{dave}, add a Resource of T1 from the Inventory.}{Name ``Printer 1'', material PLA, volume 20}{Printer 1 is listed in the Inventory under 3D printer.}
+\tcstep{As \code{alice}, create a Draft and open the Resource Type list of the line form.}{None}{3D printer is offered.}
+\tcfield{Pass criteria}{The new type is usable end to end with no code change or deployment.}
+\tcfield{Automated by}{\code{ResourceTypesTest}: ``Inventory.Type.NoCode: a new type is a row, listed at once with its attributes''}
+\end{testcase}
+
+\begin{testcase}{inv-type-rules}{Type name, class, and the built-in Person type are protected}{Inventory.Type.Define}
+\tcfield{Actor}{\code{carol} (Administrator)}
+\tcfield{Priority}{Medium}
+\tcfield{Preconditions}{Test world.}
+\tcfield{Test data}{Existing types Meeting room (has Resources) and Person (built in).}
+\tcsteps
+\tcstep{Define a type with the name of an existing type.}{Name ``Meeting room'', class Exclusive}{Refused with \code{TYPE\_NAME\_TAKEN}; no type is added.}
+\tcstep{Edit Meeting room and change its class.}{Class Metered}{Refused with \code{CLASS\_FIXED}, since Resources of the type exist; the class stays Exclusive.}
+\tcstep{Open Person and try to rename it, change its class, or retire it.}{Name ``Staff''; class Exclusive; Retire}{Each is refused with \code{PERSON\_TYPE\_FIXED}; Person stays Matched and listed.}
+\tcfield{Pass criteria}{The type list is unchanged after the three steps.}
+\tcfield{Automated by}{\code{ResourceTypesTest}: ``The Allocation Class is fixed once a Resource of the type exists'' and ``Inventory.Type.Person: Person keeps its name and class and is never retired''}
+\end{testcase}
+
+\begin{testcase}{inv-retire-type}{A retired type accepts no new lines and is never deleted}{Inventory.Type.Define, Draft.Line.Add}
+\tcfield{Actor}{\code{carol} (Administrator); \code{alice} where named}
+\tcfield{Priority}{Medium}
+\tcfield{Preconditions}{\TC{inv-define-type} has been run, so 3D printer exists with Printer 1. \code{alice} has a Draft with one line L1 for 3D printer, D 10:00--12:00.}
+\tcfield{Test data}{Type 3D printer; line L2: 3D printer, quantity 1, D 14:00--16:00.}
+\tcsteps
+\tcstep{Retire 3D printer.}{None}{The type disappears from the default type list and appears when retired types are shown. It is not deleted, since L1 refers to it.}
+\tcstep{As \code{alice}, add L2 to the Draft.}{L2}{Refused with \code{TYPE\_RETIRED}; the Draft keeps L1 only.}
+\tcstep{As \code{dave}, try to add a Resource of 3D printer.}{Name ``Printer 2''}{3D printer is not offered, or the call is refused with \code{TYPE\_RETIRED}.}
+\tcfield{Pass criteria}{The retired type and L1 still exist; no new line or Resource of it was created.}
+\tcfield{Automated by}{\code{ResourceTypesTest}: ``Inventory.Type.Retire: a retired type is listed only on request and accepts no new Resources''; \code{DraftRequestTest}: ``Draft.Line.Validate: a retired Resource Type is refused with 422 TYPE\_RETIRED''}
+\end{testcase}
+
+\begin{testcase}{inv-add-resource}{Resource Owner adds, edits, and retires an Exclusive Resource}{Inventory.Resource.Add}
+\tcfield{Actor}{\code{dave} (Resource Owner); \code{alice} where named}
+\tcfield{Priority}{High}
+\tcfield{Preconditions}{Test world.}
+\tcfield{Test data}{Resource R1: Meeting room ``Room C'', seats 6, wing North.}
+\tcsteps
+\tcstep{Choose Add Resource in the Inventory and fill in R1.}{R1}{Room C is listed under Meeting room with its attributes, owner Dave Kim, and 1 unit.}
+\tcstep{Add a second Meeting room with an attribute value outside its list.}{Name ``Room D'', wing East}{Refused with \code{ATTRIBUTE\_INVALID}; Room D is not added.}
+\tcstep{Add another Meeting room with the name of an existing one.}{Name ``Room A''}{Refused with \code{RESOURCE\_NAME\_TAKEN}.}
+\tcstep{Edit Room C.}{seats 10}{Room C shows 10 seats.}
+\tcstep{Retire Room C.}{None}{Room C is marked retired and is no longer offered for new lines.}
+\tcstep{As \code{alice}, call the API to retire Room A.}{POST \path{/api/inventory/resources/{id}/retire}}{Refused with \code{FORBIDDEN}; Room A is unchanged.}
+\tcfield{Pass criteria}{Only the Resource Owner changed the Inventory, and only valid values were saved.}
+\tcfield{Automated by}{\code{ResourcesTest}: ``An Exclusive Resource has units 1 and the caller as its owner'', ``A Resource's name is unique within its type'', ``A retired Resource is never offered again and cannot change''; \code{InventorySecurityTest}}
+\end{testcase}
+
+\begin{testcase}{inv-pool-capacity}{Pool Capacity of a Metered type is the sum of its Resources' units}{Inventory.Resource.Add}
+\tcfield{Actor}{\code{dave} (Resource Owner)}
+\tcfield{Priority}{High}
+\tcfield{Preconditions}{Test world: GPU Pool Capacity 16.}
+\tcfield{Test data}{Resource R2: GPU ``gpu-node-c'', 4 units, model A100.}
+\tcsteps
+\tcstep{Open GPU in the Inventory.}{None}{Pool Capacity 16 units.}
+\tcstep{Add R2.}{R2}{Pool Capacity 20 units.}
+\tcstep{Change the units of gpu-node-c.}{6 units}{Pool Capacity 22 units.}
+\tcstep{Retire gpu-node-c.}{None}{Pool Capacity 16 units.}
+\tcfield{Pass criteria}{The Pool Capacity always equals the sum of the units of the unretired GPU Resources.}
+\tcfield{Automated by}{\code{ResourcesTest}: ``Pool Capacity is the sum of the units of the unretired Resources''}
+\end{testcase}
+
+\begin{testcase}{inv-reduction-guard}{A reduction or retirement below booked capacity is refused, naming the earliest hour}{Inventory.Resource.Add}
+\tcfield{Actor}{\code{dave} (Resource Owner)}
+\tcfield{Priority}{High}
+\tcfield{Preconditions}{\code{alice} has an Allocated Request A1 with a line for 12 GPU units, D 10:00--14:00, and an Allocated Request A2 with Room A, D 10:00--12:00.}
+\tcfield{Test data}{GPU Pool Capacity 16 (gpu-node-a 8, gpu-node-b 8).}
+\tcsteps
+\tcstep{Reduce gpu-node-a.}{2 units (capacity would be 10)}{Refused with \code{UNITS\_BELOW\_USAGE}, naming D 10:00 as the earliest hour; gpu-node-a keeps 8 units.}
+\tcstep{Reduce gpu-node-a.}{4 units (capacity would be 12)}{Accepted; Pool Capacity 12.}
+\tcstep{Retire gpu-node-b.}{None}{Refused with \code{UNITS\_BELOW\_USAGE}, naming D 10:00.}
+\tcstep{Retire Room A.}{None}{Refused with \code{RESOURCE\_IN\_USE}, naming D 10:00, the start of A2's allocation.}
+\tcstep{Retire Room B, which has no future booking.}{None}{Accepted.}
+\tcfield{Pass criteria}{No allocation of A1 or A2 lost capacity; only the reductions that leave the peak of future usage were accepted.}
+\tcfield{Automated by}{\code{ReductionGuardTest}; \code{UsageReductionGuardTest}: ``refuses a reduction below the peak, naming the earliest failing hour, not the first used one''}
+\end{testcase}
+
+\begin{testcase}{inv-filter}{Filter Resources by type, attribute value, and being free for a window}{Inventory.View.Holder}
+\tcfield{Actor}{\code{ben} (Member)}
+\tcfield{Priority}{Medium}
+\tcfield{Preconditions}{\code{alice} has an Allocated Request A1 with Room A, D 10:00--12:00.}
+\tcfield{Test data}{None beyond the preconditions.}
+\tcsteps
+\tcstep{Open the Inventory and filter by type.}{Meeting room}{Room A and Room B only.}
+\tcstep{Add an attribute filter.}{wing = South}{Room B only.}
+\tcstep{Clear the attribute filter and filter by free for a window.}{D 11:00--13:00}{Room B only; Room A is busy for part of the window.}
+\tcstep{Change the window.}{D 12:00--14:00}{Room A and Room B; back-to-back windows do not overlap.}
+\tcfield{Pass criteria}{Each list contains exactly the Resources stated.}
+\tcfield{Automated by}{\code{ResourcesTest}: ``Inventory.View.Filter: list Resources by type and attribute value, a page at a time'' (type and attribute only)}
+\end{testcase}
+
+\begin{testcase}{inv-holder}{Resource timeline shows free, on Hold, and allocated parts with their holders}{Inventory.View.Holder, Lifecycle.Hold.Place}
+\tcfield{Actor}{\code{ben} (Member); \code{dave} where named}
+\tcfield{Priority}{High}
+\tcfield{Preconditions}{\code{alice} has an Allocated Request A1 with Room A, D 10:00--12:00. \code{bob} has a Pending Request B1 with a Matched line (Java, quantity 1, days D to D+1) and Room A, D 14:00--16:00, so Room A is on Hold for B1.}
+\tcfield{Test data}{Window D 08:00--18:00.}
+\tcsteps
+\tcstep{Open Room A and show its timeline for the window.}{D 08:00--18:00}{08:00--10:00 free; 10:00--12:00 allocated to Platform, Request A1; 12:00--14:00 free; 14:00--16:00 on Hold for Research, Request B1; 16:00--18:00 free.}
+\tcstep{As \code{dave}, check the notifications and the Request screens.}{None}{\code{dave} has no approval request for A1 or B1: a Resource Owner takes no part in allocation.}
+\tcfield{Pass criteria}{Every part of the window shows the right status and, where held or allocated, the Team and Request.}
+\tcfield{Automated by}{None yet}
+\end{testcase}

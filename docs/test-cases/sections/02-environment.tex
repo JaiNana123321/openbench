@@ -1,0 +1,112 @@
+\section{Test Environment}\label{sec:env}
+
+\subsection{Software and Hardware}
+\begin{tabularx}{\textwidth}{@{}L{3.4cm}Y@{}}
+\toprule
+\textbf{Component} & \textbf{Version and notes} \\
+\midrule
+Server & Java~25, Spring Boot~3.5, one process serving the API under \code{/api} and the web client. \\
+Database & PostgreSQL~16 (image \code{postgres:16-alpine}) in Docker, started from \code{compose.yaml}; the schema is created by the Flyway migrations of the build. \\
+Web client & React~19 built with Vite~7, packed into the server's jar. Tested in a current desktop version of Chrome or Firefox at a window width of at least 1280 pixels. \\
+API client & For the steps that call the API directly: \code{curl} with a cookie jar, or the browsable API page at \code{/api/docs/ui} while signed in. \\
+Automated tests & Maven~3.9 (\code{mvn verify}), Docker for the Testcontainers PostgreSQL~16 database, Node~24 for the client tests. \\
+Machines & The team's laptops (macOS and Linux) with Docker running; no special hardware. \\
+\bottomrule
+\end{tabularx}
+
+\subsection{Installation and Configuration}\label{sec:install}
+\begin{enumerate}
+  \item Check out the build under test (Section~\ref{sec:product}) and start Docker.
+  \item Start the application with the demo data: \code{mvn spring-boot:run -Dspring-boot.run.profiles=demo}. The server starts the database container, migrates it, and loads the seed data.
+  \item Open \code{http://localhost:8080} and sign in with a login of Table~\ref{tab:accounts}.
+\end{enumerate}
+The company time zone is \code{America/New\_York} (setting \code{OPENBENCH\_ZONE}); every time in this document is in that zone. \textbf{Reset.} To return to the test world, stop the application, run \code{docker compose down} (which removes the database container and its data), and start the application again. The database is reset at the start of each subsection of Section~\ref{sec:cases}, and again before any test case whose preconditions say ``fresh test world''. The seed posts the Grants of the Period in which the database is created, and the build under test has no Period rollover yet, so a database created before a Period ended is reset before the next test case runs.
+
+\subsection{Test Accounts}\label{sec:accounts}
+Every seeded Member's password is \code{demo}; every Member also holds the role Member.
+
+\begin{table}[h]
+\centering\small
+\caption{Test accounts.}\label{tab:accounts}
+\begin{tabular}{@{}llll@{}}
+\toprule
+\textbf{Login} & \textbf{Name} & \textbf{Team} & \textbf{Roles besides Member} \\
+\midrule
+\code{alice} & Alice Chen & Platform & Manager \\
+\code{ben} & Ben Ortiz & Platform & \\
+\code{bob} & Bob Patel & Research & Manager \\
+\code{rita} & Rita Gomez & Research & \\
+\code{oscar} & Oscar Reed & Operations & Manager \\
+\code{carol} & Carol Davis & Operations & Administrator \\
+\code{dave} & Dave Kim & Operations & Resource Owner \\
+\code{erin} & Erin Walsh & Operations & Capacity Planner \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Test World}\label{sec:world}\label{sec:data}
+Every test case starts from the following data unless its preconditions say otherwise. Items 1 to 4 are loaded by the demo seed; item 5 is entered through the Administrator's skill list and each Member's profile before the first test case of Sections~\ref{cases:profiles}, \ref{cases:matched}, and~\ref{cases:lifecycle} (the automated tests create it in their setup).
+
+\begin{enumerate}
+  \item \textbf{Resource Types and Resources} (all owned by \code{dave}):
+    \begin{itemize}
+      \item Meeting room (Exclusive), attributes \code{seats} (number) and \code{wing} (North or South): Room A (8 seats, North) and Room B (12 seats, South).
+      \item Confocal microscope (Exclusive), attribute \code{lab} (text): Microscope 1 (Imaging lab).
+      \item GPU (Metered), attribute \code{model} (A100 or H100): gpu-node-a (8 units, H100) and gpu-node-b (8 units, A100); Pool Capacity 16 units.
+      \item Person (Matched), the built-in type.
+    \end{itemize}
+  \item \textbf{Prices.} Unit Price per instance-hour or unit-hour: Meeting room 10.00, Confocal microscope 40.00, GPU 5.00. Price Bands for each type: Monday to Friday 09:00--17:00 $\times$1.5, Saturday and Sunday all day $\times$0.5, every other hour $\times$1.0. Priority premium $\times$2. Day Rate 400.00 per person-day. Refund Schedule for each type: 75\% at 168 hours (seven days) or more before the released part starts, 25\% below that, 0\% once it has started. Bump cutoff 24 hours for both Exclusive types.
+  \item \textbf{Accounts.} Each Team's Grant for the current Period, the calendar month in which the database was created, has been posted at the start of that Period and nothing else: Available Balance Platform 5000.00, Research 600.00, Operations 1000.00; no held or earned credits.
+  \item \textbf{Other settings.} Quota: Research may hold at most 8 GPU units concurrently; no other Quota. Objection Window two working days. Period one calendar month; Periods exist for ten years from the month in which the database was created.
+  \item \textbf{Matched data.} Skill list: Statistics, Java, Microscopy. Skills and availability (each available from the day of execution to D+60):
+    \begin{itemize}
+      \item Ben Ortiz (Platform): Java.
+      \item Rita Gomez (Research): Statistics, Microscopy.
+      \item Dave Kim (Operations): Statistics.
+      \item Every other Member: no skills, no availability.
+    \end{itemize}
+    No Loans exist. For a Platform line asking for Statistics the Shortlist is therefore Dave Kim, then Rita Gomez (no person-days lent, ordered by name); for a Research line it is Dave Kim alone.
+\end{enumerate}
+
+\subsection{Dates and Times}\label{sec:dates}\label{sec:time}
+Windows must start in the future, so test cases name days relative to the day the case is run:
+
+\begin{tabularx}{\textwidth}{@{}L{2.2cm}Y@{}}
+\toprule
+\textbf{Name} & \textbf{Meaning} \\
+\midrule
+D & The first Wednesday at least 14 days after the day of execution. Every Release from a window on D has a lead time of seven days or more, and every window on D starts outside the bump cutoff. \\
+D+$n$ & The day $n$ days after D: D+1 is a Thursday, D+3 a Saturday, D+7 the next Wednesday. \\
+E & A weekday two to six days after the day of execution: its windows have a lead time under seven days. \\
+H & The first whole hour at least two hours after the start of the test case: a window starting at H starts inside the 24-hour bump cutoff. \\
+\bottomrule
+\end{tabularx}
+
+\textbf{Time control.} The server reads the time only from one injected clock. The automated integration tests replace it with a clock they move by hand, so they can lapse an Objection Window, start a line's window, or cross a Period boundary in one run. The running demo server uses the real clock, so a test case with a step marked \textbf{[clock]} is run either by its automated test or manually by waiting for the stated time to pass (for example, two working days for an Objection Window).
+
+\subsection{Reference Quotes}\label{sec:quotes}
+The Quotes that the test cases use, computed from the prices of Section~\ref{sec:world} as quantity or units $\times$ Unit Price $\times$ band multiplier, summed over the hours:
+
+\begin{table}[h]
+\centering\small
+\caption{Reference Quotes.}\label{tab:quotes}
+\begin{tabularx}{\textwidth}{@{}lYr@{}}
+\toprule
+\textbf{Ref.} & \textbf{Line} & \textbf{Quote} \\
+\midrule
+Q1 & Meeting room, quantity 1, D 10:00--12:00: $2 \times 10.00 \times 1.5$ & 30.00 \\
+Q2 & Meeting room, quantity 1, D 16:00--18:00: $10.00 \times 1.5 + 10.00 \times 1.0$ & 25.00 \\
+Q3 & Meeting room, quantity 1, D+3 (Saturday) 10:00--12:00: $2 \times 10.00 \times 0.5$ & 10.00 \\
+Q4 & Meeting room, quantity 1, D 10:00--12:00, Priority: $30.00 \times 2$ & 60.00 \\
+Q5 & Meeting room, quantity 1, D 10:00--12:00 weekly on D, D+7, and D+14: $3 \times 30.00$ & 90.00 \\
+Q6 & Meeting room, quantity 1, D 09:00--17:00: $8 \times 10.00 \times 1.5$ & 120.00 \\
+Q7 & GPU, 4 units, D 10:00--12:00: $4 \times 2 \times 5.00 \times 1.5$ & 60.00 \\
+Q8 & GPU, 4 units, D 16:00--18:00: $4 \times 5.00 \times 1.5 + 4 \times 5.00 \times 1.0$ & 50.00 \\
+Q9 & Confocal microscope, quantity 1, D 09:00--17:00: $8 \times 40.00 \times 1.5$ & 480.00 \\
+Q10 & Confocal microscope, quantity 1, D+1 09:00--12:00: $3 \times 40.00 \times 1.5$ & 180.00 \\
+Q11 & GPU, 6 units, D 10:00--12:00: $6 \times 2 \times 5.00 \times 1.5$ & 90.00 \\
+\midrule
+EA & Earning for a Loan of days D to D+1 (Wednesday and Thursday): $2 \times 400.00$ & 800.00 \\
+\bottomrule
+\end{tabularx}
+\end{table}

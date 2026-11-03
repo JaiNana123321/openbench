@@ -1,0 +1,95 @@
+\subsection{Administration}\label{cases:admin}
+\tcarea{ADM}
+These cases establish that the Administrator manages Members, Teams, skills, and roles but no policy; that sign-in and roles are enforced by the server; and that the Capacity Planner sets every policy value as data, with each change recorded and affecting only what the requirement says it affects.
+
+% Requirements of this feature in the SRS short edition (cover each with at least one test case):
+%   Admin.Member.Create
+%   Planner.Settings
+
+\begin{testcase}{adm-member}{Create a Member who can sign in; a deactivated Member cannot}{Admin.Member.Create, Matched.Shortlist.Build}
+\tcfield{Actor}{\code{carol} (Administrator); the new Member and \code{alice} where named}
+\tcfield{Priority}{High}
+\tcfield{Preconditions}{Test world with the Matched data.}
+\tcfield{Test data}{Member N1: name ``Nina Lowe'', email \code{nina@openbench.example}, username \code{nina}, password \code{start-2026}, Team Operations; skill Statistics and availability to D+60 added by Nina.}
+\tcsteps
+\tcstep{Create N1 under Members.}{N1}{Nina is listed in Operations with the role Member only.}
+\tcstep{Sign in as \code{nina}.}{\code{nina} / \code{start-2026}}{Signed in; the shell shows her name and Team. She adds her skill and availability.}
+\tcstep{Sign in as \code{nina} with a wrong password.}{\code{nina} / \code{wrong}}{Refused with \code{BAD\_CREDENTIALS}; the message does not say whether the username exists, and is the same for an unknown username.}
+\tcstep{As \code{alice}, submit a line for Statistics, days D to D+1, and open its Shortlist.}{None}{Dave Kim, Nina Lowe, Rita Gomez.}
+\tcstep{As \code{carol}, deactivate Nina; as \code{alice}, submit the same line again.}{None}{Nina cannot sign in (refused as a wrong login), and she is not on the new Shortlist; her history is kept.}
+\tcfield{Pass criteria}{Nina's account works only while active.}
+\tcfield{Automated by}{\code{SessionTest}: ``CO-auth, SE-password: session login with CSRF'' (sign-in part)}
+\end{testcase}
+
+\begin{testcase}{adm-teams-roles}{Teams, moves between Teams, and roles keep exactly one Manager per Team}{Admin.Member.Create}
+\tcfield{Actor}{\code{carol} (Administrator)}
+\tcfield{Priority}{High}
+\tcfield{Preconditions}{Test world.}
+\tcfield{Test data}{Team ``Design''. Members Ben Ortiz and Rita Gomez.}
+\tcsteps
+\tcstep{Create the Team Design, then rename it.}{``Design'', then ``Product Design''}{Listed as Product Design, with no Members yet.}
+\tcstep{Move Ben to Product Design and grant him Manager.}{Ben, Manager}{Ben is the Manager of Product Design; Platform still has Alice as Manager. The change is recorded with actor, old and new value, and timestamp.}
+\tcstep{Grant Manager to Rita (Research).}{Rita, Manager}{Rita replaces Bob as Research's Manager; Bob keeps the role Member only. Research has exactly one Manager.}
+\tcstep{Grant and revoke Resource Owner for Rita.}{Rita}{Granted, then revoked; both recorded.}
+\tcstep{Retire Product Design.}{None}{Retired; its history is kept.}
+\tcfield{Pass criteria}{Every Team has exactly one Manager after each step.}
+\tcfield{Automated by}{None yet}
+\end{testcase}
+
+\begin{testcase}{adm-skills-no-policy}{The Administrator maintains the skill list and has no policy settings}{Admin.Member.Create, Profile.Skills}
+\tcfield{Actor}{\code{carol} (Administrator)}
+\tcfield{Priority}{Medium}
+\tcfield{Preconditions}{Test world with the Matched data.}
+\tcfield{Test data}{New skill ``Python''.}
+\tcsteps
+\tcstep{Add a skill.}{``Python''}{Listed; Members can now choose it on their profiles.}
+\tcstep{Look through every Administrator screen.}{None}{No Unit Price, Price Band, Grant, Quota, Day Rate, Refund Schedule, or window setting is offered.}
+\tcstep{Call the API to change the Day Rate.}{PUT \path{/api/settings/day_rate}}{Refused with \code{FORBIDDEN}.}
+\tcfield{Pass criteria}{The skill list changed and no setting did.}
+\tcfield{Automated by}{\code{InventorySecurityTest} and \code{MembersControllerTest} (role refusals)}
+\end{testcase}
+
+\begin{testcase}{adm-roles-server}{Roles are enforced by the server, not only by the client}{Admin.Member.Create}
+\tcfield{Actor}{\code{ben} (Member only)}
+\tcfield{Priority}{High}
+\tcfield{Preconditions}{Test world. A cookie jar with Ben's session and CSRF token.}
+\tcfield{Test data}{The calls of each step.}
+\tcsteps
+\tcstep{Define a Resource Type.}{POST \path{/api/inventory/types}}{\code{FORBIDDEN}; no type is added.}
+\tcstep{Add a Resource.}{POST \path{/api/inventory/resources}}{\code{FORBIDDEN}.}
+\tcstep{Create a Request.}{POST \path{/api/requests}}{\code{FORBIDDEN}.}
+\tcstep{Post a Grant.}{POST \path{/api/ledger/grants}}{\code{FORBIDDEN}.}
+\tcstep{Repeat step 1 without the CSRF header.}{No \code{X-XSRF-TOKEN}}{\code{CSRF\_REJECTED}.}
+\tcstep{Sign out and call \path{/api/me}.}{None}{\code{UNAUTHENTICATED}.}
+\tcfield{Pass criteria}{Nothing was created.}
+\tcfield{Automated by}{\code{InventorySecurityTest}: ``SE-roles: a write without its role is refused with 403 FORBIDDEN and changes nothing''; \code{MembersControllerTest}; \code{SessionTest}}
+\end{testcase}
+
+\begin{testcase}{adm-planner-settings}{The Capacity Planner sets each policy value as data, and each change is recorded}{Planner.Settings, Admin.Member.Create}
+\tcfield{Actor}{\code{erin} (Capacity Planner)}
+\tcfield{Priority}{High}
+\tcfield{Preconditions}{Test world.}
+\tcfield{Test data}{Day Rate 450.00; priority premium 3; Objection Window 3 working days; bump cutoff for Meeting room 48 hours; Quota for Platform on GPU 10; Grant for Research for the next Period 700.00; Price Band for GPU Saturday and Sunday $\times$0.25; Refund Schedule for Meeting room 50\% at 168 hours, 10\% below.}
+\tcsteps
+\tcstep{Open Settings and change each value.}{The test data}{Each is saved without a restart and shown at once.}
+\tcstep{Open the settings history.}{None}{One entry per change with actor Erin Walsh, the old value, the new value, and the timestamp.}
+\tcstep{Add a Price Band overlapping an existing one.}{GPU, Monday 12:00--18:00 $\times$2.0}{Refused with \code{BANDS\_OVERLAP} and nothing saved: Price Bands of a type may not overlap.}
+\tcstep{Set a Refund Schedule step of 100\%.}{Meeting room, 100\% at 336 hours}{Refused with \code{REFUND\_STEP\_TOO\_HIGH} and nothing saved: no step may be 100\% or more.}
+\tcstep{Set a negative Day Rate.}{$-1.00$}{Refused with \code{VALUE\_OUT\_OF\_RANGE} and nothing saved; a Day Rate of 0.00 is allowed.}
+\tcfield{Pass criteria}{Only valid values were saved, and every saved change is in the history.}
+\tcfield{Automated by}{None yet}
+\end{testcase}
+
+\begin{testcase}{adm-settings-effect}{A changed setting affects only what comes after the change}{Planner.Settings, Release.Refund}
+\tcfield{Actor}{\code{erin} (Capacity Planner); \code{alice} where named}
+\tcfield{Priority}{High}
+\tcfield{Preconditions}{\code{alice} has an Allocated Request A1 with Room A, D 10:00--12:00 (locked 30.00), and a Draft A2 with Room B, D 10:00--12:00.}
+\tcfield{Test data}{Refund Schedule for Meeting room: 50\% at 168 hours, 10\% below. Platform's planned Grant: 6000.00.}
+\tcsteps
+\tcstep{Change the Refund Schedule.}{The new schedule}{Saved.}
+\tcstep{As \code{alice}, Release A1's line.}{None}{Refund 15.00 ($30.00 \times 0.50$): the Release happens after the change.}
+\tcstep{Change Platform's planned Grant, first for the current Period, then from the next Period.}{6000.00}{For the current Period: refused with \code{PERIOD\_STARTED}. From the next Period: saved; the current Period's posted Grant of 5000.00 is unchanged (a mid-Period Grant would be needed to add credits now).}
+\tcstep{Change the Unit Price of Meeting room to 20.00 and open A2.}{20.00}{A2's Quote is 60.00; A1's locked Quote is still 30.00.}
+\tcfield{Pass criteria}{No posted Transaction or locked Quote changed.}
+\tcfield{Automated by}{\code{RequestLifecycleTest}: ``Draft.Submit.Lock: \ldots'' (price part)}
+\end{testcase}

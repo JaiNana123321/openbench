@@ -1,0 +1,134 @@
+\subsection{Exclusive Allocation}\label{cases:exclusive}
+\tcarea{EXC}
+These cases establish that an Exclusive instance is never given to two overlapping lines; how the instance is chosen; that unsatisfiable Required lines wait in the stated order and are filled when capacity frees; and that a Priority line Bumps standard lines only within the stated limits, with a full Refund for the Bumped line.
+
+% Requirements of this feature in the SRS short edition (cover each with at least one test case):
+%   Exclusive.Conflict
+%   Exclusive.Waitlist.Join
+%   Exclusive.Priority.Bump
+%   Exclusive.Bump.Effect
+
+\begin{testcase}{exc-conflict}{An instance is never given to two overlapping windows}{Exclusive.Conflict, Lifecycle.Evaluate}
+\tcfield{Actor}{\code{bob} (Manager, Research)}
+\tcfield{Priority}{High}
+\tcfield{Preconditions}{\code{alice} has an Allocated Request A1 with Room A, D 10:00--12:00.}
+\tcfield{Test data}{L1: Room A (named), D 11:00--13:00. L2: Room A (named), D 12:00--14:00.}
+\tcsteps
+\tcstep{Submit a Request B1 with L1.}{L1}{B1 is Waiting; L1 is at waitlist position 1 with the reason that no instance is free.}
+\tcstep{Submit a Request B2 with L2.}{L2}{B2 is Allocated: a window starting when another ends does not overlap.}
+\tcstep{Open Room A's timeline for D.}{D 08:00--18:00}{10:00--12:00 Platform (A1); 12:00--14:00 Research (B2); nothing for B1.}
+\tcfield{Pass criteria}{No two allocations or Holds of Room A overlap.}
+\tcfield{Automated by}{\code{ExclusiveAllocatorTest}: ``An overlapping window finds no free instance; back-to-back windows both fit''; \code{ExclusionConstraintTest}; \code{RequestLifecycleTest}: ``Exclusive.Waitlist.Join: Room A at an overlapping time waits at position 1 \ldots''}
+\end{testcase}
+
+\begin{testcase}{exc-pick-instance}{Without a named Resource, the free instance with the fewest allocated hours is chosen}{Exclusive.Conflict}
+\tcfield{Actor}{\code{bob} (Manager, Research)}
+\tcfield{Priority}{Medium}
+\tcfield{Preconditions}{\code{alice} has an Allocated Request A1 with Room A, E 14:00--18:00: 4 allocated hours in the current Period, which is the Period the choice counts (if the current Period ends within the next week, run the case after its boundary). Room B has none.}
+\tcfield{Test data}{L1: Meeting room, quantity 1, D 10:00--12:00 (no named Resource). L2: Room A (named), D 08:00--10:00.}
+\tcsteps
+\tcstep{Submit a Request with L1.}{L1}{Allocated on Room B, which has fewer allocated hours in the Period than Room A.}
+\tcstep{Submit a Request with L2.}{L2}{Allocated on Room A, although Room B is free: a named Resource is the only candidate.}
+\tcfield{Pass criteria}{Each line received the stated instance.}
+\tcfield{Automated by}{\code{ExclusiveAllocatorTest}: ``Without a named Resource, the free room with the fewest ALLOCATED hours in the Period wins'', ``A named Resource is the only candidate, even when another room is free''}
+\end{testcase}
+
+\begin{testcase}{exc-recurrence-quantity}{A recurring or multi-instance line needs the same free instances for every occurrence}{Exclusive.Conflict}
+\tcfield{Actor}{\code{bob} (Manager, Research)}
+\tcfield{Priority}{Medium}
+\tcfield{Preconditions}{\code{oscar} has Allocated Requests with Room B, D 10:00--12:00, and Room A, D+7 10:00--12:00.}
+\tcfield{Test data}{L1: Meeting room, quantity 1, 10:00--12:00 weekly on D, D+7, D+14 (Q5 = 90.00). L2: Meeting room, quantity 1, 10:00--12:00 weekly on D+14, D+21. L3: Meeting room, quantity 2, D+14 10:00--12:00.}
+\tcsteps
+\tcstep{Submit a Request with L1, Required.}{L1}{Waiting: Room A is busy on D+7 and Room B on D, so no single instance is free for every occurrence. Nothing is held or charged.}
+\tcstep{Submit a Request with L2.}{L2}{Allocated, every occurrence on the same instance.}
+\tcstep{Submit a Request with L3.}{L3}{Waiting: L2 holds one of the two rooms on D+14, and the line takes both or none.}
+\tcfield{Pass criteria}{No occurrence of any line was allocated alone.}
+\tcfield{Automated by}{\code{ExclusiveAllocatorTest}: ``A line for two rooms takes both or none'' (quantity part)}
+\end{testcase}
+
+\begin{testcase}{exc-waitlist-order}{Waitlist order: Bumped first, then Priority, then submission time}{Exclusive.Waitlist.Join}
+\tcfield{Actor}{\code{bob}, \code{alice}, \code{oscar} (Managers) as named}
+\tcfield{Priority}{High}
+\tcfield{Preconditions}{Room A and Room B are both allocated for D 10:00--12:00 to Priority lines of \code{oscar}, so no line in this case can Bump them (\TC{exc-priority-protected}).}
+\tcfield{Test data}{Each line: Meeting room, quantity 1, D 10:00--12:00, Required unless stated.}
+\tcsteps
+\tcstep{As \code{bob}, submit B1 (standard).}{None}{B1 Waiting; its line at position 1.}
+\tcstep{As \code{alice}, submit A1 (standard).}{None}{A1 Waiting at position 2.}
+\tcstep{As \code{alice}, submit A2 with the line marked Priority.}{Priority}{A2 Waiting at position 1, ahead of all standard lines; B1 moves to 2 and A1 to 3.}
+\tcstep{As \code{bob}, submit B2 with the room line Optional and a Required line GPU, 4 units, D 10:00--12:00.}{Optional room line}{B2 is Allocated with its GPU line; the room line is Dropped with its reason, not waitlisted.}
+\tcstep{Open B1 as \code{bob}.}{None}{B1's line shows position 2.}
+\tcfield{Pass criteria}{Positions are A2, B1, A1; no Optional line is on the waitlist.}
+\tcfield{Automated by}{\code{WaitlistTest}: ``Positions follow submission time among overlapping windows \ldots'', ``Bumped lines come first, then Priority lines, then by submission time'', ``\ldots Optional lines never join''}
+\end{testcase}
+
+\begin{testcase}{exc-waitlist-fill}{Freed capacity goes to the first waiting line whose window fits}{Exclusive.Waitlist.Join, Lifecycle.Waiting.Reevaluate, Release.Line}
+\tcfield{Actor}{\code{alice} (Manager, Platform); \code{bob} and \code{oscar} where named}
+\tcfield{Priority}{High}
+\tcfield{Preconditions}{Allocated: \code{alice}'s A1 with Room A, D 10:00--12:00, and \code{oscar}'s O1 with Room A, D 12:00--14:00. Waiting, in this order: \code{bob}'s B1 with Room A (named), D 10:00--13:00; \code{oscar}'s O2 with Room A (named), D 10:00--11:00.}
+\tcfield{Test data}{None.}
+\tcsteps
+\tcstep{Release A1's line in whole.}{None}{The line is Released and a Refund is posted (\TC{rel-whole}).}
+\tcstep{Open B1 as \code{bob} and O2 as \code{oscar}.}{None}{B1 is still Waiting at position 1: its window needs 12:00--13:00, which O1 still holds. O2, the next line, fits and is Allocated on Room A for D 10:00--11:00; Oscar is notified that it was satisfied from the waitlist.}
+\tcfield{Pass criteria}{The freed slot was offered in waitlist order and given to the first line whose window fits.}
+\tcfield{Automated by}{None yet}
+\end{testcase}
+
+\begin{testcase}{exc-waitlist-expire}{A waiting line leaves the waitlist when its window starts}{Exclusive.Waitlist.Join}
+\tcfield{Actor}{\code{bob} (Manager, Research)}
+\tcfield{Priority}{Medium}
+\tcfield{Preconditions}{\code{alice} has an Allocated Request with Room A, E 10:00--12:00. \code{bob} has a Waiting Request B1 whose line for Room A, E 10:00--12:00 is at position 1.}
+\tcfield{Test data}{None.}
+\tcsteps
+\tcstep{[clock] Let E 10:00 pass.}{Time E 10:00}{B1's line has left the waitlist; B1 stays Waiting.}
+\tcstep{Open Room A's waitlist.}{None}{No line waits for E 10:00--12:00.}
+\tcfield{Pass criteria}{The line was never allocated after its window began.}
+\tcfield{Automated by}{None yet}
+\end{testcase}
+
+\begin{testcase}{exc-bump}{A Priority line Bumps the latest-submitted blocking standard line}{Exclusive.Priority.Bump, Ledger.Price.Formula}
+\tcfield{Actor}{\code{alice} (Manager, Platform)}
+\tcfield{Priority}{High}
+\tcfield{Preconditions}{Standard lines, all Allocated: \code{bob}'s B1 with Room A, D 10:00--12:00 (submitted first); \code{oscar}'s O1 with Room B, D 10:00--12:00 (submitted second).}
+\tcfield{Test data}{L1: Meeting room, quantity 1, D 10:00--12:00, Priority (Q4 = 60.00).}
+\tcsteps
+\tcstep{Add L1 to a Draft.}{L1}{Quote 60.00, twice the standard Quote.}
+\tcstep{Submit.}{None}{The Request is Allocated with L1 on Room B. O1's line is Bumped: each room needed one Bump, and O1 was submitted later.}
+\tcstep{Open Room A's and Room B's timelines for D.}{None}{Room A: B1 unchanged. Room B: Platform, Priority line L1.}
+\tcfield{Pass criteria}{Exactly one line was Bumped, the latest-submitted one; the Charge for L1 is 60.00.}
+\tcfield{Automated by}{None yet}
+\end{testcase}
+
+\begin{testcase}{exc-bump-effect}{A Bumped line is refunded in full, heads its waitlist, and returns its Request to Waiting}{Exclusive.Bump.Effect, Lifecycle.States}
+\tcfield{Actor}{\code{oscar} (Manager, Operations)}
+\tcfield{Priority}{High}
+\tcfield{Preconditions}{O1 as in \TC{exc-bump}, with a second line O1b: GPU, 4 units, D 10:00--12:00 (60.00), both Required; O1 was Allocated with Charges 30.00 and 60.00 before Alice's Priority line Bumped its room line.}
+\tcfield{Test data}{None.}
+\tcsteps
+\tcstep{Open the notifications.}{None}{A notification that O1's room line was Bumped, with the reason (a Priority line).}
+\tcstep{Open O1.}{None}{O1 is Waiting; the room line is Bumped and at position 1 of the waitlist for Meeting room, D 10:00--12:00; O1b is still allocated. The history records the Bump with both lines, the actor, and the timestamp.}
+\tcstep{Open the Statement of Operations.}{None}{A Refund of 30.00 referencing the room line's Charge; the GPU Charge of 60.00 is untouched; Balance 940.00 (1000.00 $-$ 30.00 $-$ 60.00 $+$ 30.00).}
+\tcfield{Pass criteria}{The Refund, the waitlist head, the state change, and the record were all made together.}
+\tcfield{Automated by}{None yet}
+\end{testcase}
+
+\begin{testcase}{exc-bump-cutoff}{No Bump inside the bump cutoff; the Priority line waits ahead of standard lines}{Exclusive.Priority.Bump}
+\tcfield{Actor}{\code{alice} (Manager, Platform)}
+\tcfield{Priority}{High}
+\tcfield{Preconditions}{Standard lines Allocated: \code{bob}'s with Room A for H to H+2 hours and \code{oscar}'s with Room B for H to H+2 hours. \code{bob} also has a Waiting standard line for Meeting room, H to H+2 hours.}
+\tcfield{Test data}{L1: Meeting room, quantity 1, H to H+2 hours, Priority.}
+\tcsteps
+\tcstep{Submit a Request with L1.}{L1}{No Bump: both blocking lines start within 24 hours. The Request is Waiting and L1 is at position 1, ahead of Bob's waiting standard line.}
+\tcfield{Pass criteria}{Both blocking lines are still allocated.}
+\tcfield{Automated by}{None yet}
+\end{testcase}
+
+\begin{testcase}{exc-priority-protected}{A Priority line is never Bumped and never Bumps another Priority line}{Exclusive.Priority.Bump}
+\tcfield{Actor}{\code{bob} (Manager, Research)}
+\tcfield{Priority}{Medium}
+\tcfield{Preconditions}{\code{alice} and \code{oscar} each have an Allocated Priority line for Room A and Room B respectively, D 10:00--12:00.}
+\tcfield{Test data}{L1: Meeting room, quantity 1, D 10:00--12:00, Priority.}
+\tcsteps
+\tcstep{Submit a Request with L1.}{L1}{No Bump; the Request is Waiting with L1 on the waitlist.}
+\tcfield{Pass criteria}{Alice's and Oscar's lines are still allocated and no Refund was posted.}
+\tcfield{Automated by}{None yet}
+\end{testcase}

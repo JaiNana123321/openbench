@@ -1,0 +1,39 @@
+% Title page, record of changes, how to read, contents (short edition; copied from sections/00-front-matter.tex on 2026-11-07).
+% The Record of Changes is the same in both editions: change both.
+\begin{titlepage}
+  \centering
+  \vspace*{3cm}
+  {\Huge\bfseries Functional Test Case Descriptions\par}
+  \vspace{0.6cm}
+  {\LARGE for\par}
+  \vspace{0.6cm}
+  {\Huge\bfseries \SRSproduct\par}
+  \vspace{0.4cm}
+  {\Large Tests of Release 1 against the Software Requirements Specification, version \SRSversion\par}
+  \vspace{1.5cm}
+  {\Large Version \TCDversion, short edition\par}
+  \vspace{0.4cm}
+  {\large \TCDdate\par}
+  \vfill
+  {\large Prepared by\par}
+  {\Large Jai Nana \quad Brian Lujan\par Fotih Turopov \quad Yerassyl Shnazbayev\par}
+  \vspace{0.8cm}
+  {\large CSDS 393 Software Engineering\par Case Western Reserve University\par}
+  \vspace{1cm}
+\end{titlepage}
+
+\section*{Record of Changes}\label{sec:changes}
+\addcontentsline{toc}{section}{Record of Changes}
+\begin{tabularx}{\textwidth}{@{}L{3.2cm}L{2.2cm}YL{2.6cm}L{1.6cm}@{}}
+\toprule
+\textbf{Name} & \textbf{Date} & \textbf{Reason for changes} & \textbf{Reviewed by} & \textbf{Version} \\
+\midrule
+J.\ Nana & 2026-11-05 & First complete draft: introduction, test environment and test world, approach, and test cases for all 47 functional requirements of SRS \SRSversion{} with the traceability matrix. & B.~Lujan, F.~Turopov, Y.~Shnazbayev & 0.1 \\
+J.\ Nana & \TCDdate & Short edition added for submission: the High priority test cases and the Low priority cases of the Stretch requirements, which together cover every requirement; the Medium priority cases are kept in the full edition, and identifiers are the same in both. & B.~Lujan, F.~Turopov, Y.~Shnazbayev & 0.2 \\
+\bottomrule
+\end{tabularx}
+
+\noindent\textbf{How to read this document.} Section~\ref{sec:intro} names the product and the build under test, the scope, and the conventions of the test case template; Section~\ref{sec:env} gives the environment, the test accounts, the test world every case starts from, the relative dates, and the reference Quotes; Section~\ref{sec:approach} gives the approach, the pass and fail criteria, and the special considerations, including how cases for features not yet built are treated; Section~\ref{sec:cases} holds the test cases, one subsection per feature of the SRS in the SRS's order, each ending with the numbers of the cases kept in the full edition only; Appendix~\ref{app:trace} maps every requirement to its test cases, and Appendix~\ref{app:glossary} defines the terms. This short edition holds the High priority test cases and the Low priority cases of the Stretch requirements, which together cover every requirement. A longer edition that adds the Medium priority cases, for secondary rules and refusals, is kept in the project repository; identifiers are the same in both.
+
+\tableofcontents
+\clearpage
