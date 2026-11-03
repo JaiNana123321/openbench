@@ -22,7 +22,7 @@ Issues, bugs, and work briefs live in GitHub Issues on `JaiNana123321/openbench`
 
 ### Triage labels
 
-Default vocabulary: `needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`, applied as GitHub labels. See `docs/agents/triage-labels.md`.
+One workflow label per open issue: `status: planned`, `status: ready`, `status: in progress`, `status: in review`, `status: blocked`, `status: to discuss` (merged locally, waiting for Jai to close it); plus `wontfix`. See `docs/agents/triage-labels.md`.
 
 ### Domain docs
 

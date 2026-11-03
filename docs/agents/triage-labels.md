@@ -1,13 +1,24 @@
 # Triage Labels
 
-The skills speak in terms of five canonical triage roles. This file maps those roles to the GitHub labels used in this repo's issue tracker (see `issue-tracker.md`). An issue carries exactly one of them while it is open.
+Every open issue carries exactly one `status:` label, which follows it through the workflow (see `issue-tracker.md`):
 
-| Label in mattpocock/skills | Label in our tracker | Meaning                                  |
-| -------------------------- | -------------------- | ---------------------------------------- |
-| `needs-triage`             | `needs-triage`       | Maintainer needs to evaluate this issue  |
-| `needs-info`               | `needs-info`         | Waiting on reporter for more information |
-| `ready-for-agent`          | `ready-for-agent`    | Fully specified, ready for an AFK agent  |
-| `ready-for-human`          | `ready-for-human`    | Requires human implementation            |
-| `wontfix`                  | `wontfix`            | Will not be actioned                     |
+| Label | Meaning |
+| --- | --- |
+| `status: planned` | Not briefed yet |
+| `status: ready` | Briefed; can be started by an agent or a teammate (the body says which) |
+| `status: in progress` | An agent or a teammate is working on it |
+| `status: in review` | The branch is done; the coordinator is reviewing it |
+| `status: blocked` | Waiting on another issue (`Depends on #n`) or a decision |
+| `status: to discuss` | Merged locally; to be discussed with Jai, who closes it by hand |
 
-When a skill mentions a role (e.g. "apply the AFK-ready triage label"), use the corresponding label string from this table.
+`wontfix` marks an issue that will not be actioned.
+
+The skills speak in terms of five canonical triage roles. Use these labels for them:
+
+| Role in mattpocock/skills | Label in our tracker |
+| --- | --- |
+| `needs-triage` | `status: planned` |
+| `needs-info` | `status: blocked`, with the question in a comment |
+| `ready-for-agent` | `status: ready` |
+| `ready-for-human` | `status: ready`, with "For a teammate" in the body |
+| `wontfix` | `wontfix` |
