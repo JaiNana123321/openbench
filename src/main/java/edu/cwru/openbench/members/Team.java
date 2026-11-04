@@ -33,6 +33,15 @@ class Team {
         return managerMemberId;
     }
 
+    boolean retired() {
+        return retiredAt != null;
+    }
+
+    /** The Team's Manager left it: it has no Manager until the role is granted again. */
+    void clearManager() {
+        this.managerMemberId = null;
+    }
+
     TeamSummary toSummary() {
         return new TeamSummary(new TeamId(id), name);
     }
