@@ -7,6 +7,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import edu.cwru.openbench.Verifies;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -16,6 +17,7 @@ import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
 
 /** SE-roles on the Inventory: every Member reads; only the right role writes, whatever the client. */
+@Verifies("inv-add-resource")
 class InventorySecurityTest extends InventoryTest {
 
     private long type;
@@ -40,6 +42,7 @@ class InventorySecurityTest extends InventoryTest {
         "PUT  | /api/inventory/resources/{resource}/units | admin  | {\"units\": 1}",
         "POST | /api/inventory/resources/{resource}/retire | member | "})
     @DisplayName("SE-roles: a write without its role is refused with 403 FORBIDDEN and changes nothing")
+    @Verifies(value = {"adm-roles-server", "adm-skills-no-policy"}, partial = true)
     void refusesAWriteWithoutItsRole(String method, String path, String who, String body) throws Exception {
         String username = switch (who) {
             case "member" -> member;

@@ -3,6 +3,7 @@ package edu.cwru.openbench.ledger;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import edu.cwru.openbench.Verifies;
 import edu.cwru.openbench.common.Credits;
 import edu.cwru.openbench.common.TimeWindow;
 import edu.cwru.openbench.settings.PriceBand;
@@ -24,6 +25,7 @@ import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 
 /** The Quote formula and the Refund step function, with the demo world's prices (no database). */
+@Verifies("met-line-form")
 class PricingTest {
 
     private static final ZoneId ZONE = ZoneId.of("America/New_York");
@@ -47,6 +49,7 @@ class PricingTest {
 
     @Nested
     @DisplayName("Ledger.Price.Formula: the demo story's Quotes")
+    @Verifies("led-price-bands")
     class DemoStory {
 
         @Test
@@ -71,6 +74,7 @@ class PricingTest {
 
     @Nested
     @DisplayName("Ledger.Price.Band: which band an hour falls in")
+    @Verifies("led-price-bands")
     class Bands {
 
         @Test
@@ -129,6 +133,7 @@ class PricingTest {
 
     @Nested
     @DisplayName("Ledger.Price.Premium and rounding")
+    @Verifies("led-price-bands")
     class PremiumAndRounding {
 
         @Test
@@ -162,29 +167,34 @@ class PricingTest {
 
     @Nested
     @DisplayName("Release.Refund: the step function")
+    @Verifies("rel-schedule")
     class Refunds {
 
         private final Credits charge = Credits.of("45.00");
 
         @Test
+        @Verifies(value = "rel-whole", partial = true)
         void returnsTheSevenDayStepAtOrAboveSevenDays() {
             assertThat(Pricing.refund(charge, DEMO_REFUNDS, Duration.ofDays(10).plusHours(4))).isEqualTo(Credits.of("33.75"));
             assertThat(Pricing.refund(charge, DEMO_REFUNDS, Duration.ofDays(7))).isEqualTo(Credits.of("33.75"));
         }
 
         @Test
+        @Verifies(value = "rel-whole", partial = true)
         void returnsTheZeroStepBelowSevenDays() {
             assertThat(Pricing.refund(charge, DEMO_REFUNDS, Duration.ofDays(7).minusSeconds(1))).isEqualTo(Credits.of("11.25"));
             assertThat(Pricing.refund(charge, DEMO_REFUNDS, Duration.ofHours(1))).isEqualTo(Credits.of("11.25"));
         }
 
         @Test
+        @Verifies(value = "rel-whole", partial = true)
         void returnsNothingOnceThePartHasStarted() {
             assertThat(Pricing.refund(charge, DEMO_REFUNDS, Duration.ZERO)).isEqualTo(Credits.ZERO);
             assertThat(Pricing.refund(charge, DEMO_REFUNDS, Duration.ofHours(-2))).isEqualTo(Credits.ZERO);
         }
 
         @Test
+        @Verifies(value = "rel-whole", partial = true)
         void returnsNothingBelowEveryStep() {
             RefundSchedule weekAhead = new RefundSchedule(List.of(new RefundStep(Duration.ofDays(7), new BigDecimal("0.75"))));
             assertThat(Pricing.refund(charge, weekAhead, Duration.ofDays(1))).isEqualTo(Credits.ZERO);
@@ -192,12 +202,14 @@ class PricingTest {
         }
 
         @Test
+        @Verifies(value = "rel-whole", partial = true)
         void roundsDown() {
             // 45.01 x 0.75 = 33.7575
             assertThat(Pricing.refund(Credits.of("45.01"), DEMO_REFUNDS, Duration.ofDays(8))).isEqualTo(Credits.of("33.75"));
         }
 
         @Test
+        @Verifies(value = "rel-whole", partial = true)
         void neverReturnsTheWholeCharge() {
             RefundSchedule almostAll = new RefundSchedule(List.of(new RefundStep(Duration.ZERO, new BigDecimal("0.999"))));
             assertThat(Pricing.refund(Credits.of("100.00"), almostAll, Duration.ofDays(30))).isLessThan(Credits.of("100.00"));

@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import edu.cwru.openbench.Verifies;
 import edu.cwru.openbench.common.ConcurrencyRetry;
 import edu.cwru.openbench.common.RequestId;
 import edu.cwru.openbench.members.SignedInMember;
@@ -61,6 +62,7 @@ class SubmitConcurrencyTest extends DemoWorldTest {
 
     @RepeatedTest(5)
     @DisplayName("exactly one Request is Allocated, the other Waiting at position 1, and both Accounts fold")
+    @Verifies("lif-race")
     void theLastRoomGoesToOneRequest() throws Exception {
         long aliceRequest = draftForTheLastRoom(alice);
         long bobRequest = draftForTheLastRoom(bob);

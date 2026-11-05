@@ -3,6 +3,7 @@ package edu.cwru.openbench.allocation;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import edu.cwru.openbench.Verifies;
 import edu.cwru.openbench.common.ResourceTypeId;
 import edu.cwru.openbench.common.TimeWindow;
 import edu.cwru.openbench.inventory.AllocationClass;
@@ -45,6 +46,7 @@ class WaitlistTest extends AllocationTest {
 
     @Test
     @DisplayName("Positions follow submission time among overlapping windows, not the moment of joining")
+    @Verifies("exc-waitlist-order")
     void ordersBySubmissionTime() {
         LineSnapshot later = waiting(tuesday, now.minusSeconds(60));
         LineSnapshot earlier = waiting(tuesday, now.minusSeconds(120));
@@ -60,6 +62,7 @@ class WaitlistTest extends AllocationTest {
 
     @Test
     @DisplayName("Bumped lines come first, then Priority lines, then by submission time")
+    @Verifies("exc-waitlist-order")
     void bumpedThenPriorityThenSubmission() {
         LineSnapshot standard = waiting(tuesday, now.minusSeconds(900));
         LineSnapshot priority = waiting(withMarks(exclusiveLine(team, rooms, tuesday, 1, Optional.empty(),
@@ -77,6 +80,7 @@ class WaitlistTest extends AllocationTest {
 
     @Test
     @DisplayName("Joining twice keeps one entry; leaving and cancel take the line off; Optional lines never join")
+    @Verifies("exc-waitlist-order")
     void oneEntryPerLine() {
         LineSnapshot line = waiting(tuesday, now);
         join(line);

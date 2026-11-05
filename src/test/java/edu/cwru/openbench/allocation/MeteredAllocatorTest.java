@@ -4,6 +4,7 @@ import static edu.cwru.openbench.TestData.unique;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import edu.cwru.openbench.Verifies;
 import edu.cwru.openbench.common.RuleViolation;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -11,6 +12,7 @@ import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 
 @DisplayName("Metered.Line.Form, Metered.Pool.Check: MeteredAllocator")
+@Verifies("met-line-form")
 class MeteredAllocatorTest extends AllocationTest {
 
     private long gpus;
@@ -44,6 +46,7 @@ class MeteredAllocatorTest extends AllocationTest {
 
         @Test
         @DisplayName("is POOL_FULL at 14:00, one unit short")
+        @Verifies("met-pool-hourly")
         void isPoolFullAtTwo() {
             Evaluation evaluation = evaluate(line);
 
@@ -73,6 +76,7 @@ class MeteredAllocatorTest extends AllocationTest {
 
         @Test
         @DisplayName("fits from 15:00, after A ends")
+        @Verifies("met-pool-hourly")
         void fitsAfterAEnds() {
             assertThat(evaluate(meteredLine(team, gpus, 4, window(7, 15, 17))).fits()).isTrue();
         }
@@ -80,6 +84,7 @@ class MeteredAllocatorTest extends AllocationTest {
 
     @Test
     @DisplayName("A Hold blocks exactly like an allocation; cancel frees it")
+    @Verifies("lif-hold-blocks")
     void aHoldBlocksLikeAnAllocation() {
         LineSnapshot held = meteredLine(otherTeam, gpus, 7, window(7, 9, 12));
         hold(held);
@@ -96,6 +101,7 @@ class MeteredAllocatorTest extends AllocationTest {
 
     @Test
     @DisplayName("Only the requesting Team's own units count toward its Quota")
+    @Verifies("met-quota")
     void theQuotaCountsOnlyTheTeam() {
         testData().quota(team, gpus, 3);
         commit(meteredLine(otherTeam, gpus, 5, window(7, 9, 12)));

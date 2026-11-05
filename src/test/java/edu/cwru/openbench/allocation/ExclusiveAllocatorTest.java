@@ -4,6 +4,7 @@ import static edu.cwru.openbench.TestData.unique;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import edu.cwru.openbench.Verifies;
 import edu.cwru.openbench.common.RuleViolation;
 import edu.cwru.openbench.common.TimeWindow;
 import java.sql.Timestamp;
@@ -52,6 +53,7 @@ class ExclusiveAllocatorTest extends AllocationTest {
 
     @Test
     @DisplayName("A Hold blocks like an allocation, and cancel turns it EXPIRED, which frees the room")
+    @Verifies("lif-hold-blocks")
     void cancelDropsTheHold() {
         LineSnapshot first = namedLine(team, rooms, tuesdayAfternoon, roomA);
         LineSnapshot second = namedLine(team, rooms, tuesdayAfternoon, roomA);
@@ -67,6 +69,7 @@ class ExclusiveAllocatorTest extends AllocationTest {
 
     @Test
     @DisplayName("Without a named Resource, the free room with the fewest ALLOCATED hours in the Period wins")
+    @Verifies("exc-pick-instance")
     void picksTheLeastUsedFreeRoom() {
         // Room A has 2 ALLOCATED hours today (inside the current Period), Room B 1; a RELEASED one does not count.
         LineSnapshot history = exclusiveLine(team, rooms, window(0, 0, 3));
@@ -95,6 +98,7 @@ class ExclusiveAllocatorTest extends AllocationTest {
 
     @Test
     @DisplayName("A named Resource is the only candidate, even when another room is free")
+    @Verifies("exc-pick-instance")
     void honoursANamedResource() {
         LineSnapshot onB = namedLine(team, rooms, tuesdayAfternoon, roomB);
         commit(onB);
@@ -109,6 +113,7 @@ class ExclusiveAllocatorTest extends AllocationTest {
 
     @Test
     @DisplayName("An overlapping window finds no free instance; back-to-back windows both fit")
+    @Verifies("exc-conflict")
     void overlapConflictsButBackToBackDoesNot() {
         long microscopes = exclusiveType();
         long microscope = room(microscopes, unique("Microscope"));
@@ -129,6 +134,7 @@ class ExclusiveAllocatorTest extends AllocationTest {
 
     @Test
     @DisplayName("A line for two rooms takes both or none")
+    @Verifies(value = "exc-recurrence-quantity", partial = true)
     void takesEveryInstanceOrNone() {
         LineSnapshot both = exclusiveLine(team, rooms, tuesdayAfternoon, 2, Optional.empty(), clock.instant());
         commit(both);

@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import edu.cwru.openbench.PostgresTest;
+import edu.cwru.openbench.Verifies;
 import edu.cwru.openbench.common.Actor;
 import edu.cwru.openbench.common.Credits;
 import edu.cwru.openbench.common.MemberId;
@@ -67,6 +68,7 @@ class LedgerServiceTest extends PostgresTest {
 
     @Test
     @DisplayName("Ledger.Account: Balance is granted plus earned, Available Balance is Balance minus held")
+    @Verifies(value = {"led-account", "lif-pending-holds"}, partial = true)
     void computesTheAccountFigures() {
         grant("600.00");
         earn("50.00");
@@ -121,6 +123,7 @@ class LedgerServiceTest extends PostgresTest {
 
     @Test
     @DisplayName("INSUFFICIENT_BALANCE: a Hold above the Available Balance is refused and holds nothing")
+    @Verifies("lif-held-credits")
     void refusesAHoldAboveTheAvailableBalance() {
         grant("600.00");
         ledger.holdCredits(teamId, line(), Credits.of("500.00"));
@@ -143,6 +146,7 @@ class LedgerServiceTest extends PostgresTest {
 
     @Test
     @DisplayName("Ledger.SpendOrder: a Charge draws granted credits first, then earned, and records the split")
+    @Verifies(value = "rel-bucket", partial = true)
     void commitsAHeldLineGrantedCreditsFirst() {
         // The design's worked example: granted 30 and earned 50 meet a Charge of 40.
         grant("30.00");
@@ -274,6 +278,7 @@ class LedgerServiceTest extends PostgresTest {
 
     @Test
     @DisplayName("The account row equals the fold of the Team's Transactions and Period closes")
+    @Verifies("led-account")
     void keepsTheAccountRowEqualToTheFoldOfTheTransactions() {
         grant("500.00");
         earn("75.00");
@@ -300,6 +305,7 @@ class LedgerServiceTest extends PostgresTest {
 
     @Test
     @DisplayName("Two concurrent Holds on one Account cannot together exceed the Available Balance")
+    @Verifies("lif-held-credits")
     void serializesConcurrentHoldsOnTheAccountRow() throws Exception {
         grant("100.00");
         RequestLineId first = line();

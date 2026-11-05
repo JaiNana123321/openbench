@@ -93,10 +93,13 @@ public class TestCaseReportListener implements TestExecutionListener {
                 tally(key, type.getName() + "#" + method.getName(), type, name(method), onMethod.partial()).add(outcome, note);
             }
         }
-        Verifies onClass = type.getAnnotation(Verifies.class);
-        if (onClass != null) {
-            for (String key : onClass.value()) {
-                tally(key, type.getName(), type, null, onClass.partial()).add(outcome, note);
+        // A tag on a class covers its @Nested classes' tests too.
+        for (Class<?> c = type; c != null; c = c.getEnclosingClass()) {
+            Verifies onClass = c.getAnnotation(Verifies.class);
+            if (onClass != null) {
+                for (String key : onClass.value()) {
+                    tally(key, c.getName(), c, null, onClass.partial()).add(outcome, note);
+                }
             }
         }
     }
@@ -127,7 +130,13 @@ public class TestCaseReportListener implements TestExecutionListener {
 
     private Tally tally(String key, String id, Class<?> type, String method, boolean partial) {
         return tallies.computeIfAbsent(key, k -> new LinkedHashMap<>())
-                .computeIfAbsent(id, i -> new Tally(type.getSimpleName(), method, partial));
+                .computeIfAbsent(id, i -> new Tally(simpleName(type), method, partial));
+    }
+
+    /** {@code PricingTest.Refunds} for a nested class. */
+    private static String simpleName(Class<?> type) {
+        return type.getEnclosingClass() == null ? type.getSimpleName()
+                : simpleName(type.getEnclosingClass()) + "." + type.getSimpleName();
     }
 
     private static String name(Method method) {

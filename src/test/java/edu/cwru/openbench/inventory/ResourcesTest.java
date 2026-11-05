@@ -9,6 +9,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.jayway.jsonpath.JsonPath;
+import edu.cwru.openbench.Verifies;
 import edu.cwru.openbench.common.Role;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -43,6 +44,7 @@ class ResourcesTest extends InventoryTest {
 
     @Test
     @DisplayName("An Exclusive Resource has units 1 and the caller as its owner")
+    @Verifies("inv-add-resource")
     void addsAnExclusiveResource() throws Exception {
         String name = unique("Room A");
         postAs(owner, "/api/inventory/resources", """
@@ -64,6 +66,7 @@ class ResourcesTest extends InventoryTest {
 
     @Test
     @DisplayName("Pool Capacity is the sum of the units of the unretired Resources")
+    @Verifies("inv-pool-capacity")
     void sumsThePoolCapacity() throws Exception {
         add("""
                 {"typeId": %d, "name": "%s", "units": 8, "attributes": {"model": "H100"}}""".formatted(gpus, unique("node-a")));
@@ -124,6 +127,7 @@ class ResourcesTest extends InventoryTest {
 
     @Test
     @DisplayName("A Resource's name is unique within its type")
+    @Verifies("inv-add-resource")
     void refusesANameTakenWithinTheType() throws Exception {
         String name = unique("Room A");
         add("""
@@ -221,6 +225,7 @@ class ResourcesTest extends InventoryTest {
 
     @Test
     @DisplayName("A retired Resource is never offered again and cannot change")
+    @Verifies("inv-add-resource")
     void retiresAResource() throws Exception {
         String name = unique("Room E");
         long room = add("""
@@ -242,6 +247,7 @@ class ResourcesTest extends InventoryTest {
 
     @Test
     @DisplayName("Inventory.View.Filter: list Resources by type and attribute value, a page at a time")
+    @Verifies(value = "inv-filter", partial = true)
     void listsResourcesByTypeAndAttribute() throws Exception {
         String north = unique("Room N");
         String south = unique("Room S");

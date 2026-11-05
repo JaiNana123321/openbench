@@ -10,6 +10,7 @@ import static edu.cwru.openbench.requests.RequestState.WITHDRAWN;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import edu.cwru.openbench.Verifies;
 import edu.cwru.openbench.common.RuleViolation;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -20,6 +21,7 @@ import org.junit.jupiter.api.Test;
 
 /** Lifecycle.States: every transition of design Table "Request transitions" passes, every other is refused. */
 @DisplayName("Lifecycle.States: the Request state rules")
+@Verifies("lif-states-rules")
 class RequestStateTest {
 
     /** The table's changes of state, from and to. */

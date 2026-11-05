@@ -8,6 +8,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import edu.cwru.openbench.TestData;
+import edu.cwru.openbench.Verifies;
 import jakarta.servlet.http.Cookie;
 import java.util.Arrays;
 import org.junit.jupiter.api.DisplayName;
@@ -23,6 +24,7 @@ import org.springframework.test.web.servlet.request.RequestPostProcessor;
  * and the token. The demo world's shape is built in test setup ({@link DemoWorldTest}).
  */
 @DisplayName("End to end: submit to Allocated, the Statement's Charges, Waiting with positions, and the shortfall")
+@Verifies("lif-direct")
 class SubmitEndToEndTest extends DemoWorldTest {
 
     @Test

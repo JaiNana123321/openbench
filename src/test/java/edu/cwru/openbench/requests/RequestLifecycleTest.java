@@ -5,6 +5,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import edu.cwru.openbench.Verifies;
 import java.math.BigDecimal;
 import java.util.List;
 import org.junit.jupiter.api.DisplayName;
@@ -14,10 +15,12 @@ import org.junit.jupiter.api.Test;
  * Submission, withdrawal, and the detail through the API, one contract per test: each outcome and
  * each refusal code, the scope and role checks, and all or nothing when a Required line misfits.
  */
+@Verifies(value = {"lif-allocate", "adm-settings-effect"}, partial = true)
 class RequestLifecycleTest extends DemoWorldTest {
 
     @Test
     @DisplayName("Lifecycle.Allocate: every Required line fits, so the lines are allocated and charged their locked Quotes")
+    @Verifies("lif-direct")
     void allocatesARequestWhoseRequiredLinesFit() throws Exception {
         long request = createDraft(as(alice));
         long roomLine = line(as(alice), request, room, 1, tuesdayAt(14), tuesdayAt(16), roomA);
@@ -62,6 +65,7 @@ class RequestLifecycleTest extends DemoWorldTest {
 
     @Test
     @DisplayName("Draft.Submit.Lock: the Quotes are locked at submission and do not follow a later price change")
+    @Verifies("drf-submit-lock")
     void locksTheQuotes() throws Exception {
         long request = createDraft(as(alice));
         line(as(alice), request, room, 1, tuesdayAt(14), tuesdayAt(16), roomA);
@@ -76,6 +80,7 @@ class RequestLifecycleTest extends DemoWorldTest {
 
     @Test
     @DisplayName("INSUFFICIENT_BALANCE: a Request costing more than the Available Balance is refused with the shortfall and stays a Draft")
+    @Verifies("drf-shortfall")
     void refusesARequestOverTheAvailableBalance() throws Exception {
         long request = createDraft(as(bob));
         line(as(bob), request, microscope, 1, tuesdayAt(9), tuesdayAt(17), null);
@@ -100,6 +105,7 @@ class RequestLifecycleTest extends DemoWorldTest {
 
     @Test
     @DisplayName("Exclusive.Waitlist.Join: Room A at an overlapping time waits at position 1, with the reason, and nothing is held")
+    @Verifies("exc-conflict")
     void waitsForATakenRoom() throws Exception {
         long allocated = createDraft(as(alice));
         line(as(alice), allocated, room, 1, tuesdayAt(14), tuesdayAt(16), roomA);
@@ -128,6 +134,7 @@ class RequestLifecycleTest extends DemoWorldTest {
 
     @Test
     @DisplayName("Metered.Pool.Check: 10 GPU units exceed Research's Quota of 8, so the line waits with QUOTA_EXCEEDED")
+    @Verifies("met-quota")
     void waitsOverTheQuota() throws Exception {
         long request = createDraft(as(bob));
         line(as(bob), request, gpu, 10, tuesdayAt(10), tuesdayAt(14), null);
@@ -143,6 +150,7 @@ class RequestLifecycleTest extends DemoWorldTest {
 
     @Test
     @DisplayName("QA-atomic: when one Required line misfits, the fitting one is not held, allocated, or charged either")
+    @Verifies("lif-atomic-waiting")
     void allocatesNothingWhenARequiredLineMisfits() throws Exception {
         long allocated = createDraft(as(alice));
         line(as(alice), allocated, room, 1, tuesdayAt(14), tuesdayAt(16), roomA);
@@ -168,6 +176,7 @@ class RequestLifecycleTest extends DemoWorldTest {
 
     @Test
     @DisplayName("Draft.Line.Required: an Optional line that does not fit is Dropped with its reason; the Request is still Allocated")
+    @Verifies("lif-optional-drop")
     void dropsAnUnfitOptionalLine() throws Exception {
         long allocated = createDraft(as(alice));
         line(as(alice), allocated, room, 1, tuesdayAt(14), tuesdayAt(16), roomA);
@@ -226,6 +235,7 @@ class RequestLifecycleTest extends DemoWorldTest {
 
     @Test
     @DisplayName("EMPTY_REQUEST: a Draft without lines cannot be submitted")
+    @Verifies("lif-states-rules")
     void refusesAnEmptyDraft() throws Exception {
         submit(as(alice), createDraft(as(alice)))
                 .andExpect(status().isUnprocessableEntity())
@@ -234,6 +244,7 @@ class RequestLifecycleTest extends DemoWorldTest {
 
     @Test
     @DisplayName("WRONG_STATE: a Request that is not a Draft cannot be submitted again, and an Allocated one cannot be withdrawn")
+    @Verifies(value = {"lif-states-rules", "drf-withdraw"}, partial = true)
     void refusesTransitionsTheStateDoesNotAllow() throws Exception {
         long request = createDraft(as(alice));
         line(as(alice), request, room, 1, tuesdayAt(14), tuesdayAt(16), null);
@@ -251,6 +262,7 @@ class RequestLifecycleTest extends DemoWorldTest {
 
     @Test
     @DisplayName("Draft.Create: withdrawing a Waiting Request cancels its lines and takes them off the waitlist")
+    @Verifies(value = "drf-withdraw", partial = true)
     void withdrawsAWaitingRequest() throws Exception {
         long allocated = createDraft(as(alice));
         line(as(alice), allocated, room, 1, tuesdayAt(14), tuesdayAt(16), roomA);
@@ -277,6 +289,7 @@ class RequestLifecycleTest extends DemoWorldTest {
 
     @Test
     @DisplayName("Draft.Create: a Draft can be withdrawn, after which it can be neither edited nor submitted")
+    @Verifies(value = "drf-withdraw", partial = true)
     void withdrawsADraft() throws Exception {
         long request = createDraft(as(alice));
         line(as(alice), request, room, 1, tuesdayAt(14), tuesdayAt(16), null);
@@ -292,6 +305,7 @@ class RequestLifecycleTest extends DemoWorldTest {
 
     @Test
     @DisplayName("Another Team's Request is not found: submit, withdraw, and the detail all answer 404")
+    @Verifies("drf-scope")
     void hidesAnotherTeamsRequest() throws Exception {
         long request = createDraft(as(alice));
         line(as(alice), request, room, 1, tuesdayAt(14), tuesdayAt(16), null);

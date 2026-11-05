@@ -12,6 +12,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.jayway.jsonpath.JsonPath;
 import edu.cwru.openbench.PostgresTest;
+import edu.cwru.openbench.Verifies;
 import edu.cwru.openbench.common.Credits;
 import edu.cwru.openbench.common.PeriodId;
 import edu.cwru.openbench.common.Role;
@@ -84,6 +85,7 @@ class DraftRequestTest extends PostgresTest {
 
     @Test
     @DisplayName("Draft.Quote.Line and Draft.Quote.Totals: Room A 30.00, 4 GPU units 1120.00, Required 1150.00 of 5000.00")
+    @Verifies("drf-lines-quotes")
     void showsTheQuotesTheSumsAndTheAvailableBalance() throws Exception {
         grant(platform, "5000.00");
         long draft = createDraft(alice);
@@ -117,6 +119,7 @@ class DraftRequestTest extends PostgresTest {
 
     @Test
     @DisplayName("Draft.Create: a Manager's new Draft belongs to their Team and is recorded in its history")
+    @Verifies("drf-create")
     void createsADraftForTheCallersTeam() throws Exception {
         String body = mvc.perform(post("/api/requests").with(signedInAs(alice)).with(xsrf()))
                 .andExpect(status().isCreated())
@@ -132,6 +135,7 @@ class DraftRequestTest extends PostgresTest {
 
     @Test
     @DisplayName("Draft.Quote.Totals: the shortfall is the Required sum above the Available Balance; Optional lines do not count")
+    @Verifies("drf-shortfall")
     void showsTheShortfallOfTheRequiredLines() throws Exception {
         grant(platform, "1000.00");
         long draft = createDraft(alice);
@@ -169,6 +173,7 @@ class DraftRequestTest extends PostgresTest {
 
     @Test
     @DisplayName("Draft.Line.Split: part of a line moves to a new Optional line of the same type and window")
+    @Verifies(value = "drf-required-optional", partial = true)
     void splitsALine() throws Exception {
         long draft = createDraft(alice);
         long rooms = lineId(addLine(alice, draft, room, 3, tuesdayAt(14), tuesdayAt(16), null));
@@ -190,6 +195,7 @@ class DraftRequestTest extends PostgresTest {
 
     @Test
     @DisplayName("Draft.Line.Split: a Metered line splits its units")
+    @Verifies(value = "drf-required-optional", partial = true)
     void splitsTheUnitsOfAMeteredLine() throws Exception {
         long draft = createDraft(alice);
         long units = lineId(addLine(alice, draft, gpu, 4, tuesdayAt(9), tuesdayAt(10), null));
@@ -202,6 +208,7 @@ class DraftRequestTest extends PostgresTest {
 
     @Test
     @DisplayName("Split refuses with 422 LINE_NOT_ATOMIC unless both parts keep at least 1")
+    @Verifies(value = "drf-required-optional", partial = true)
     void refusesASplitThatLeavesNothing() throws Exception {
         long draft = createDraft(alice);
         long rooms = lineId(addLine(alice, draft, room, 2, tuesdayAt(14), tuesdayAt(16), null));
@@ -237,6 +244,7 @@ class DraftRequestTest extends PostgresTest {
 
     @Test
     @DisplayName("A window that ends before it starts, or off the whole hour, is refused with 422 WINDOW_INVALID")
+    @Verifies("drf-line-refusals")
     void refusesAMalformedWindow() throws Exception {
         long draft = createDraft(alice);
         refused(addLine(alice, draft, room, 1, tuesdayAt(16), tuesdayAt(14), null), 422, "WINDOW_INVALID");
@@ -247,6 +255,7 @@ class DraftRequestTest extends PostgresTest {
 
     @Test
     @DisplayName("Draft.Line.Validate: a window that does not start in the future is refused with 422 WINDOW_NOT_FUTURE")
+    @Verifies("drf-line-refusals")
     void refusesAWindowInThePast() throws Exception {
         long draft = createDraft(alice);
         Instant lastHour = clock.instant().truncatedTo(ChronoUnit.HOURS);
@@ -255,6 +264,7 @@ class DraftRequestTest extends PostgresTest {
 
     @Test
     @DisplayName("Draft.Line.Validate: a retired Resource Type is refused with 422 TYPE_RETIRED")
+    @Verifies({"drf-line-refusals", "inv-retire-type"})
     void refusesARetiredType() throws Exception {
         long retired = testData().resourceType(unique("Old room"), "EXCLUSIVE");
         jdbc.update("UPDATE resource_type SET retired_at = now() WHERE id = ?", retired);
@@ -263,6 +273,7 @@ class DraftRequestTest extends PostgresTest {
 
     @Test
     @DisplayName("Draft.Line.Validate: a quantity below 1 is refused with 422 QUANTITY_INVALID")
+    @Verifies("drf-line-refusals")
     void refusesAQuantityBelowOne() throws Exception {
         long draft = createDraft(alice);
         refused(addLine(alice, draft, room, 0, tuesdayAt(14), tuesdayAt(16), null), 422, "QUANTITY_INVALID");
@@ -271,12 +282,14 @@ class DraftRequestTest extends PostgresTest {
 
     @Test
     @DisplayName("A line naming one Resource asks for 1 instance, else 422 QUANTITY_INVALID")
+    @Verifies(value = "drf-line-options", partial = true)
     void refusesSeveralInstancesOfANamedResource() throws Exception {
         refused(addLine(alice, createDraft(alice), room, 2, tuesdayAt(14), tuesdayAt(16), roomA), 422, "QUANTITY_INVALID");
     }
 
     @Test
     @DisplayName("A named Resource of another type is refused with 422 TYPE_MISMATCH")
+    @Verifies("drf-line-refusals")
     void refusesANamedResourceOfAnotherType() throws Exception {
         long otherRoom = testData().resourceType(unique("Lab"), "EXCLUSIVE");
         refused(addLine(alice, createDraft(alice), otherRoom, 1, tuesdayAt(14), tuesdayAt(16), roomA), 422, "TYPE_MISMATCH");
@@ -284,6 +297,7 @@ class DraftRequestTest extends PostgresTest {
 
     @Test
     @DisplayName("A Metered line cannot name a Resource: 422 NAMED_RESOURCE_NOT_OFFERED")
+    @Verifies("drf-line-refusals")
     void refusesANamedResourceOnAMeteredLine() throws Exception {
         long node = testData().resource(gpu, unique("gpu-node"), dave, 8);
         refused(addLine(alice, createDraft(alice), gpu, 1, tuesdayAt(14), tuesdayAt(16), node),

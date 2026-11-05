@@ -9,9 +9,11 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import edu.cwru.openbench.PostgresTest;
+import edu.cwru.openbench.Verifies;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
+@Verifies("adm-roles-server")
 class MembersControllerTest extends PostgresTest {
 
     @Test
@@ -31,6 +33,7 @@ class MembersControllerTest extends PostgresTest {
 
     @Test
     @DisplayName("SE-roles: a caller without the role a service needs gets 403 FORBIDDEN")
+    @Verifies(value = {"drf-create", "adm-skills-no-policy"}, partial = true)
     void refusesACallerWithoutTheRole() throws Exception {
         mvc.perform(get("/api/teams").with(user("outsider").authorities(() -> "SOMETHING_ELSE")))
                 .andExpect(status().isForbidden())

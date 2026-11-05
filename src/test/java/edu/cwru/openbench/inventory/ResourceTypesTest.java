@@ -10,6 +10,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.jayway.jsonpath.JsonPath;
+import edu.cwru.openbench.Verifies;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -24,6 +25,7 @@ class ResourceTypesTest extends InventoryTest {
 
     @Test
     @DisplayName("Inventory.Type.NoCode: a new type is a row, listed at once with its attributes")
+    @Verifies("inv-define-type")
     void definesATypeAsData() throws Exception {
         String name = unique("3D printer");
         String body = postAs(admin, "/api/inventory/types", """
@@ -178,6 +180,7 @@ class ResourceTypesTest extends InventoryTest {
 
     @Test
     @DisplayName("The Allocation Class is fixed once a Resource of the type exists")
+    @Verifies("inv-type-rules")
     void fixesTheClassOnceAResourceExists() throws Exception {
         String name = unique("Scope");
         long type = testData().resourceType(name, "EXCLUSIVE");
@@ -196,6 +199,7 @@ class ResourceTypesTest extends InventoryTest {
 
     @Test
     @DisplayName("Inventory.Type.Person: Person keeps its name and class and is never retired")
+    @Verifies("inv-type-rules")
     void keepsThePersonTypeFixed() throws Exception {
         long person = personId();
         postAs(admin, "/api/inventory/types/" + person + "/retire").andExpect(refused(422, "PERSON_TYPE_FIXED"));
@@ -211,6 +215,7 @@ class ResourceTypesTest extends InventoryTest {
 
     @Test
     @DisplayName("Inventory.Type.Retire: a retired type is listed only on request and accepts no new Resources")
+    @Verifies("inv-retire-type")
     void retiresAType() throws Exception {
         String name = unique("Old room");
         long type = testData().resourceType(name, "EXCLUSIVE");
