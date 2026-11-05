@@ -246,6 +246,9 @@ public class MemberService {
             throw new RuleViolation("TEAM_RETIRED", "The Team has been retired and takes no Members.");
         }
         Team current = team(member.teamId());
+        if (current.id().equals(target.id())) {
+            return summaryOf(member, current);
+        }
         if (member.id().equals(current.managerMemberId())) {
             if (members.countByTeamIdAndActiveTrue(current.id()) > 1) {
                 throw new RuleViolation("TEAM_NEEDS_MANAGER",
