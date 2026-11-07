@@ -3,6 +3,7 @@ package edu.cwru.openbench.allocation;
 import static edu.cwru.openbench.TestData.unique;
 import static org.assertj.core.api.Assertions.assertThat;
 
+import edu.cwru.openbench.Verifies;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
@@ -24,6 +25,7 @@ import org.junit.jupiter.api.RepeatedTest;
  * the pool is oversold, or {@code exclusive_occurrence_no_overlap} refuses the second room.
  */
 @DisplayName("QA-correct: two concurrent attempts for the last capacity")
+@Verifies("lif-race")
 class AllocationConcurrencyTest extends AllocationTest {
 
     private final ExecutorService threads = Executors.newFixedThreadPool(2);
@@ -58,6 +60,7 @@ class AllocationConcurrencyTest extends AllocationTest {
 
     @RepeatedTest(5)
     @DisplayName("the last units of a pool go to exactly one line, and no hour exceeds the Pool Capacity")
+    @Verifies("met-pool-hourly")
     void theLastUnitsGoToOneLine() throws Exception {
         long gpus = meteredType();
         node(gpus, 4);

@@ -12,6 +12,7 @@ import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import edu.cwru.openbench.Verifies;
 import edu.cwru.openbench.common.ResourceId;
 import edu.cwru.openbench.common.ResourceTypeId;
 import java.time.Clock;
@@ -29,6 +30,7 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
  * naming the earliest failing hour, when the guard finds one. The guard here is a test double that
  * answers an hour, standing in for Allocation's.
  */
+@Verifies("inv-reduction-guard")
 class ReductionGuardTest extends InventoryTest {
 
     /** Thursday 15 October 2026, 14:00 in New York. */

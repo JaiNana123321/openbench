@@ -8,6 +8,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.jayway.jsonpath.JsonPath;
+import edu.cwru.openbench.Verifies;
 import edu.cwru.openbench.common.ResourceTypeId;
 import java.time.Instant;
 import java.time.OffsetDateTime;
@@ -53,6 +54,7 @@ class UsageReductionGuardTest extends AllocationTest {
 
         @Test
         @DisplayName("refuses a reduction below the peak, naming the earliest failing hour, not the first used one")
+        @Verifies("inv-reduction-guard")
         void refusesAReductionBelowThePeak() throws Exception {
             MvcResult result = setUnits(nodeB, 1)
                     .andExpect(status().isUnprocessableEntity())

@@ -18,6 +18,7 @@ import org.junit.jupiter.params.provider.ValueSource;
 
 /** The privileges of openbench_app, the role the application connects as in production (V7). */
 @DisplayName("Ledger.Transaction.Kinds, QA-audit: the application role cannot change history")
+@Verifies("led-immutable")
 class AppRoleGrantsTest extends PostgresTest {
 
     private static final String INSUFFICIENT_PRIVILEGE = "42501";

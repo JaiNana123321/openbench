@@ -13,5 +13,22 @@ export default defineConfig({
   test: {
     environment: 'jsdom',
     setupFiles: ['./src/test/setup.ts'],
+    // `npm run coverage` writes coverage/ (index.html, lcov.info, coverage-summary.json) and fails below
+    // the thresholds, set a few points under the measured baseline (TESTING.md).
+    coverage: {
+      provider: 'v8',
+      reportsDirectory: 'coverage',
+      reporter: ['text-summary', 'html', 'lcov', 'json-summary'],
+      include: ['src/**/*.{ts,tsx}'],
+      exclude: [
+        'src/**/*.test.{ts,tsx}',
+        // The test helpers themselves.
+        'src/test/**',
+        // Only mounts <App> into the page's #root; the tests render App through renderApp instead.
+        'src/main.tsx',
+      ],
+      // Baseline on 2026-11-07: statements 95.0%, branches 83.1%, functions 96.8%, lines 97.4%.
+      thresholds: { statements: 90, branches: 78, functions: 92, lines: 92 },
+    },
   },
 });

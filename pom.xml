@@ -21,6 +21,11 @@
     <java.version>25</java.version>
     <springdoc.version>2.9.1</springdoc.version>
     <archunit.version>1.5.1</archunit.version>
+    <!-- 0.8.14 is the first release that instruments Java 25 class files. -->
+    <jacoco.version>0.8.14</jacoco.version>
+    <!-- The coverage gate of `mvn verify` over the whole bundle (TESTING.md). -->
+    <coverage.line.minimum>0.90</coverage.line.minimum>
+    <coverage.branch.minimum>0.80</coverage.branch.minimum>
     <frontend-maven-plugin.version>2.0.2</frontend-maven-plugin.version>
     <!-- The same Node as the Nix dev shell (flake.nix), so the lockfile behaves alike. -->
     <node.version>v24.21.0</node.version>
@@ -100,6 +105,12 @@
       <version>${archunit.version}</version>
       <scope>test</scope>
     </dependency>
+    <!-- The API of the listener that writes target/test-cases/report.md (TestCaseReportListener). -->
+    <dependency>
+      <groupId>org.junit.platform</groupId>
+      <artifactId>junit-platform-launcher</artifactId>
+      <scope>test</scope>
+    </dependency>
   </dependencies>
 
   <build>
@@ -107,6 +118,72 @@
       <plugin>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-maven-plugin</artifactId>
+      </plugin>
+      <!-- TestCaseReportListener writes the functional test case run report only when given its file. -->
+      <plugin>
+        <artifactId>maven-surefire-plugin</artifactId>
+        <configuration>
+          <systemPropertyVariables>
+            <openbench.test-cases.report>${project.build.directory}/test-cases/report.md</openbench.test-cases.report>
+          </systemPropertyVariables>
+        </configuration>
+      </plugin>
+      <!--
+        Server coverage. prepare-agent puts the agent into Surefire's argLine; at verify, report writes
+        target/site/jacoco/ (index.html, jacoco.xml, jacoco.csv) and check fails the build below the
+        line and branch minimums above.
+      -->
+      <plugin>
+        <groupId>org.jacoco</groupId>
+        <artifactId>jacoco-maven-plugin</artifactId>
+        <version>${jacoco.version}</version>
+        <configuration>
+          <excludes>
+            <!-- Only main() calling SpringApplication.run: the tests start the context through @SpringBootTest. -->
+            <exclude>edu/cwru/openbench/OpenBenchApplication.class</exclude>
+          </excludes>
+        </configuration>
+        <executions>
+          <execution>
+            <id>prepare-agent</id>
+            <goals>
+              <goal>prepare-agent</goal>
+            </goals>
+          </execution>
+          <execution>
+            <id>report</id>
+            <phase>verify</phase>
+            <goals>
+              <goal>report</goal>
+            </goals>
+          </execution>
+          <execution>
+            <id>check</id>
+            <phase>verify</phase>
+            <goals>
+              <goal>check</goal>
+            </goals>
+            <configuration>
+              <rules>
+                <rule>
+                  <element>BUNDLE</element>
+                  <limits>
+                    <limit>
+                      <counter>LINE</counter>
+                      <value>COVEREDRATIO</value>
+                      <minimum>${coverage.line.minimum}</minimum>
+                    </limit>
+                    <limit>
+                      <counter>BRANCH</counter>
+                      <value>COVEREDRATIO</value>
+                      <minimum>${coverage.branch.minimum}</minimum>
+                    </limit>
+                  </limits>
+                </rule>
+              </rules>
+            </configuration>
+          </execution>
+        </executions>
       </plugin>
     </plugins>
   </build>

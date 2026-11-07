@@ -8,6 +8,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import edu.cwru.openbench.PostgresTest;
+import edu.cwru.openbench.Verifies;
 import edu.cwru.openbench.common.Actor;
 import edu.cwru.openbench.common.Credits;
 import edu.cwru.openbench.common.MemberId;
@@ -101,6 +102,7 @@ class LedgerControllerTest extends PostgresTest {
 
     @Test
     @DisplayName("A Member who is neither Manager nor Planner gets 403 FORBIDDEN for the Account and the Statement")
+    @Verifies("led-statement")
     void refusesTheLedgerToAPlainMember() throws Exception {
         mvc.perform(get("/api/ledger/account").with(signedInAs(rita)))
                 .andExpect(status().isForbidden())
@@ -112,6 +114,7 @@ class LedgerControllerTest extends PostgresTest {
 
     @Test
     @DisplayName("Ledger.Statement: opening, totals, closing, the Account, and every Transaction of the Period")
+    @Verifies("led-statement")
     void showsTheStatementOfAPeriod() throws Exception {
         TeamId team = new TeamId(research);
         // Before the Period: a Grant of 100 that expired at the earlier Period's close, and an Earning of 50.
@@ -178,6 +181,7 @@ class LedgerControllerTest extends PostgresTest {
 
     @Test
     @DisplayName("A Manager asking for another Team's Statement gets 404 NOT_FOUND")
+    @Verifies("led-statement")
     void hidesAnotherTeamsStatementFromAManager() throws Exception {
         mvc.perform(get("/api/ledger/statements/{team}/{period}", research, period).with(signedInAs(alice)))
                 .andExpect(status().isNotFound())
@@ -210,6 +214,7 @@ class LedgerControllerTest extends PostgresTest {
 
     @Test
     @DisplayName("REASON_REQUIRED and INVALID_AMOUNT: a mid-Period Grant needs a reason and a positive amount")
+    @Verifies("led-grant-mid")
     void refusesAMidPeriodGrantWithoutAReasonOrAPositiveAmount() throws Exception {
         mvc.perform(post("/api/ledger/grants").with(signedInAs(erin)).with(xsrf())
                         .contentType(MediaType.APPLICATION_JSON)

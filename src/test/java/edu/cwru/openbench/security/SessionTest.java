@@ -11,6 +11,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import edu.cwru.openbench.PostgresTest;
 import edu.cwru.openbench.TestData;
+import edu.cwru.openbench.Verifies;
 import edu.cwru.openbench.common.Role;
 import jakarta.servlet.http.Cookie;
 import java.util.Arrays;
@@ -25,6 +26,7 @@ import org.springframework.test.web.servlet.ResultActions;
 
 /** Sign-in, sign-out, and /api/me through MockMvc with a real session and CSRF token. */
 @DisplayName("CO-auth, SE-password: session login with CSRF")
+@Verifies("adm-roles-server")
 class SessionTest extends PostgresTest {
 
     private static final String CSRF_COOKIE = "XSRF-TOKEN";
@@ -44,6 +46,7 @@ class SessionTest extends PostgresTest {
     }
 
     @Test
+    @Verifies(value = "adm-member", partial = true)
     void signsInReadsMeAndSignsOut() throws Exception {
         MvcResult signedOut = mvc.perform(get("/api/me"))
                 .andExpect(status().isUnauthorized())
@@ -73,6 +76,7 @@ class SessionTest extends PostgresTest {
     }
 
     @Test
+    @Verifies(value = "adm-member", partial = true)
     void refusesAWrongPasswordAnUnknownUsernameAndADeactivatedMemberAlike() throws Exception {
         Cookie token = csrfCookie(mvc.perform(get("/api/me")).andReturn());
         String deactivated = unique("ben");

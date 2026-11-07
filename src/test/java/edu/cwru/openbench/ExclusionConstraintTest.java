@@ -15,6 +15,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.dao.DataIntegrityViolationException;
 
 @DisplayName("Exclusive.Conflict, QA-correct: exclusive_occurrence_no_overlap")
+@Verifies("exc-conflict")
 class ExclusionConstraintTest extends PostgresTest {
 
     private static final Instant TEN = Instant.parse("2026-10-27T14:00:00Z");

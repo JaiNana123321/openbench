@@ -164,6 +164,19 @@ abstract class DemoWorldTest extends PostgresTest {
         return LocalDate.now(clock).with(TemporalAdjusters.next(DayOfWeek.TUESDAY));
     }
 
+    /**
+     * Day D of the test case document (Section 2.5): the first Wednesday at least 14 days after today, so
+     * D+1 is a Thursday, D+3 a Saturday, and D+7 the next Wednesday.
+     */
+    protected LocalDate dayD() {
+        return LocalDate.now(clock).plusDays(14).with(TemporalAdjusters.nextOrSame(DayOfWeek.WEDNESDAY));
+    }
+
+    /** The day at this hour, company time. */
+    protected Instant at(LocalDate day, int hour) {
+        return day.atTime(LocalTime.of(hour, 0)).atZone(clock.getZone()).toInstant();
+    }
+
     // ---------------------------------------------------------------- rows
 
     /** The Team's account row, and the same three figures folded from its Transactions and Holds. */
