@@ -54,7 +54,9 @@ public class ProblemDetailsAdvice extends ResponseEntityExceptionHandler {
 
     @ExceptionHandler(RuleViolation.class)
     ResponseEntity<ProblemDetail> ruleViolation(RuleViolation e) {
-        HttpStatus status = e.isStateConflict() ? HttpStatus.CONFLICT : HttpStatus.UNPROCESSABLE_ENTITY;
+        HttpStatus status = e.isValidationFailure() ? HttpStatus.BAD_REQUEST
+                : e.isStateConflict() ? HttpStatus.CONFLICT
+                : HttpStatus.UNPROCESSABLE_ENTITY;
         ProblemDetail problem = Problems.of(status, e.code(), e.getMessage());
         e.properties().forEach(problem::setProperty);
         return respond(problem);

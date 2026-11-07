@@ -159,4 +159,83 @@ public final class TestData {
     private static OffsetDateTime utc(Instant instant) {
         return instant.atOffset(ZoneOffset.UTC);
     }
+
+    // ---------------------------------------------------------------- Members: skills, availability, Matched data
+
+    /**
+     * The skill with this name, ignoring case, added to the list only when no skill has it, so every
+     * test shares it. Never retire a skill found this way; retire one with a {@link #unique} name.
+     */
+    public long skill(String name) {
+        jdbc.update("INSERT INTO skill (name) VALUES (?) ON CONFLICT DO NOTHING", name);
+        return jdbc.queryForObject("SELECT id FROM skill WHERE lower(name) = lower(?)", Long.class, name);
+    }
+
+    /** The Member holds these skills besides any they hold already. */
+    public void holds(long memberId, long... skillIds) {
+        for (long skillId : skillIds) {
+            jdbc.update("INSERT INTO member_skill (member_id, skill_id) VALUES (?, ?) ON CONFLICT DO NOTHING",
+                    memberId, skillId);
+        }
+    }
+
+    /** Adds a range, inclusive at both ends, to the Member's availability; it must not touch another of theirs. */
+    public void available(long memberId, LocalDate from, LocalDate to) {
+        jdbc.update("INSERT INTO availability_range (member_id, from_date, to_date) VALUES (?, ?, ?)",
+                memberId, from, to);
+    }
+
+    /** A Member of a test world: their id and the username to sign in with ({@code signedInAs}). */
+    public record Login(long id, String username) {}
+
+    /**
+     * Item 5 of the test world (docs/test-cases, Section "Test World") on Teams of its own. See
+     * {@link #matchedWorld(LocalDate)}. {@code d} is day D: the first Wednesday at least 14 days
+     * after {@code today}.
+     */
+    public record MatchedWorld(
+            long platform, long research, long operations,
+            Login alice, Login ben, Login bob, Login rita, Login oscar, Login dave,
+            long statistics, long java, long microscopy,
+            LocalDate today, LocalDate d) {}
+
+    /**
+     * The Matched data of the test world: Teams Platform (Manager Alice Chen, Ben Ortiz), Research
+     * (Manager Bob Patel, Rita Gomez), and Operations (Manager Oscar Reed, Dave Kim, Resource
+     * Owner); the skill list Statistics, Java, Microscopy; Ben holds Java, Rita Statistics and
+     * Microscopy, Dave Statistics, each available from {@code today} to D+60. Every call makes new
+     * Teams and Members with unique names and usernames but the document's display names, and
+     * reuses the shared skills by name. Other tests' Members hold the same skills, so check a
+     * query's answer for this world's Members rather than comparing it whole.
+     */
+    public MatchedWorld matchedWorld(LocalDate today) {
+        LocalDate d = today.plusDays(14).with(java.time.temporal.TemporalAdjusters.nextOrSame(java.time.DayOfWeek.WEDNESDAY));
+        long platform = team(unique("Platform"));
+        long research = team(unique("Research"));
+        long operations = team(unique("Operations"));
+        long statistics = skill("Statistics");
+        long java = skill("Java");
+        long microscopy = skill("Microscopy");
+        Login alice = named(platform, "alice", "Alice Chen", Role.MANAGER);
+        Login ben = named(platform, "ben", "Ben Ortiz");
+        Login bob = named(research, "bob", "Bob Patel", Role.MANAGER);
+        Login rita = named(research, "rita", "Rita Gomez");
+        Login oscar = named(operations, "oscar", "Oscar Reed", Role.MANAGER);
+        Login dave = named(operations, "dave", "Dave Kim", Role.RESOURCE_OWNER);
+        holds(ben.id(), java);
+        holds(rita.id(), statistics, microscopy);
+        holds(dave.id(), statistics);
+        for (Login lendable : new Login[] {ben, rita, dave}) {
+            available(lendable.id(), today, d.plusDays(60));
+        }
+        return new MatchedWorld(platform, research, operations, alice, ben, bob, rita, oscar, dave,
+                statistics, java, microscopy, today, d);
+    }
+
+    private Login named(long teamId, String login, String name, Role... roles) {
+        String username = unique(login);
+        long id = member(teamId, username, roles);
+        jdbc.update("UPDATE member SET name = ? WHERE id = ?", name, id);
+        return new Login(id, username);
+    }
 }

@@ -45,7 +45,8 @@ class ProblemDetailsTest extends PostgresTest {
         "ALREADY_DECIDED, 409",
         "ALLOCATION_CONFLICT, 409",
         "INSUFFICIENT_BALANCE, 422",
-        "TYPE_RETIRED, 422"})
+        "TYPE_RETIRED, 422",
+        "VALIDATION_FAILED, 400"})
     void mapsARuleViolationTo409Or422ByItsCode(String code, int status) throws Exception {
         perform(get("/api/test/rule/" + code))
                 .andExpect(status().is(status))

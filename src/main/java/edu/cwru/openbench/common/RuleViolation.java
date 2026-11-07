@@ -9,8 +9,9 @@ import java.util.Set;
  * on, the message one sentence written for the user, and the optional properties extra fields of
  * the problem response (for example {@code shortfall} or {@code earliestHour}).
  *
- * <p>Codes that describe the object's current state map to HTTP 409; every other code maps to 422
- * (design Section 8, Error Taxonomy).
+ * <p>{@code VALIDATION_FAILED} maps to HTTP 400, as for invalid fields, when a value is well formed
+ * but names nothing valid (an unknown skill id, for example). Codes that describe the object's
+ * current state map to HTTP 409; every other code maps to 422 (design Section 8, Error Taxonomy).
  */
 public final class RuleViolation extends RuntimeException {
 
@@ -42,6 +43,11 @@ public final class RuleViolation extends RuntimeException {
 
     public Map<String, Object> properties() {
         return properties;
+    }
+
+    /** True for {@code VALIDATION_FAILED}, which answers HTTP 400 like an invalid field. */
+    public boolean isValidationFailure() {
+        return "VALIDATION_FAILED".equals(code);
     }
 
     /** True for codes that describe the object's current state (HTTP 409), false otherwise (422). */

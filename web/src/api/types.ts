@@ -329,3 +329,35 @@ export interface RequestDetail {
   lines: LineDetail[];
   history: RequestEvent[];
 }
+
+// ---------------------------------------------------------------- Profiles and the skill list
+
+/** GET /api/skills: an entry of the Administrator's skill list. A retired skill is no longer offered. */
+export interface Skill {
+  id: Id;
+  name: string;
+  retired: boolean;
+}
+
+/**
+ * GET /api/members/{id}/profile (`me` for the caller): name, email, Team, skills, and availability,
+ * and no other personal data. The Team is read-only; only an Administrator moves a Member.
+ */
+export interface MemberProfile {
+  id: Id;
+  name: string;
+  email: string;
+  team: TeamRef;
+  skills: Skill[];
+  availability: DayRange[];
+}
+
+/** One row of GET /api/teams/{id}/members (paged): a Member of the Team. */
+export interface MemberSummary {
+  id: Id;
+  name: string;
+  username: string;
+  team: TeamRef;
+  active: boolean;
+  roles: Role[];
+}

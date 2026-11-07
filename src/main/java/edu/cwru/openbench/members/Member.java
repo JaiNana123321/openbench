@@ -42,6 +42,10 @@ class Member {
         return name;
     }
 
+    String email() {
+        return email;
+    }
+
     String username() {
         return username;
     }
@@ -53,5 +57,10 @@ class Member {
     /** False once an Administrator deactivates the Member: they can no longer sign in. */
     boolean active() {
         return active;
+    }
+
+    /** Moves the Member to another Team; their stored roles follow by the foreign key's cascade. */
+    void moveTo(Long teamId) {
+        this.teamId = teamId;
     }
 }
