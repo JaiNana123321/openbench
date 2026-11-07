@@ -25,7 +25,7 @@ class ExclusiveCasesTest extends DemoWorldTest {
      * {@code recurrence} column), so step 3 runs with L2's occurrence on D+14, the one that blocks L3.
      */
     @Test
-    @DisplayName("TC exc-recurrence-quantity, step 3: a line for two rooms waits while one is taken on D+14; nothing is held or charged")
+    @DisplayName("exc-recurrence-quantity, step 3: a line for two rooms waits while one is taken on D+14; nothing is held or charged")
     @Verifies(value = "exc-recurrence-quantity", partial = true)
     void waitsForTwoRoomsWhenOneIsTaken() throws Exception {
         LocalDate d = dayD();

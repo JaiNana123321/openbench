@@ -25,7 +25,7 @@ import org.springframework.test.web.servlet.request.RequestPostProcessor;
 class DraftCasesTest extends DemoWorldTest {
 
     @Test
-    @DisplayName("TC drf-balance-boundary: a Required sum equal to the Available Balance is accepted and leaves exactly 0.00")
+    @DisplayName("drf-balance-boundary: a Required sum equal to the Available Balance is accepted and leaves exactly 0.00")
     @Verifies("drf-balance-boundary")
     void acceptsARequiredSumEqualToTheAvailableBalance() throws Exception {
         LocalDate d = dayD();
@@ -56,7 +56,7 @@ class DraftCasesTest extends DemoWorldTest {
     }
 
     @Test
-    @DisplayName("TC drf-required-optional: Required by default; a split moves a part to an Optional line; marking it Required again")
+    @DisplayName("drf-required-optional: Required by default; a split moves a part to an Optional line; marking it Required again")
     @Verifies("drf-required-optional")
     void splitsLinesToMakeAPartOptional() throws Exception {
         LocalDate d = dayD();
@@ -116,7 +116,7 @@ class DraftCasesTest extends DemoWorldTest {
     }
 
     @Test
-    @DisplayName("TC drf-line-options, steps 1 and 2: an Exclusive line names Room B (Q1 = 30.00); quantity 2 on it is QUANTITY_INVALID")
+    @DisplayName("drf-line-options, steps 1 and 2: an Exclusive line names Room B (Q1 = 30.00); quantity 2 on it is QUANTITY_INVALID")
     @Verifies(value = "drf-line-options", partial = true)
     void letsAnExclusiveLineNameOneResource() throws Exception {
         LocalDate d = dayD();
@@ -144,7 +144,7 @@ class DraftCasesTest extends DemoWorldTest {
      */
     @Test
     @Disabled("drf-line-options steps 3 and 6: the Priority mark (PUT .../lines/{lineId}/priority) and weekly recurrence are not built")
-    @DisplayName("TC drf-line-options, steps 3 and 6: Priority doubles an Exclusive line's Quote (Q4 = 60.00) and is refused on a GPU line")
+    @DisplayName("drf-line-options, steps 3 and 6: Priority doubles an Exclusive line's Quote (Q4 = 60.00) and is refused on a GPU line")
     @Verifies(value = "drf-line-options", partial = true)
     void offersPriorityOnExclusiveLinesOnly() throws Exception {
         LocalDate d = dayD();
