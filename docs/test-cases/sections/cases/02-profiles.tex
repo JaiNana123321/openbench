@@ -18,7 +18,7 @@ These cases establish that a Member's skills come only from the Administrator's 
 \tcstep{Try to change the Team on the profile.}{Team Research}{The Team is shown but not editable; the API refuses the change with \code{FORBIDDEN}.}
 \tcstep{As \code{alice}, open a Draft line for Person with skill Statistics, quantity 1, days D to D+1, and submit.}{None}{Ben is not on the Shortlist: he is in the requesting Team (see \TC{mat-shortlist-build}).}
 \tcfield{Pass criteria}{Ben's skills are exactly Java and Statistics, and his Team is Platform.}
-\tcfield{Automated by}{None yet}
+\tcfield{Automated by}{\code{ProfilesTest}: ``prf-skills: a Member maintains their own skills from the skill list, and not their Team'' (steps 1--4; the Shortlist step: none yet)}
 \end{testcase}
 
 \begin{testcase}{prf-availability}{Availability ranges decide whether a Member is available for a window}{Profile.Availability, Matched.Shortlist.Build}
@@ -31,7 +31,7 @@ These cases establish that a Member's skills come only from the Administrator's 
 \tcstep{As \code{alice}, submit a Request with M1 and open its Shortlist.}{M1}{Rita Gomez only: D+1 is outside Dave's ranges, so he is not available for the whole window.}
 \tcstep{As \code{alice}, submit a second Request with M2 and open its Shortlist.}{M2}{Dave Kim, then Rita Gomez: every day of M2 lies inside a range.}
 \tcfield{Pass criteria}{A Member is a Candidate only when every day of the window lies inside one of their ranges.}
-\tcfield{Automated by}{None yet}
+\tcfield{Automated by}{\code{ProfilesTest}: ``prf-availability: a Member is available only when one range holds every day of the window'' (step 1, and availability for M1 and M2 at the service level; the Shortlist steps: none yet)}
 \end{testcase}
 
 \begin{testcase}{prf-loan-overlap}{A Member with an overlapping Loan is not a Candidate, and a Loan leaves availability unchanged}{Profile.Availability, Matched.Shortlist.Build, Release.Loan.Prorate}
@@ -61,5 +61,5 @@ These cases establish that a Member's skills come only from the Administrator's 
 \tcstep{As \code{ben}, call the API for Dave's profile.}{GET Dave's profile}{Refused with \code{NOT\_FOUND}: a Member sees only their own profile.}
 \tcstep{As \code{bob}, try to edit Ben's availability.}{Any range}{Refused with \code{NOT\_FOUND}; Ben's ranges are unchanged.}
 \tcfield{Pass criteria}{Only Ben and Alice saw or changed Ben's profile.}
-\tcfield{Automated by}{None yet}
+\tcfield{Automated by}{\code{ProfilesTest}: ``prf-visibility: profiles are seen by the Member and their own Manager only'' (Loans on the profile: none yet)}
 \end{testcase}

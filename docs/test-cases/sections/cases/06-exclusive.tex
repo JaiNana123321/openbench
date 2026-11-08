@@ -43,7 +43,7 @@ These cases establish that an Exclusive instance is never given to two overlappi
 \tcstep{Submit a Request with L2.}{L2}{Allocated, every occurrence on the same instance.}
 \tcstep{Submit a Request with L3.}{L3}{Waiting: L2 holds one of the two rooms on D+14, and the line takes both or none.}
 \tcfield{Pass criteria}{No occurrence of any line was allocated alone.}
-\tcfield{Automated by}{\code{ExclusiveAllocatorTest}: ``A line for two rooms takes both or none'' (quantity part)}
+\tcfield{Automated by}{\code{ExclusiveCasesTest}: ``exc-recurrence-quantity, step 3: \ldots''; \code{ExclusiveAllocatorTest}: ``A line for two rooms takes both or none'' (steps 1 and 2: none yet, weekly recurrence is not built)}
 \end{testcase}
 
 \begin{testcase}{exc-waitlist-order}{Waitlist order: Bumped first, then Priority, then submission time}{Exclusive.Waitlist.Join}

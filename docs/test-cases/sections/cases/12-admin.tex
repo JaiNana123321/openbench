@@ -46,7 +46,7 @@ These cases establish that the Administrator manages Members, Teams, skills, and
 \tcstep{Look through every Administrator screen.}{None}{No Unit Price, Price Band, Grant, Quota, Day Rate, Refund Schedule, or window setting is offered.}
 \tcstep{Call the API to change the Day Rate.}{PUT \path{/api/settings/day_rate}}{Refused with \code{FORBIDDEN}.}
 \tcfield{Pass criteria}{The skill list changed and no setting did.}
-\tcfield{Automated by}{\code{InventorySecurityTest} and \code{MembersControllerTest} (role refusals)}
+\tcfield{Automated by}{\code{ProfilesTest}: ``adm-skills-no-policy: the Administrator adds a skill, which Members can then choose''; \code{SkillsPage.test.tsx}; \code{InventorySecurityTest} and \code{MembersControllerTest} (role refusals) (the settings step: none yet)}
 \end{testcase}
 
 \begin{testcase}{adm-roles-server}{Roles are enforced by the server, not only by the client}{Admin.Member.Create}

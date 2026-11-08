@@ -63,7 +63,7 @@ These cases establish that only a Manager drafts, submits, and withdraws their o
 \tcstep{Add L3 again with quantity 2.}{Dave Kim, quantity 2}{Refused with \code{QUANTITY\_INVALID}.}
 \tcstep{Try to mark a GPU line or a Person line as Priority through the API.}{GPU, 4 units, Priority}{Refused with \code{PRIORITY\_NOT\_OFFERED}: Priority is offered for Exclusive lines only.}
 \tcfield{Pass criteria}{The Draft holds L1, L2, and L3 only.}
-\tcfield{Automated by}{\code{DraftRequestTest}: ``A line naming one Resource asks for 1 instance, else 422 QUANTITY\_INVALID'' (Exclusive part)}
+\tcfield{Automated by}{\code{DraftCasesTest}: ``drf-line-options, steps 1 and 2: \ldots''; \code{DraftRequestTest}: ``A line naming one Resource asks for 1 instance, else 422 QUANTITY\_INVALID'' (steps 3 and 6: \code{DraftCasesTest} ``drf-line-options, steps 3 and 6: \ldots'', disabled until the Priority mark and weekly recurrence are built; steps 4 and 5: none yet)}
 \end{testcase}
 
 \begin{testcase}{drf-line-refusals}{Invalid lines are refused as they are added}{Draft.Line.Add}
@@ -94,7 +94,7 @@ These cases establish that only a Manager drafts, submits, and withdraws their o
 \tcstep{Try to split L1 again, moving its only room.}{1 of 1}{Refused with \code{LINE\_NOT\_ATOMIC}: both parts must keep at least one.}
 \tcstep{Mark L1b Required.}{Required}{Required 120.00; Optional 30.00.}
 \tcfield{Pass criteria}{No line offers a partial-acceptance setting; only whole lines are Required or Optional.}
-\tcfield{Automated by}{\code{DraftRequestTest}: ``Draft.Line.Split: \ldots'' (both), ``Split refuses with 422 LINE\_NOT\_ATOMIC unless both parts keep at least 1''}
+\tcfield{Automated by}{\code{DraftCasesTest}: ``drf-required-optional: Required by default; a split moves a part to an Optional line; marking it Required again''; \code{DraftRequestTest}: ``Draft.Line.Split: \ldots'' (both), ``Split refuses with 422 LINE\_NOT\_ATOMIC unless both parts keep at least 1''}
 \end{testcase}
 
 \begin{testcase}{drf-shortfall}{Submission refused while the Required sum exceeds the Available Balance}{Draft.Quote.Line, Ledger.Account}
@@ -121,7 +121,7 @@ These cases establish that only a Manager drafts, submits, and withdraws their o
 \tcstep{Submit.}{None}{Accepted; the Request is Allocated.}
 \tcstep{Open the Statement of Research.}{None}{Charges 480.00 and 120.00; Balance 0.00, not below zero.}
 \tcfield{Pass criteria}{The Balance is exactly zero.}
-\tcfield{Automated by}{None yet}
+\tcfield{Automated by}{\code{DraftCasesTest}: ``drf-balance-boundary: a Required sum equal to the Available Balance is accepted and leaves exactly 0.00''}
 \end{testcase}
 
 \begin{testcase}{drf-submit-lock}{Submission locks every Quote and records the submission time}{Draft.Submit.Lock, Planner.Settings}
