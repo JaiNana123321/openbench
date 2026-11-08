@@ -25,6 +25,8 @@ mvn verify
 
 This runs the unit tests, the integration tests on PostgreSQL 16 with the production migrations, and the ArchUnit test of the module rules. When `web/package.json` exists, the build also installs Node, runs `npm ci` and `npm run build` in `web/`, and packs the client into the jar; add `-Dskip.npm -Dskip.installnodenpm` to skip that.
 
+`mvn verify` also gates server coverage with JaCoCo (report in `target/site/jacoco/`) and writes the functional test case run report to `target/test-cases/report.md`; `npm --prefix web run coverage` runs the client tests with coverage. See [TESTING.md](TESTING.md) for the reports, running a test case by hand, the manual run record, and how to file a defect.
+
 ## Run the application with demo data
 
 ```sh
