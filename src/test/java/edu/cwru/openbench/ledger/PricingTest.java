@@ -218,6 +218,81 @@ class PricingTest {
             assertThatThrownBy(() -> Pricing.refund(Credits.of("100.00"), all, Duration.ofDays(30)))
                     .isInstanceOf(IllegalArgumentException.class);
         }
+
+        /**
+         * The design's worked example (Section 4.7): a room at 10.00 on Thursdays 14:00 to 17:00 on
+         * October 15, 22, and 29 is quoted 135.00 and released on Monday, October 19 at 10:00. October
+         * 15 is consumed; each later occurrence is attributed 45.00 and refunded by its own lead time.
+         */
+        @Test
+        @DisplayName("Release.Refund: the worked example returns 11.25 + 33.75 = 45.00 over three occurrences")
+        @Verifies(value = "rel-partial", partial = true)
+        void refundsTheWorkedExamplePerOccurrence() {
+            List<TimeWindow> thursdays = List.of(
+                    new TimeWindow(at(2026, 10, 15, 14), at(2026, 10, 15, 17)),
+                    new TimeWindow(at(2026, 10, 22, 14), at(2026, 10, 22, 17)),
+                    new TimeWindow(at(2026, 10, 29, 14), at(2026, 10, 29, 17)));
+            LineSpec line = new LineSpec(1, thursdays, false, ZONE);
+            Credits locked = Pricing.quote(line, MEETING_ROOM, PREMIUM).amount();
+            assertThat(locked).isEqualTo(Credits.of("135.00"));
+            Instant released = at(2026, 10, 19, 10);
+
+            Credits total = Credits.ZERO;
+            for (TimeWindow occurrence : thursdays.subList(1, 3)) {
+                Credits attributable = Pricing.attributable(locked,
+                        line, new LineSpec(1, List.of(occurrence), false, ZONE), MEETING_ROOM);
+                assertThat(attributable).isEqualTo(Credits.of("45.00"));
+                total = total.plus(Pricing.refund(attributable, DEMO_REFUNDS, Duration.between(released, occurrence.start())));
+            }
+
+            assertThat(Pricing.refund(Credits.of("45.00"), DEMO_REFUNDS,
+                    Duration.between(released, thursdays.get(1).start()))).isEqualTo(Credits.of("11.25"));
+            assertThat(total).isEqualTo(Credits.of("45.00"));
+        }
+
+        @Test
+        @DisplayName("Release.Refund: GPU 4 units, Wednesday 10:00 to 14:00 (120.00): the hours from 12:00 are 60.00, 2 units of 10:00 to 12:00 are 30.00")
+        @Verifies(value = "rel-partial", partial = true)
+        void attributesTheLockedQuoteToHoursAndUnits() {
+            Instant tenOClock = at(2026, 11, 25, 10);
+            LineSpec line = new LineSpec(4, List.of(new TimeWindow(tenOClock, at(2026, 11, 25, 14))), false, ZONE);
+            Credits locked = Pricing.quote(line, GPU, PREMIUM).amount();
+            assertThat(locked).isEqualTo(Credits.of("120.00"));
+
+            LineSpec laterHours = new LineSpec(4, List.of(new TimeWindow(at(2026, 11, 25, 12), at(2026, 11, 25, 14))), false, ZONE);
+            LineSpec twoUnits = new LineSpec(2, List.of(new TimeWindow(tenOClock, at(2026, 11, 25, 12))), false, ZONE);
+
+            assertThat(Pricing.attributable(locked, line, laterHours, GPU)).isEqualTo(Credits.of("60.00"));
+            assertThat(Pricing.attributable(locked, line, twoUnits, GPU)).isEqualTo(Credits.of("30.00"));
+            assertThat(Pricing.refund(Credits.of("60.00"), DEMO_REFUNDS, Duration.ofDays(14))).isEqualTo(Credits.of("45.00"));
+            assertThat(Pricing.refund(Credits.of("30.00"), DEMO_REFUNDS, Duration.ofDays(14))).isEqualTo(Credits.of("22.50"));
+        }
+
+        @Test
+        @DisplayName("Release.Refund: the part is priced at the locked prices, whatever the Unit Price is now")
+        void attributesAtTheLockedPrices() {
+            LineSpec line = new LineSpec(1, List.of(new TimeWindow(at(2026, 10, 27, 15), at(2026, 10, 27, 19))), false, ZONE);
+            LineSpec lastTwoHours = new LineSpec(1, List.of(new TimeWindow(at(2026, 10, 27, 17), at(2026, 10, 27, 19))), false, ZONE);
+            // Locked at 10.00: 15 + 15 + 10 + 10 = 50.00, of which 17:00 to 19:00 is 20.00.
+            Credits locked = Credits.of("50.00");
+
+            assertThat(Pricing.attributable(locked, line, lastTwoHours, MEETING_ROOM)).isEqualTo(Credits.of("20.00"));
+            assertThat(Pricing.attributable(locked, line, lastTwoHours, pricing("99.00", DEMO_BANDS))).isEqualTo(Credits.of("20.00"));
+        }
+
+        @Test
+        @DisplayName("Release.Refund: the attributable part rounds half-up, the Refund down")
+        @Verifies(value = "rel-whole", partial = true)
+        void roundsTheShareHalfUpAndTheRefundDown() {
+            LineSpec line = new LineSpec(1, List.of(new TimeWindow(at(2026, 10, 27, 10), at(2026, 10, 27, 13))), false, ZONE);
+            LineSpec oneHour = new LineSpec(1, List.of(new TimeWindow(at(2026, 10, 27, 12), at(2026, 10, 27, 13))), false, ZONE);
+
+            Credits third = Pricing.attributable(Credits.of("100.00"), line, oneHour, MEETING_ROOM);
+
+            assertThat(third).isEqualTo(Credits.of("33.33"));
+            // 33.33 x 0.75 = 24.9975
+            assertThat(Pricing.refund(third, DEMO_REFUNDS, Duration.ofDays(8))).isEqualTo(Credits.of("24.99"));
+        }
     }
 
     private static TypePricing pricing(String unitPrice, List<PriceBand> bands) {

@@ -7,6 +7,7 @@ import edu.cwru.openbench.settings.RefundSchedule;
 import edu.cwru.openbench.settings.RefundStep;
 import edu.cwru.openbench.settings.TypePricing;
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDateTime;
@@ -74,6 +75,39 @@ public final class Pricing {
             }
         }
         return Credits.roundedDown(charge.amount().multiply(fraction));
+    }
+
+    /**
+     * The part of a line's locked Quote attributable to a released part (design Section 4.8,
+     * "Release"), priced as the Quote was: the part's quantity times the band multiplier summed over
+     * its hours, as a share of the same sum for the whole line, times the locked Quote. Unit Price and
+     * premium multiply both sums alike, so the share is the locked price of the part even after the
+     * Unit Price changes. Rounded half-up to two decimals; 0 for a line without hours.
+     *
+     * @param lockedQuote the whole line's Quote locked at submission
+     * @param line the whole line as submitted
+     * @param part the released part: its quantity (instances or units) and its hours
+     * @throws IllegalArgumentException if a window does not start and end on a whole hour
+     */
+    public static Credits attributable(Credits lockedQuote, LineSpec line, LineSpec part, TypePricing pricing) {
+        BigDecimal whole = weight(line, pricing);
+        if (whole.signum() == 0) {
+            return Credits.ZERO;
+        }
+        return new Credits(lockedQuote.amount().multiply(weight(part, pricing))
+                .divide(whole, 10, RoundingMode.HALF_UP));
+    }
+
+    /** The quantity times the band multiplier, summed over every hour of every occurrence. */
+    private static BigDecimal weight(LineSpec line, TypePricing pricing) {
+        BigDecimal multiplierHours = BigDecimal.ZERO;
+        for (TimeWindow occurrence : line.occurrences()) {
+            requireWholeHours(occurrence, line.zone());
+            for (Instant hour = occurrence.start(); hour.isBefore(occurrence.end()); hour = hour.plus(HOUR)) {
+                multiplierHours = multiplierHours.add(multiplierAt(hour, line.zone(), pricing.bands()));
+            }
+        }
+        return multiplierHours.multiply(BigDecimal.valueOf(line.quantity()));
     }
 
     private static BigDecimal multiplierAt(Instant hour, ZoneId zone, List<PriceBand> bands) {

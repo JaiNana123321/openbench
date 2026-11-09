@@ -1,6 +1,7 @@
 package edu.cwru.openbench;
 
 import edu.cwru.openbench.common.Role;
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
@@ -237,5 +238,25 @@ public final class TestData {
         long id = member(teamId, username, roles);
         jdbc.update("UPDATE member SET name = ? WHERE id = ?", name, id);
         return new Login(id, username);
+    }
+
+    // ---------------------------------------------------------------- Ledger: earned credits
+
+    /**
+     * Earned credits for the Team, as {@code LedgerService} would post an Earning: an {@code EARNING}
+     * Transaction of {@code amount} (all earned part, no Loan) in the Period containing the database's
+     * current date, and the Team's account row's {@code earned} grown by it (the row is created if
+     * missing). For test setup until Loans post real Earnings.
+     */
+    public void postEarning(long teamId, String amount) {
+        BigDecimal earned = new BigDecimal(amount);
+        LocalDate today = jdbc.queryForObject("SELECT current_date", LocalDate.class);
+        long period = periodContaining(today);
+        jdbc.update("""
+                INSERT INTO transaction (team_id, kind, amount, granted_part, earned_part, period_id, posted_at)
+                VALUES (?, 'EARNING', ?, 0, ?, ?, now())""", teamId, earned, earned, period);
+        jdbc.update("""
+                INSERT INTO account (team_id, earned) VALUES (?, ?)
+                ON CONFLICT (team_id) DO UPDATE SET earned = account.earned + EXCLUDED.earned""", teamId, earned);
     }
 }

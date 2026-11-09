@@ -17,6 +17,7 @@ import edu.cwru.openbench.members.TeamSummary;
 import edu.cwru.openbench.settings.Period;
 import edu.cwru.openbench.settings.SettingsService;
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.Clock;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -342,5 +343,57 @@ public class LedgerService {
 
     private static String actorText(Long actorId) {
         return actorId == null ? "system" : actorId.toString();
+    }
+
+    // ---------------------------------------------------------------- Refunds
+
+    /**
+     * (Unscoped) Posts a Refund on a charged line (Release.Refund): the credits return to the
+     * granted and earned parts in the proportions of the line's Charge, so that the line's Refunds
+     * together keep those proportions, each part rounded half-up and the earned part taking the
+     * rest. A zero amount posts nothing. Locks the account row and joins the caller's transaction;
+     * the Transaction names the signed-in Member as its actor.
+     *
+     * @throws RuleViolation {@code REFUND_EXCEEDS_CHARGE} if the line's Refunds would exceed its Charge,
+     *     or it has none
+     * @throws IllegalArgumentException for a negative amount, or a line charged to another Team
+     */
+    @Transactional
+    public void refund(TeamId team, RequestLineId line, Credits amount) {
+        if (amount.isNegative()) {
+            throw new IllegalArgumentException("A Refund cannot be negative.");
+        }
+        if (amount.amount().signum() == 0) {
+            return;
+        }
+        Account account = lock(team);
+        Transaction charge = transactions.findByLineIdAndKindOrderByIdAsc(line.value(), TransactionKind.CHARGE)
+                .stream().findFirst().orElse(null);
+        BigDecimal refundedBefore = BigDecimal.ZERO;
+        BigDecimal grantedBefore = BigDecimal.ZERO;
+        for (Transaction earlier : transactions.findByLineIdAndKindOrderByIdAsc(line.value(), TransactionKind.REFUND)) {
+            refundedBefore = refundedBefore.add(earlier.amount());
+            grantedBefore = grantedBefore.add(earlier.grantedPart());
+        }
+        BigDecimal charged = charge == null ? BigDecimal.ZERO : charge.amount();
+        BigDecimal refunded = refundedBefore.add(amount.amount());
+        if (refunded.compareTo(charged) > 0) {
+            throw new RuleViolation("REFUND_EXCEEDS_CHARGE", "Line " + line.value() + " was charged "
+                    + new Credits(charged) + " credits and has had " + new Credits(refundedBefore)
+                    + " refunded; a Refund of " + amount + " would exceed its Charge.");
+        }
+        if (!charge.teamId().equals(team.value())) {
+            throw new IllegalArgumentException("Line " + line.value() + " is charged to another Team.");
+        }
+        BigDecimal grantedInAll = new Credits(refunded.multiply(charge.grantedPart())
+                .divide(charged, 10, RoundingMode.HALF_UP)).amount();
+        BigDecimal fromGranted = grantedInAll.subtract(grantedBefore).max(BigDecimal.ZERO).min(amount.amount());
+        BigDecimal toEarned = amount.amount().subtract(fromGranted);
+        account.refund(fromGranted, toEarned);
+        Long actor = signedInMemberId();
+        Transaction posted = transactions.save(Transaction.refund(team.value(), fromGranted, toEarned,
+                settings.currentPeriod().id().value(), line.value(), actor, clock.instant()));
+        log.info("event=transaction kind=REFUND id={} team={} amount={} line={} actor={}",
+                posted.id(), team.value(), amount, line.value(), actorText(actor));
     }
 }

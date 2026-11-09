@@ -75,8 +75,18 @@ class Transaction {
                 actorId, postedAt);
     }
 
+    static Transaction refund(Long teamId, BigDecimal grantedPart, BigDecimal earnedPart, Long periodId, Long lineId,
+            Long actorId, Instant postedAt) {
+        return new Transaction(teamId, TransactionKind.REFUND, grantedPart, earnedPart, periodId, lineId, null,
+                actorId, postedAt);
+    }
+
     Long id() {
         return id;
+    }
+
+    Long teamId() {
+        return teamId;
     }
 
     TransactionKind kind() {
