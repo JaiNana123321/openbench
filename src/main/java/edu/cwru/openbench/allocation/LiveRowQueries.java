@@ -38,4 +38,9 @@ class LiveRowQueries implements AllocationQueries {
     public int peakUnitsInUse(ResourceTypeId type, Optional<ResourceId> instance, Instant from) {
         return HourlyLoad.peak(sums.hoursFrom(type, instance, from));
     }
+
+    @Override
+    public List<WaitingLine> waitingStartedBy(Instant now) {
+        return waitlist.findByStartsAtLessThanEqualOrderById(now).stream().map(WaitlistEntryRow::toWaitingLine).toList();
+    }
 }

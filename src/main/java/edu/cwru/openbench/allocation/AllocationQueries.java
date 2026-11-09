@@ -30,4 +30,11 @@ public interface AllocationQueries {
      * cut at {@code from}.
      */
     int peakUnitsInUse(ResourceTypeId type, Optional<ResourceId> instance, Instant from);
+
+    /**
+     * The waitlist entries, of every type, whose window started at or before {@code now}, by entry
+     * id: the lines {@code expireWaitingLines} takes off the waitlist (SRS Exclusive.Waitlist.Expire).
+     * An entry whose window starts after {@code now} is never among them.
+     */
+    List<WaitingLine> waitingStartedBy(Instant now);
 }

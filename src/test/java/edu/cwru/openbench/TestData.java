@@ -238,4 +238,46 @@ public final class TestData {
         jdbc.update("UPDATE member SET name = ? WHERE id = ?", name, id);
         return new Login(id, username);
     }
+
+    // ---------------------------------------------------------------- Ledger: earned credits, planned Grants, Period boundaries
+
+    /**
+     * Earned credits for the Team, as {@code LedgerService} would post an Earning for a Loan (which
+     * comes with the Matched increment): an {@code EARNING} Transaction of the amount, all earned,
+     * into the Period containing today in the company zone, posted now by the system, and the
+     * Team's {@code account} row (created if missing) with {@code earned} grown by the amount.
+     */
+    public void postEarning(long teamId, String amount) {
+        long period = jdbc.queryForObject(
+                "SELECT id FROM period WHERE starts_on <= current_date AND ends_on >= current_date", Long.class);
+        jdbc.update("""
+                INSERT INTO transaction (team_id, kind, amount, granted_part, earned_part, period_id, posted_at)
+                VALUES (?, 'EARNING', ?::numeric, 0, ?::numeric, ?, now())""", teamId, amount, amount, period);
+        jdbc.update("""
+                INSERT INTO account (team_id, earned) VALUES (?, ?::numeric)
+                ON CONFLICT (team_id) DO UPDATE SET earned = account.earned + EXCLUDED.earned""", teamId, amount);
+    }
+
+    /** The Capacity Planner's planned Grant for the Team from this Period on (a {@code grant_plan} row). */
+    public void grantPlan(long teamId, long periodId, String amount) {
+        jdbc.update("INSERT INTO grant_plan (team_id, period_id, amount) VALUES (?, ?, ?::numeric)", teamId, periodId, amount);
+    }
+
+    /**
+     * Two Periods on far-future days of their own, the second starting the day after the first ends,
+     * with no Period between them: {@code ending} is one day, {@code starting} two days from
+     * {@code startsOn}. For moving the Clock across a Period boundary no other test uses.
+     */
+    public PeriodBoundary periodBoundary() {
+        LocalDate endingOn = LocalDate.of(2200, 1, 1).plusDays(SEQUENCE.addAndGet(3) - 2);
+        long ending = jdbc.queryForObject(
+                "INSERT INTO period (starts_on, ends_on) VALUES (?, ?) RETURNING id", Long.class, endingOn, endingOn);
+        LocalDate startsOn = endingOn.plusDays(1);
+        long starting = jdbc.queryForObject("INSERT INTO period (starts_on, ends_on) VALUES (?, ?) RETURNING id",
+                Long.class, startsOn, startsOn.plusDays(1));
+        return new PeriodBoundary(ending, starting, endingOn, startsOn);
+    }
+
+    /** See {@link #periodBoundary()}. */
+    public record PeriodBoundary(long ending, long starting, LocalDate endingOn, LocalDate startsOn) {}
 }

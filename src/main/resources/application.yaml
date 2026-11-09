@@ -35,3 +35,7 @@ springdoc:
 openbench:
   # The company time zone (an IANA id): windows, Price Bands, Periods, and the API's offsets.
   zone: America/New_York
+  jobs:
+    # The scheduled jobs (DueWorkJob, PeriodRolloverJob) and the rollover catch-up at start-up.
+    # The tests turn them off and call each job's run() directly.
+    enabled: true
