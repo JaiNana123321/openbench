@@ -17,6 +17,7 @@ import java.util.Comparator;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -306,5 +307,14 @@ public class MemberService {
 
     private static NotFoundException teamNotFound(Long id) {
         return new NotFoundException("Team " + id + " does not exist.");
+    }
+
+    /**
+     * (Unscoped) The Team's current Manager, or empty for a Team without one or that does not exist.
+     * Unlike {@link #managerOf}, it never throws, so a caller inside its own transaction (a job
+     * notifying every Team) can skip a Team without marking that transaction for rollback.
+     */
+    public Optional<MemberId> findManagerOf(TeamId team) {
+        return teams.findById(team.value()).map(Team::managerMemberId).map(MemberId::new);
     }
 }

@@ -17,15 +17,23 @@ import edu.cwru.openbench.members.TeamSummary;
 import edu.cwru.openbench.settings.Period;
 import edu.cwru.openbench.settings.SettingsService;
 import java.math.BigDecimal;
+import edu.cwru.openbench.notifications.NotificationKind;
+import edu.cwru.openbench.notifications.Notifier;
 import java.time.Clock;
+import java.time.Instant;
+import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.EnumMap;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.TreeMap;
+import java.util.TreeSet;
 import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -61,9 +69,11 @@ public class LedgerService {
     private final SettingsService settings;
     private final MemberService members;
     private final Clock clock;
+    private final Notifier notifier;
 
     LedgerService(AccountRepository accounts, TransactionRepository transactions, HeldCreditRepository heldCredits,
-            PeriodCloseRepository periodCloses, SettingsService settings, MemberService members, Clock clock) {
+            PeriodCloseRepository periodCloses, SettingsService settings, MemberService members, Clock clock,
+            Notifier notifier) {
         this.accounts = accounts;
         this.transactions = transactions;
         this.heldCredits = heldCredits;
@@ -71,6 +81,7 @@ public class LedgerService {
         this.settings = settings;
         this.members = members;
         this.clock = clock;
+        this.notifier = notifier;
     }
 
     /** (Unscoped) The Team's Account; all zero before its first Transaction. */
@@ -342,5 +353,98 @@ public class LedgerService {
 
     private static String actorText(Long actorId) {
         return actorId == null ? "system" : actorId.toString();
+    }
+
+    // ---------------------------------------------------------------- rollover
+
+    /**
+     * (Unscoped) The Period rollover (design Scenario S7, SRS Ledger.Grant.Period), in one
+     * transaction. Locks every {@code account} row in ascending Team id (with each Team that has a
+     * planned Grant but no row yet), and for each Team without a {@code period_close} row for the
+     * ending Period: its remaining granted credits expire, its earned and held credits are untouched,
+     * one {@code period_close} row records the expired amount and the closing granted and earned
+     * credits, the starting Period's planned Grant posts when it is positive, and the Team's Manager
+     * is told. A Team that already has the row is skipped, so a second run of the same boundary
+     * changes nothing.
+     *
+     * <p>Granted credits that a Grant posted into the starting Period or a later one do not expire,
+     * so a Grant posted after the boundary but before the rollover ran survives it; nor does a
+     * planned Grant post twice when one (a Grant without a reason) is in the starting Period already.
+     * The Grant's Transaction names the system as actor.
+     *
+     * @return the number of Teams closed by this call
+     * @throws IllegalArgumentException unless {@code ending} is the Period right before {@code starting}
+     * @throws IllegalStateException if {@code starting} has not begun by the Clock
+     */
+    @Transactional
+    public int rollover(PeriodId ending, PeriodId starting) {
+        Period start = settings.period(starting);
+        Period end = settings.period(ending);
+        if (!start.previous().equals(Optional.of(ending))) {
+            throw new IllegalArgumentException(
+                    "Period " + ending.value() + " is not the Period right before Period " + starting.value() + ".");
+        }
+        if (LocalDate.now(clock).isBefore(start.startsOn())) {
+            throw new IllegalStateException("Period " + starting.value() + " starts on " + start.startsOn()
+                    + "; it cannot be rolled over into before then.");
+        }
+        Map<TeamId, Credits> planned = settings.plannedGrants(starting);
+        Set<Long> fromStart = settings.periods().stream()
+                .filter(period -> !period.startsOn().isBefore(start.startsOn()))
+                .map(period -> period.id().value())
+                .collect(Collectors.toSet());
+        TreeSet<Long> teams = new TreeSet<>(accounts.findAllTeamIds());
+        planned.keySet().forEach(team -> teams.add(team.value()));
+
+        Instant now = clock.instant();
+        int closed = 0;
+        for (Long teamId : teams) {
+            TeamId team = new TeamId(teamId);
+            Account account = lock(team);
+            if (periodCloses.existsById(new PeriodClose.Key(teamId, ending.value()))) {
+                continue;
+            }
+            BigDecimal laterGrants = BigDecimal.ZERO;
+            BigDecimal laterGranted = BigDecimal.ZERO;
+            BigDecimal laterEarned = BigDecimal.ZERO;
+            boolean plannedGrantPosted = false;
+            for (Transaction later : transactions.findByTeamIdAndPeriodIdIn(teamId, fromStart)) {
+                laterGranted = laterGranted.add(later.signedGranted());
+                laterEarned = laterEarned.add(later.signedEarned());
+                if (later.kind() == TransactionKind.GRANT) {
+                    laterGrants = laterGrants.add(later.grantedPart());
+                    plannedGrantPosted |= later.reason() == null;
+                }
+            }
+            BigDecimal expired = account.granted().subtract(laterGrants).max(BigDecimal.ZERO);
+            BigDecimal closingGranted = account.granted().subtract(laterGranted).subtract(expired);
+            BigDecimal closingEarned = account.earned().subtract(laterEarned);
+            account.expire(expired);
+            periodCloses.save(new PeriodClose(teamId, ending.value(), expired, closingGranted, closingEarned, now));
+
+            Credits grant = planned.getOrDefault(team, Credits.ZERO);
+            boolean posts = grant.amount().signum() > 0 && !plannedGrantPosted;
+            if (posts) {
+                postGrant(team, starting, grant, null, null);
+            }
+            log.info("event=period_close team={} period={} expired={} closing_granted={} closing_earned={} grant={}",
+                    teamId, ending.value(), expired, closingGranted, closingEarned, posts ? grant : "none");
+            if (expired.signum() > 0 || posts) {
+                Credits expiredCredits = new Credits(expired);
+                members.findManagerOf(team).ifPresent(manager -> notifier.notify(manager, NotificationKind.PERIOD_ROLLOVER,
+                        rolloverText(end, start, expiredCredits, posts ? grant : null), "/statement"));
+            }
+            closed++;
+        }
+        log.info("event=rollover ending={} starting={} teams_closed={}", ending.value(), starting.value(), closed);
+        return closed;
+    }
+
+    private static String rolloverText(Period end, Period start, Credits expired, Credits grant) {
+        DateTimeFormatter day = DateTimeFormatter.ofPattern("MMM d, yyyy", Locale.US);
+        String text = "The Period from " + day.format(end.startsOn()) + " to " + day.format(end.endsOn()) + " has ended: "
+                + expired + " granted credits expired, and earned credits stay.";
+        return grant == null ? text
+                : text + " A Grant of " + grant + " credits is posted for the Period starting " + day.format(start.startsOn()) + ".";
     }
 }

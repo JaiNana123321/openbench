@@ -148,4 +148,15 @@ public class SettingsService {
         return Optional.ofNullable(values.get(key))
                 .orElseThrow(() -> new IllegalStateException("The planner setting " + key + " is not set."));
     }
+
+    /**
+     * (Unscoped) Each Team's planned Grant for the Period: that Period's {@code grant_plan} row, or
+     * else the Team's most recent earlier one. A Team with no plan is absent. For the rollover, which
+     * posts the starting Period's Grants.
+     */
+    public Map<TeamId, Credits> plannedGrants(PeriodId id) {
+        Period target = period(id);
+        return grantPlans.findPlannedAsOf(target.startsOn()).stream().collect(Collectors.toMap(
+                grant -> new TeamId(grant.getTeamId()), grant -> new Credits(grant.getAmount())));
+    }
 }
