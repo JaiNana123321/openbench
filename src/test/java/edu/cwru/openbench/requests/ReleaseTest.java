@@ -11,6 +11,7 @@ import edu.cwru.openbench.common.Role;
 import edu.cwru.openbench.common.TeamId;
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
@@ -74,6 +75,17 @@ abstract class ReleaseTest extends DemoWorldTest {
     protected String requestState(String manager, long request) throws Exception {
         return JsonPath.read(detail(as(manager), request).andReturn().getResponse().getContentAsString(),
                 "$.request.state");
+    }
+
+    // ---------------------------------------------------------------- time
+
+    /** Day E of the test case document: a weekday two to six days after today, under seven days ahead. */
+    protected LocalDate dayE() {
+        LocalDate day = LocalDate.now(clock).plusDays(2);
+        while (day.getDayOfWeek().getValue() > 5) {
+            day = day.plusDays(1);
+        }
+        return day;
     }
 
     // ---------------------------------------------------------------- rows

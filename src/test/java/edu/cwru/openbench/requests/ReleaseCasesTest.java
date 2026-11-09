@@ -289,14 +289,6 @@ class ReleaseCasesTest extends ReleaseTest {
         }
     }
 
-    /** Day E of the test case document: a weekday two to six days after today. */
-    private LocalDate dayE() {
-        LocalDate day = LocalDate.now(clock).plusDays(2);
-        while (day.getDayOfWeek().getValue() > 5) {
-            day = day.plusDays(1);
-        }
-        return day;
-    }
 
     private static String utcHour(Instant instant) {
         return String.format("%02d", instant.atZone(ZoneOffset.UTC).getHour());
