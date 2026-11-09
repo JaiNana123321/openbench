@@ -361,3 +361,31 @@ export interface MemberSummary {
   active: boolean;
   roles: Role[];
 }
+
+// ---------------------------------------------------------------- Notifications
+
+/** What a notification is about. */
+export type NotificationKind =
+  | 'APPROVAL_REQUESTED'
+  | 'CANDIDATE_SELECTED'
+  | 'LOAN_FORMED'
+  | 'REQUEST_UPDATE'
+  | 'BUMPED'
+  | 'WAITLIST_FILLED'
+  | 'ESCALATED'
+  | 'SUGGESTION'
+  | 'PERIOD_ROLLOVER';
+
+/**
+ * GET /api/notifications (paged: the caller's unread notices, newest first) and
+ * POST /api/notifications/{id}/read. `link` is a client route such as "/requests/42", or null.
+ */
+export interface MemberNotification {
+  id: Id;
+  recipient: Id;
+  kind: NotificationKind;
+  text: string;
+  link: string | null;
+  createdAt: Instant;
+  readAt: Instant | null;
+}

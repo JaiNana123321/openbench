@@ -5,6 +5,7 @@ import { useSignOut } from '../auth/session';
 import { Button } from '../ui';
 import type { NavItem } from './feature';
 import { NavItemsContext } from './navigation';
+import { useUnreadNotifications } from './unreadNotifications';
 
 /** The frame of every signed-in page: the header with the menu and the Member, then the page. */
 export function AppShell({ nav }: { nav: readonly NavItem[] }) {
@@ -27,6 +28,7 @@ export function AppShell({ nav }: { nav: readonly NavItem[] }) {
             ))}
           </nav>
           <div className="session">
+            <UnreadLink />
             <div className="session__who">
               <span className="session__name">{me.name}</span>
               <span className="session__team">{me.team.name}</span>
@@ -41,5 +43,25 @@ export function AppShell({ nav }: { nav: readonly NavItem[] }) {
         <Outlet />
       </main>
     </NavItemsContext>
+  );
+}
+
+/** The header's link to the notifications page, with the number of unread notices once known. */
+function UnreadLink() {
+  const unread = useUnreadNotifications();
+  const count = unread.data?.totalElements ?? 0;
+  return (
+    <NavLink
+      to="/notifications"
+      className="notices-link"
+      aria-label={count === 0 ? 'Notifications' : `Notifications, ${count} unread`}
+    >
+      Notifications
+      {count > 0 && (
+        <span className="notices-count" aria-hidden="true">
+          {count}
+        </span>
+      )}
+    </NavLink>
   );
 }
