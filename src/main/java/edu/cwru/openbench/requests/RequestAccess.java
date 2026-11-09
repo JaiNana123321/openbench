@@ -72,4 +72,12 @@ class RequestAccess {
     static NotFoundException notFound(RequestId id) {
         return new NotFoundException("Request " + id.value() + " does not exist.");
     }
+
+    /**
+     * The Request, locked until the transaction ends, for a change the system makes on its own, such
+     * as allocating a waiting Request when capacity frees: no caller's scope applies.
+     */
+    RequestRow lockForSystem(Long id) {
+        return requests.lockById(id).orElseThrow(() -> notFound(new RequestId(id)));
+    }
 }

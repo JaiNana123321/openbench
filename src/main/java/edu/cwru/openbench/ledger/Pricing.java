@@ -59,6 +59,16 @@ public final class Pricing {
      * @throws IllegalArgumentException if a step of the schedule returns 100% or more
      */
     public static Credits refund(Credits charge, RefundSchedule schedule, Duration leadTime) {
+        return Credits.roundedDown(charge.amount().multiply(refundFraction(schedule, leadTime)));
+    }
+
+    /**
+     * The fraction {@link #refund} applies for this lead time: the step with the largest minimum lead
+     * time not above it, 0 for a part already started or below every step.
+     *
+     * @throws IllegalArgumentException if a step of the schedule returns 100% or more
+     */
+    public static BigDecimal refundFraction(RefundSchedule schedule, Duration leadTime) {
         List<RefundStep> steps = schedule.steps();
         for (RefundStep step : steps) {
             if (step.fraction().signum() < 0 || step.fraction().compareTo(BigDecimal.ONE) >= 0) {
@@ -66,7 +76,7 @@ public final class Pricing {
             }
         }
         if (leadTime.isNegative() || leadTime.isZero()) {
-            return Credits.ZERO;
+            return BigDecimal.ZERO;
         }
         BigDecimal fraction = BigDecimal.ZERO;
         for (RefundStep step : steps) {
@@ -74,7 +84,7 @@ public final class Pricing {
                 fraction = step.fraction();
             }
         }
-        return Credits.roundedDown(charge.amount().multiply(fraction));
+        return fraction;
     }
 
     /**

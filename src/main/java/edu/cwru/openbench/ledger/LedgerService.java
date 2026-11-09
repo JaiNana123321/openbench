@@ -151,11 +151,14 @@ public class LedgerService {
      */
     @Transactional
     public void commitCharges(RequestId request, List<ChargeSpec> charges) {
+        postCharges(request, charges, signedInMemberId());
+    }
+
+    private void postCharges(RequestId request, List<ChargeSpec> charges, Long actor) {
         // Accounts are locked in ascending Team id; a Request's lines normally share one Team.
         Map<TeamId, List<ChargeSpec>> byTeam = charges.stream().collect(Collectors.groupingBy(ChargeSpec::team,
                 () -> new TreeMap<>(Comparator.comparingLong(TeamId::value)), Collectors.toList()));
         PeriodId period = byTeam.isEmpty() ? null : settings.currentPeriod().id();
-        Long actor = signedInMemberId();
         byTeam.forEach((team, lines) -> {
             Account account = lock(team);
             BigDecimal total = BigDecimal.ZERO;
@@ -395,5 +398,27 @@ public class LedgerService {
                 settings.currentPeriod().id().value(), line.value(), actor, clock.instant()));
         log.info("event=transaction kind=REFUND id={} team={} amount={} line={} actor={}",
                 posted.id(), team.value(), amount, line.value(), actorText(actor));
+    }
+
+    /**
+     * (Unscoped) The Team's Available Balance read under its account lock, which lasts to the end of
+     * the caller's transaction: for a decision whose Charges must still fit when they post, such as
+     * allocating a waiting Request when capacity frees.
+     */
+    @Transactional
+    public Credits lockedAvailable(TeamId team) {
+        return new Credits(lock(team).available());
+    }
+
+    /**
+     * (Unscoped) {@link #commitCharges} for a Request the system allocates on its own, such as a
+     * waiting Request filled from the waitlist when another Team releases capacity: the Charges name
+     * the system as actor, not the Member whose call freed the capacity.
+     *
+     * @throws RuleViolation {@code INSUFFICIENT_BALANCE}, with the {@code shortfall}
+     */
+    @Transactional
+    public void commitChargesBySystem(RequestId request, List<ChargeSpec> charges) {
+        postCharges(request, charges, null);
     }
 }
