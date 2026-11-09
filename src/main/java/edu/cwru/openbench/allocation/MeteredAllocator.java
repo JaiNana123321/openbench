@@ -8,6 +8,8 @@ import edu.cwru.openbench.inventory.AllocationClass;
 import edu.cwru.openbench.inventory.InventoryQueries;
 import edu.cwru.openbench.settings.SettingsService;
 import java.time.Clock;
+import java.util.Collection;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -87,17 +89,39 @@ class MeteredAllocator implements Allocator, Waitlistable {
     }
 
     @Override
-    public void release(LineSnapshot line, ReleasePart part) {
+    public Released release(LineSnapshot line, ReleasePart part) {
         checkClass(line);
-        List<MeteredAllocationRow> allocated = rowsOf(line, Set.of(RowState.ALLOCATED));
-        if (allocated.isEmpty()) {
-            throw new RuleViolation("NOT_ALLOCATED", "This line holds no allocated units of "
-                    + inventory.type(line.typeId()).name() + ".");
-        }
-        switch (part) {
-            case ReleasePart.WholeLine whole -> allocated.forEach(row -> row.changeState(RowState.RELEASED));
+        Map<Long, MeteredAllocationRow> allocated = new HashMap<>();
+        rowsOf(line, Set.of(RowState.ALLOCATED)).forEach(row -> allocated.put(row.id(), row));
+        ReleasePlan plan = plan(line, part, allocated.values());
+        for (ReleasePlan.Step step : plan.steps()) {
+            MeteredAllocationRow row = allocated.get(step.row().id());
+            switch (step) {
+                case ReleasePlan.Step.ReleaseRow whole -> row.changeState(RowState.RELEASED);
+                case ReleasePlan.Step.Shorten shorten -> {
+                    allocations.save(row.tailFrom(shorten.newEnd()));
+                    row.endAt(shorten.newEnd());
+                }
+                case ReleasePlan.Step.Reduce reduce -> {
+                    allocations.save(row.unitsGivenBack(reduce.newUnits()));
+                    row.keepUnits(reduce.newUnits());
+                }
+            }
         }
         allocations.flush();
+        return plan.released();
+    }
+
+    /** What the part would give back, without writing: the plan {@link #release} applies. */
+    Released preview(LineSnapshot line, ReleasePart part) {
+        checkClass(line);
+        return plan(line, part, rowsOf(line, Set.of(RowState.ALLOCATED))).released();
+    }
+
+    private ReleasePlan plan(LineSnapshot line, ReleasePart part, Collection<MeteredAllocationRow> rows) {
+        return ReleasePlan.of(
+                rows.stream().map(row -> new ReleasePlan.Row(row.id(), row.window(), row.units())).toList(),
+                part, true, clock.instant(), clock.getZone(), "units of " + inventory.type(line.typeId()).name());
     }
 
     @Override

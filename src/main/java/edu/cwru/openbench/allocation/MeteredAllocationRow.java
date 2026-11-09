@@ -1,5 +1,6 @@
 package edu.cwru.openbench.allocation;
 
+import edu.cwru.openbench.common.TimeWindow;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
@@ -63,5 +64,33 @@ class MeteredAllocationRow {
 
     void changeState(RowState state) {
         this.state = state;
+    }
+
+    TimeWindow window() {
+        return new TimeWindow(startsAt, endsAt);
+    }
+
+    int units() {
+        return units;
+    }
+
+    /** A RELEASED row for this row's units from {@code newEnd} to its end. */
+    MeteredAllocationRow tailFrom(Instant newEnd) {
+        return new MeteredAllocationRow(lineId, teamId, requestId, typeId, units, newEnd, endsAt, RowState.RELEASED);
+    }
+
+    /** A RELEASED row for the units given back over this row's whole window. */
+    MeteredAllocationRow unitsGivenBack(int newUnits) {
+        return new MeteredAllocationRow(lineId, teamId, requestId, typeId, units - newUnits, startsAt, endsAt,
+                RowState.RELEASED);
+    }
+
+    /** Shortens the row to end at {@code newEnd}; its start stays. */
+    void endAt(Instant newEnd) {
+        this.endsAt = newEnd;
+    }
+
+    void keepUnits(int newUnits) {
+        this.units = newUnits;
     }
 }

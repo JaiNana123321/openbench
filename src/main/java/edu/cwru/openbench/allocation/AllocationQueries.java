@@ -30,4 +30,18 @@ public interface AllocationQueries {
      * cut at {@code from}.
      */
     int peakUnitsInUse(ResourceTypeId type, Optional<ResourceId> instance, Instant from);
+
+    /**
+     * What {@link Allocator#release} would give back for this part, without writing or locking, so a
+     * Manager sees the Refund before confirming.
+     *
+     * @throws edu.cwru.openbench.common.RuleViolation the codes of {@link Allocator#release}
+     */
+    Released previewRelease(LineSnapshot line, ReleasePart part);
+
+    /**
+     * The line's ALLOCATED parts, one per occurrence by start: its window and its instances
+     * (Exclusive) or units (Metered). Empty for a line with nothing allocated.
+     */
+    List<AllocatedPart> allocatedParts(RequestLineId line);
 }
