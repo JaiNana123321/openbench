@@ -6,6 +6,9 @@ import type {
   LineEdit,
   NewLine,
   Page,
+  RefundQuote,
+  ReleaseBody,
+  ReleaseOutcome,
   RequestDetail,
   RequestLine,
   RequestRecord,
@@ -149,6 +152,34 @@ export function useWithdrawRequest(requestId: Id) {
   const invalidate = useInvalidateTransition();
   return useMutation({
     mutationFn: () => api.post<RequestRecord>(`/api/requests/${requestId}/withdraw`),
+    onSuccess: invalidate,
+  });
+}
+
+/**
+ * The Refund a Release of this part would post now, as the server computes it; waits while the
+ * part is incomplete. The occurrences go as one comma-separated parameter.
+ */
+export function useReleasePreview(requestId: Id, lineId: Id, body: ReleaseBody | undefined) {
+  return useQuery({
+    queryKey: [...requestKeys.request(requestId), 'release-preview', lineId, body] as const,
+    queryFn: () =>
+      api.get<RefundQuote>(`/api/requests/${requestId}/lines/${lineId}/release-preview`, {
+        kind: body?.kind,
+        newEnd: body?.newEnd,
+        newUnits: body?.newUnits,
+        occurrences: body?.occurrences?.join(','),
+      }),
+    enabled: body !== undefined,
+  });
+}
+
+/** Releases part of a line; the Refund changes the Account and Statement, and a fill may change other Requests. */
+export function useReleaseLine(requestId: Id) {
+  const invalidate = useInvalidateTransition();
+  return useMutation({
+    mutationFn: ({ lineId, body }: { lineId: Id; body: ReleaseBody }) =>
+      api.post<ReleaseOutcome>(`/api/requests/${requestId}/lines/${lineId}/release`, body),
     onSuccess: invalidate,
   });
 }

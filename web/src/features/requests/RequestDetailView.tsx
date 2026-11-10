@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { Link } from 'react-router';
 import type { Id, LineDetail, RequestEvent, RequestState } from '../../api/types';
 import { useCurrentMember } from '../../auth/currentMember';
@@ -17,27 +18,36 @@ import {
   type Column,
 } from '../../ui';
 import { useRequestDetail, useWithdrawRequest } from './queries';
+import { ReleaseForm } from './ReleaseForm';
 
 /** The states a Request may be withdrawn from (design Table "Request transitions"); the server decides. */
 const WITHDRAWABLE: ReadonlySet<RequestState> = new Set(['DRAFT', 'PENDING', 'WAITING']);
 
+/** The line states a Release starts from; the server decides. */
+const RELEASABLE: ReadonlySet<string> = new Set(['ALLOCATED', 'PARTLY_RELEASED']);
+
 /**
  * The Request detail: its state, each line with its state, the Resources it is allocated on, its
- * locked Quote, why it waits or was Dropped, and its waitlist position, and the history. Its Team's
- * Manager may withdraw it while the state allows.
+ * locked Quote, why it waits or was Dropped, its waitlist position, and what it holds now, and the
+ * history. Its Team's Manager may withdraw it while the state allows, and release an allocated
+ * Exclusive or Metered line in whole or in part.
  */
 export function RequestDetailView({ id }: { id: Id }) {
   const me = useCurrentMember();
   const detail = useRequestDetail(id);
   const withdraw = useWithdrawRequest(id);
+  const [releasing, setReleasing] = useState<Id | null>(null);
 
   if (detail.isError) return <ErrorPage error={detail.error} />;
   if (detail.isPending) return <Loading />;
 
   const { request, lines, history } = detail.data;
   const number = new Map(lines.map((line, index) => [line.line.id, index + 1]));
-  const canWithdraw =
-    WITHDRAWABLE.has(request.state) && me.roles.includes('MANAGER') && me.team.id === request.team.id;
+  const ownManager = me.roles.includes('MANAGER') && me.team.id === request.team.id;
+  const canWithdraw = WITHDRAWABLE.has(request.state) && ownManager;
+  const releasable = (line: LineDetail) =>
+    ownManager && RELEASABLE.has(line.line.state) && line.line.allocationClass !== 'MATCHED';
+  const released = lines.find((line) => line.line.id === releasing);
 
   return (
     <>
@@ -70,12 +80,22 @@ export function RequestDetailView({ id }: { id: Id }) {
         </h2>
         <Table
           label="Lines"
-          columns={lineColumns(number)}
+          columns={[...lineColumns(number), ...releaseColumns(releasable, setReleasing)]}
           rows={lines}
           rowKey={(line) => line.line.id}
           empty={<EmptyState title="This Request has no lines." />}
         />
       </section>
+
+      {released && (
+        <ReleaseForm
+          key={released.line.id}
+          requestId={id}
+          detail={released}
+          number={number.get(released.line.id)}
+          onClose={() => setReleasing(null)}
+        />
+      )}
 
       <section className="section" aria-labelledby="history-title">
         <h2 id="history-title" className="section-title">
@@ -147,4 +167,31 @@ function eventText(event: RequestEvent, number: Map<Id, number>): string {
 function amountText(allocationClass: string, quantity: number): string {
   if (allocationClass === 'METERED') return `${quantity} ${quantity === 1 ? 'unit' : 'units'}`;
   return `${quantity} ${quantity === 1 ? 'instance' : 'instances'}`;
+}
+
+/** What each line holds now, and a Release action on each line its Team's Manager may release. */
+function releaseColumns(
+  releasable: (line: LineDetail) => boolean,
+  onRelease: (line: Id) => void,
+): Column<LineDetail>[] {
+  return [
+    {
+      header: 'Allocated now',
+      cell: ({ line, allocatedParts }) =>
+        allocatedParts.length === 0
+          ? '—'
+          : allocatedParts
+              .map((part) => `${formatWindow(part.window)}, ${amountText(line.allocationClass, part.amount)}`)
+              .join('; '),
+    },
+    {
+      header: 'Actions',
+      cell: (line) =>
+        releasable(line) ? (
+          <Button variant="secondary" onClick={() => onRelease(line.line.id)}>
+            Release…
+          </Button>
+        ) : null,
+    },
+  ];
 }

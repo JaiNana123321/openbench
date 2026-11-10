@@ -59,8 +59,16 @@ export const aliceAllocated: RequestDetail = {
       reason: null,
       reasonMessage: null,
       waitlistPosition: null,
+      allocatedParts: [{ window: roomLine.window, amount: 1 }],
     },
-    { line: { ...gpuLine, state: 'ALLOCATED' }, assignedResources: [], reason: null, reasonMessage: null, waitlistPosition: null },
+    {
+      line: { ...gpuLine, state: 'ALLOCATED' },
+      assignedResources: [],
+      reason: null,
+      reasonMessage: null,
+      waitlistPosition: null,
+      allocatedParts: [{ window: gpuLine.window, amount: 4 }],
+    },
   ],
   history: [
     event(null, null, 'DRAFT', null, '2026-10-23T10:00:00-04:00'),
@@ -93,6 +101,7 @@ export const bobWaiting: RequestDetail = {
       reason: 'NO_FREE_INSTANCE',
       reasonMessage: 'Room A is taken for part of the window.',
       waitlistPosition: 1,
+      allocatedParts: [],
     },
     {
       line: {
@@ -108,6 +117,7 @@ export const bobWaiting: RequestDetail = {
       reason: 'QUOTA_EXCEEDED',
       reasonMessage: 'The line exceeds the Team’s Quota of 8 GPU units by 2 units.',
       waitlistPosition: 2,
+      allocatedParts: [],
     },
   ],
   history: [

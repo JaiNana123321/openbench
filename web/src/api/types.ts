@@ -304,6 +304,8 @@ export interface LineDetail {
   reason: string | null;
   reasonMessage: string | null;
   waitlistPosition: number | null;
+  /** What an Exclusive or Metered line holds now, one part per occurrence; empty when nothing is allocated. */
+  allocatedParts: AllocatedPart[];
 }
 
 /**
@@ -360,4 +362,55 @@ export interface MemberSummary {
   team: TeamRef;
   active: boolean;
   roles: Role[];
+}
+
+// ---------------------------------------------------------------- Requests: Release and Refund
+
+/** One occurrence of a line as allocated now: its window, shortened by an earlier end, and its instances or units. */
+export interface AllocatedPart {
+  window: TimeWindow;
+  amount: number;
+}
+
+/** What a Release gives back: the whole line, an earlier end, some occurrences, or (Metered) fewer units. */
+export type ReleaseKind = 'WHOLE' | 'EARLIER_END' | 'OCCURRENCES' | 'FEWER_UNITS';
+
+/**
+ * The body of POST /api/requests/{id}/lines/{lineId}/release, and the query of GET
+ * .../release-preview. `newEnd` is for EARLIER_END, `occurrences` (their starts) for OCCURRENCES,
+ * and `newUnits`, the units kept, for FEWER_UNITS.
+ */
+export interface ReleaseBody {
+  kind: ReleaseKind;
+  newEnd?: Instant;
+  occurrences?: Instant[];
+  newUnits?: number;
+}
+
+/**
+ * One released piece of a Refund: the hours `released` of the occurrence `occurrence`, for `amount`
+ * instances or units; `fraction` (such as 0.75) of its `attributable` share of the locked Quote,
+ * by the lead time to the occurrence's start (`leadHours`, negative once it started).
+ */
+export interface RefundPiece {
+  occurrence: TimeWindow;
+  released: TimeWindow;
+  amount: number;
+  leadHours: number;
+  fraction: number;
+  attributable: Credits;
+  refund: Credits;
+}
+
+/** GET .../release-preview: the Refund a Release would post now, and the pieces it sums. */
+export interface RefundQuote {
+  attributable: Credits;
+  refund: Credits;
+  pieces: RefundPiece[];
+}
+
+/** POST .../release: the line in its new state (RELEASED or PARTLY_RELEASED) and the Refund posted. */
+export interface ReleaseOutcome {
+  line: RequestLine;
+  refund: RefundQuote;
 }

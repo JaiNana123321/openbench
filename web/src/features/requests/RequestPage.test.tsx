@@ -164,6 +164,7 @@ describe('RequestPage, the Draft editor', () => {
         reason: null,
         reasonMessage: null,
         waitlistPosition: null,
+        allocatedParts: [],
       })),
       history: [aliceAllocated.history[0]],
     };
