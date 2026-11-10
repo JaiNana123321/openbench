@@ -147,6 +147,10 @@ class ReleaseRulesTest extends ReleaseTest {
                 .andExpect(jsonPath("$.pieces[0].amount").value(4));
         preview(alice, a1[0], a1[1], "kind=FEWER_UNITS&newUnits=3").andExpect(jsonPath("$.refund").value(22.50));
         preview(alice, a1[0], a1[1], "kind=OCCURRENCES&occurrences=" + at(d, 10)).andExpect(jsonPath("$.refund").value(90.00));
+        // Several occurrences go comma-separated, as the web client sends them; D+7 is not this line's.
+        preview(alice, a1[0], a1[1], "kind=OCCURRENCES&occurrences=" + at(d, 10) + "," + at(d.plusDays(7), 10))
+                .andExpect(status().isConflict()).andExpect(jsonPath("$.code").value("NOT_ALLOCATED"));
+        preview(alice, a1[0], a1[1], "kind=EARLIER_END").andExpect(status().isBadRequest());
         preview(alice, a1[0], a1[1], "kind=FEWER_UNITS&newUnits=9")
                 .andExpect(status().isUnprocessableEntity()).andExpect(jsonPath("$.code").value("QUANTITY_INVALID"));
 
