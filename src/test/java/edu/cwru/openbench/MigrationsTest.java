@@ -46,7 +46,8 @@ class MigrationsTest extends PostgresTest {
                         "planner_setting", "setting_change",
                         "account", "transaction", "held_credit", "period_close",
                         "request", "request_line", "suggestion", "request_event",
-                        "exclusive_occurrence", "metered_allocation", "waitlist_entry");
+                        "exclusive_occurrence", "metered_allocation", "waitlist_entry",
+                        "notification");
     }
 
     @Test
