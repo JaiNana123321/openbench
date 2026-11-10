@@ -29,7 +29,8 @@ import org.springframework.stereotype.Component;
  *     retired ({@code RESOURCE_RETIRED}), and makes the quantity 1 ({@code QUANTITY_INVALID});
  * <li>a weekly recurrence only on an Exclusive line ({@code RECURRENCE_NOT_OFFERED}), with 2 to 52
  *     occurrences and a window of at most one week, so that its occurrences never overlap each other
- *     ({@code RECURRENCE_INVALID}).
+ *     ({@code RECURRENCE_INVALID});
+ * <li>the Priority mark only on an Exclusive line ({@code PRIORITY_NOT_OFFERED}).
  * </ul>
  */
 @Component
@@ -132,6 +133,21 @@ class LineRules {
         if (end.isAfter(secondStart)) {
             throw new RuleViolation("RECURRENCE_INVALID",
                     "A weekly line's window lasts at most one week, so that its occurrences do not overlap.");
+        }
+    }
+
+    /**
+     * Checks a line's Priority mark: offered only for a class whose allocator is {@code Bumpable}
+     * (design Section 4.5). Until Bumps (#9) add that capability, that is the Exclusive class.
+     */
+    void checkPriority(ResourceTypeId typeId, boolean priority) {
+        if (!priority) {
+            return;
+        }
+        ResourceType type = typeOf(typeId);
+        if (type.allocationClass() != AllocationClass.EXCLUSIVE) {
+            throw new RuleViolation("PRIORITY_NOT_OFFERED",
+                    "A " + type.name() + " line cannot be marked Priority; Priority is offered for Exclusive lines only.");
         }
     }
 }

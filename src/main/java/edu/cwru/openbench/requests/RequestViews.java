@@ -104,7 +104,8 @@ class RequestViews {
                     row.required(),
                     row.state(),
                     quote,
-                    row.recurrence());
+                    row.recurrence(),
+                    row.priority());
         }
 
         private TeamSummary team(Long id) {

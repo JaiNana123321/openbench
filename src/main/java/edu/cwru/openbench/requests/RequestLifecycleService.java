@@ -156,6 +156,7 @@ public class RequestLifecycleService {
             rules.check(new ResourceTypeId(row.typeId()), row.amount(), row.startsAt(), row.endsAt(),
                     row.namedResourceId() == null ? null : new ResourceId(row.namedResourceId()));
             rules.checkRecurrence(new ResourceTypeId(row.typeId()), row.startsAt(), row.endsAt(), row.recurrence());
+            rules.checkPriority(new ResourceTypeId(row.typeId()), row.priority());
             row.lockQuote(views.currentQuote(row, current).map(Credits::amount).orElse(null));
         }
         request.submit(now);

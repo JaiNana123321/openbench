@@ -162,6 +162,7 @@ class RequestLineRow {
         RequestLineRow part = new RequestLineRow(requestId, typeId, allocationClass, amountForNewLine, startsAt, endsAt,
                 namedResourceId, false, at, actor);
         part.recurrence = recurrence;
+        part.priority = priority;
         return part;
     }
 
@@ -178,5 +179,9 @@ class RequestLineRow {
     /** Every occurrence of the line, by start, in the company time zone: the window alone without a recurrence. */
     List<TimeWindow> occurrences(ZoneId zone) {
         return WeeklyRecurrence.occurrencesOf(new TimeWindow(startsAt, endsAt), recurrence(), zone);
+    }
+
+    void setPriority(boolean priority) {
+        this.priority = priority;
     }
 }

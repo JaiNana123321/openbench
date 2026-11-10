@@ -31,8 +31,8 @@ import org.springframework.transaction.annotation.Transactional;
 /**
  * Draft editing (design Section 4.8, {@code RequestService}): a Manager creates a Draft for their
  * own Team, adds, edits, splits, and removes lines, marks them Required or Optional, and sees the
- * Draft view with every line's Quote, the sums, the Available Balance, and the shortfall. Demo 1
- * leaves out the Priority mark and Matched lines.
+ * Draft view with every line's Quote, the sums, the Available Balance, and the shortfall. Matched
+ * lines are not offered yet.
  *
  * <p>Scope ({@link RequestAccess}): a Manager sees only their own Team's Requests and a Capacity
  * Planner every Team's; anything else is not found. Only the Manager of the owning Team edits; a
@@ -137,6 +137,21 @@ public class RequestService {
         RequestRow request = access.editableDraft(actor, id);
         RequestLineRow row = lineOf(request, lineId);
         row.setRequired(required);
+        return views.session().line(request, row);
+    }
+
+    /**
+     * Marks a line Priority or standard (SRS Exclusive.Priority.Bump, the drafting part; design
+     * Section 4.8, {@code setPriority}). The mark is offered only for a class whose allocator can
+     * Bump, Exclusive ({@code PRIORITY_NOT_OFFERED}); its Quote carries the priority premium.
+     */
+    @PreAuthorize("hasAuthority('MANAGER')")
+    @Transactional
+    public RequestLine setPriority(Actor actor, RequestId id, RequestLineId lineId, boolean priority) {
+        RequestRow request = access.editableDraft(actor, id);
+        RequestLineRow row = lineOf(request, lineId);
+        rules.checkPriority(new ResourceTypeId(row.typeId()), priority);
+        row.setPriority(priority);
         return views.session().line(request, row);
     }
 

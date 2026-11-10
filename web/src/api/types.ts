@@ -244,6 +244,8 @@ export interface RequestLine {
   quote: Credits | null;
   /** Null unless an Exclusive line recurs weekly; `window` is then the first occurrence and the Quote covers all. */
   recurrence: WeeklyRecurrence | null;
+  /** The Priority mark, offered on Exclusive lines only; the Quote then carries the priority premium. */
+  priority: boolean;
 }
 
 /** The body of POST /api/requests/{id}/lines. `namedResourceId` is for an Exclusive line only. */

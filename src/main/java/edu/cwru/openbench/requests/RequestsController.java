@@ -116,6 +116,12 @@ class RequestsController {
         return requests.setRequired(actor, id, lineId, mark.required());
     }
 
+    @PutMapping("/{id}/lines/{lineId}/priority")
+    RequestLine setPriority(Actor actor, @PathVariable RequestId id, @PathVariable RequestLineId lineId,
+            @Valid @RequestBody PriorityMark mark) {
+        return requests.setPriority(actor, id, lineId, mark.priority());
+    }
+
     private static ResponseEntity<RequestLine> created(RequestLine line) {
         URI location = URI.create("/api/requests/" + line.requestId().value() + "/lines/" + line.id().value());
         return ResponseEntity.created(location).body(line);
@@ -126,6 +132,9 @@ class RequestsController {
 
     /** The body of PUT .../required: {@code {"required": false}}. */
     record RequiredMark(@NotNull Boolean required) {}
+
+    /** The body of PUT .../priority: {@code {"priority": true}}. */
+    record PriorityMark(@NotNull Boolean priority) {}
 
     /** Releases the part the body names; answers 200 with the line in its new state and the Refund posted. */
     @PostMapping("/{id}/lines/{lineId}/release")

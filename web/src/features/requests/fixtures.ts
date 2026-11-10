@@ -18,6 +18,7 @@ export const roomLine: RequestLine = {
   state: 'DRAFT',
   quote: 30,
   recurrence: null,
+  priority: false,
 };
 
 export const gpuLine: RequestLine = {
@@ -34,6 +35,7 @@ export const gpuLine: RequestLine = {
   state: 'DRAFT',
   quote: 1120,
   recurrence: null,
+  priority: false,
 };
 
 export const aliceDraft: DraftView = {

@@ -11,7 +11,6 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import com.jayway.jsonpath.JsonPath;
 import edu.cwru.openbench.Verifies;
 import java.time.LocalDate;
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.MediaType;
@@ -136,46 +135,35 @@ class DraftCasesTest extends DemoWorldTest {
         draftView(as(alice), draft).andExpect(jsonPath("$.lines.length()").value(1));
     }
 
-    /**
-     * Steps 3 and 6 need the Priority mark on a Draft line: design Section 7 gives it its own endpoint, PUT
-     * {@code /api/requests/{id}/lines/{lineId}/priority}, refused with {@code PRIORITY_NOT_OFFERED} for any line
-     * that is not Exclusive. The build has no such endpoint (it answers 404), and step 3's weekly recurrence has
-     * no API either, so this runs the Priority part on one occurrence: Q4 = 60.00.
-     */
     @Test
-    @Disabled("drf-line-options steps 3 and 6: the Priority mark (PUT .../lines/{lineId}/priority) and weekly recurrence are not built")
-    @DisplayName("drf-line-options, steps 3 and 6: Priority doubles an Exclusive line's Quote (Q4 = 60.00) and is refused on a GPU line")
+    @DisplayName("drf-line-options, steps 3 and 6: a weekly Priority room line has three occurrences, Quote 180.00 (3 x Q4); Priority on a GPU line is PRIORITY_NOT_OFFERED")
     @Verifies(value = "drf-line-options", partial = true)
     void offersPriorityOnExclusiveLinesOnly() throws Exception {
         LocalDate d = dayD();
         long draft = createDraft(as(alice));
-        long roomLine = line(as(alice), draft, room, 1, at(d, 10), at(d, 12), null);
-        long gpuLine = line(as(alice), draft, gpu, 4, at(d, 10), at(d, 12), null);
 
-        setPriority(as(alice), draft, roomLine, true)
+        // 3. L2: Meeting room, quantity 1, D 10:00-12:00, weekly on D, D+7, D+14, Priority. The Priority mark has its
+        //    own endpoint (design Section 7), so the line is added and then marked.
+        long l2 = weeklyLine(as(alice), draft, room, 1, at(d, 10), at(d, 12), null, 3);
+        setPriority(as(alice), draft, l2, true)
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.quote").value(60.00));
+                .andExpect(jsonPath("$.priority").value(true))
+                .andExpect(jsonPath("$.recurrence.occurrences").value(3))
+                .andExpect(jsonPath("$.quote").value(180.00));
+        draftView(as(alice), draft)
+                .andExpect(jsonPath("$.lines.length()").value(1))
+                .andExpect(jsonPath("$.lines[0].priority").value(true))
+                .andExpect(jsonPath("$.lines[0].recurrence.occurrences").value(3))
+                .andExpect(jsonPath("$.requiredSum").value(180.00));
+
+        // 6. Mark a GPU line (4 units) Priority through the API: refused, Priority is for Exclusive lines only.
+        long gpuLine = line(as(alice), draft, gpu, 4, at(d, 10), at(d, 12), null);
         setPriority(as(alice), draft, gpuLine, true)
                 .andExpect(status().isUnprocessableEntity())
                 .andExpect(jsonPath("$.code").value("PRIORITY_NOT_OFFERED"));
-    }
-
-    @Test
-    @DisplayName("drf-line-options, step 3 (weekly part): a Meeting room line weekly on D, D+7, D+14 has three occurrences; Quote 90.00 (Q5)")
-    @Verifies(value = "drf-line-options", partial = true)
-    void acceptsAWeeklyExclusiveLine() throws Exception {
-        LocalDate d = dayD();
-        long draft = createDraft(as(alice));
-
-        // 3. L2 without its Priority mark: Meeting room, quantity 1, D 10:00-12:00, weekly on D, D+7, D+14.
-        addWeeklyLine(as(alice), draft, room, 1, at(d, 10), at(d, 12), null, 3)
-                .andExpect(status().isCreated())
-                .andExpect(jsonPath("$.recurrence.occurrences").value(3))
-                .andExpect(jsonPath("$.quote").value(90.00));
         draftView(as(alice), draft)
-                .andExpect(jsonPath("$.lines.length()").value(1))
-                .andExpect(jsonPath("$.lines[0].recurrence.occurrences").value(3))
-                .andExpect(jsonPath("$.requiredSum").value(90.00));
+                .andExpect(jsonPath("$.lines[1].priority").value(false))
+                .andExpect(jsonPath("$.lines[1].quote").value(60.00));
     }
 
     // ---------------------------------------------------------------- API calls

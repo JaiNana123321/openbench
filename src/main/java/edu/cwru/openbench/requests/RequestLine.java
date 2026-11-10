@@ -16,7 +16,8 @@ import edu.cwru.openbench.inventory.AllocationClass;
  * Draft line counts 0.00 in the sums then). {@code namedResource} and {@code namedResourceName} are
  * null unless an Exclusive line names one Resource. {@code window} is the first occurrence;
  * {@code recurrence} is null unless an Exclusive line recurs weekly, and the Quote then covers every
- * occurrence.
+ * occurrence. {@code priority} is the Priority mark, offered on Exclusive lines only; the Quote
+ * then carries the priority premium.
  */
 public record RequestLine(
         RequestLineId id,
@@ -31,4 +32,5 @@ public record RequestLine(
         boolean required,
         RequestLineState state,
         Credits quote,
-        WeeklyRecurrence recurrence) {}
+        WeeklyRecurrence recurrence,
+        boolean priority) {}
