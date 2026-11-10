@@ -39,11 +39,14 @@ public interface Allocator {
     void commit(LineSnapshot line);
 
     /**
-     * Gives back allocated capacity: the rows become RELEASED, so history stays.
+     * Gives back allocated capacity, in whole or in part ({@link ReleasePart}): given-back rows become
+     * RELEASED, and a shortened or reduced row keeps its instance while a RELEASED row records what
+     * it gave back, so history stays. Returns what was given back.
      *
-     * @throws edu.cwru.openbench.common.RuleViolation {@code NOT_ALLOCATED} if the line has no allocated rows
+     * @throws edu.cwru.openbench.common.RuleViolation {@code NOT_ALLOCATED} if the line has no allocated
+     *     rows or the part does not lie inside them, or has started
      */
-    void release(LineSnapshot line, ReleasePart part);
+    Released release(LineSnapshot line, ReleasePart part);
 
     /** Abandons the line before allocation: its Holds become EXPIRED and it leaves the waitlist. Idempotent. */
     void cancel(LineSnapshot line);

@@ -1,5 +1,6 @@
 package edu.cwru.openbench.allocation;
 
+import edu.cwru.openbench.common.TimeWindow;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
@@ -63,5 +64,19 @@ class ExclusiveOccurrenceRow {
 
     void changeState(RowState state) {
         this.state = state;
+    }
+
+    TimeWindow window() {
+        return new TimeWindow(startsAt, endsAt);
+    }
+
+    /** A RELEASED row on the same instance for the hours from {@code newEnd} to this row's end. */
+    ExclusiveOccurrenceRow tailFrom(Instant newEnd) {
+        return new ExclusiveOccurrenceRow(lineId, teamId, requestId, resourceId, newEnd, endsAt, RowState.RELEASED);
+    }
+
+    /** Shortens the row to end at {@code newEnd}; its start, the occurrence's, stays. */
+    void endAt(Instant newEnd) {
+        this.endsAt = newEnd;
     }
 }

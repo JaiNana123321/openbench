@@ -1,10 +1,12 @@
 package edu.cwru.openbench.requests;
 
+import edu.cwru.openbench.allocation.ReleasePart;
 import edu.cwru.openbench.common.Actor;
 import edu.cwru.openbench.common.ConcurrencyRetry;
 import edu.cwru.openbench.common.PageResponse;
 import edu.cwru.openbench.common.RequestId;
 import edu.cwru.openbench.common.RequestLineId;
+import edu.cwru.openbench.common.RuleViolation;
 import edu.cwru.openbench.common.TeamId;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;
@@ -12,6 +14,7 @@ import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 import java.net.URI;
+import java.time.Instant;
 import java.util.List;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -26,7 +29,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 /**
  * The Requests endpoints (design Table "Endpoints by module"): Drafts, the Request detail, and the
- * submit and withdraw transitions. A transition answers 200 with the Request in its new state; it
+ * submit, withdraw, and release transitions. A transition answers 200 with the Request in its new state; it
  * runs once more after a deadlock or lock timeout, and a second failure answers 503.
  */
 @RestController
@@ -123,4 +126,62 @@ class RequestsController {
 
     /** The body of PUT .../required: {@code {"required": false}}. */
     record RequiredMark(@NotNull Boolean required) {}
+
+    /** Releases the part the body names; answers 200 with the line in its new state and the Refund posted. */
+    @PostMapping("/{id}/lines/{lineId}/release")
+    ReleaseOutcome release(Actor actor, @PathVariable RequestId id, @PathVariable RequestLineId lineId,
+            @Valid @RequestBody Release release) {
+        return ConcurrencyRetry.once(() -> lifecycle.releaseLine(actor, id, lineId, release.part()));
+    }
+
+    /**
+     * The Refund a Release would post now, without releasing: the same fields as the Release body, as
+     * query parameters, such as {@code ?kind=EARLIER_END&newEnd=2026-11-25T17:00:00Z}; repeat
+     * {@code occurrences} for several.
+     */
+    @GetMapping("/{id}/lines/{lineId}/release-preview")
+    RefundQuote previewRelease(Actor actor, @PathVariable RequestId id, @PathVariable RequestLineId lineId,
+            @Valid Release release) {
+        return lifecycle.previewRelease(actor, id, lineId, release.part());
+    }
+
+    /**
+     * The body of POST .../release, one of:
+     * <ul>
+     * <li>{@code {"kind": "WHOLE"}}: every occurrence that has not started;
+     * <li>{@code {"kind": "EARLIER_END", "newEnd": "2026-11-25T17:00:00Z"}}: the hours from the new end on;
+     * <li>{@code {"kind": "OCCURRENCES", "occurrences": ["2026-12-09T15:00:00Z"]}}: the occurrences
+     *     starting at these instants;
+     * <li>{@code {"kind": "FEWER_UNITS", "newUnits": 2}}: a Metered line keeps 2 units.
+     * </ul>
+     * The kind is explicit, so an empty body never releases a whole line by mistake. Fields that the
+     * kind does not use are ignored.
+     */
+    record Release(@NotNull Kind kind, Instant newEnd, Integer newUnits, List<Instant> occurrences) {
+
+        enum Kind { WHOLE, EARLIER_END, OCCURRENCES, FEWER_UNITS }
+
+        /** @throws RuleViolation {@code VALIDATION_FAILED} when the kind's field is missing */
+        ReleasePart part() {
+            return switch (kind) {
+                case WHOLE -> new ReleasePart.WholeLine();
+                case EARLIER_END -> new ReleasePart.EarlierEnd(require(newEnd, "newEnd"));
+                case FEWER_UNITS -> new ReleasePart.FewerUnits(require(newUnits, "newUnits"));
+                case OCCURRENCES -> {
+                    List<Instant> starts = require(occurrences, "occurrences");
+                    if (starts.isEmpty() || starts.stream().distinct().count() != starts.size()) {
+                        throw new RuleViolation("VALIDATION_FAILED", "Name each occurrence to give back once.");
+                    }
+                    yield new ReleasePart.Occurrences(starts);
+                }
+            };
+        }
+
+        private <T> T require(T value, String field) {
+            if (value == null) {
+                throw new RuleViolation("VALIDATION_FAILED", "A Release of kind " + kind + " needs " + field + ".");
+            }
+            return value;
+        }
+    }
 }

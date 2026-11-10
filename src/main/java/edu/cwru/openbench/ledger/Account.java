@@ -59,4 +59,10 @@ class Account {
     void expire(BigDecimal amount) {
         granted = granted.subtract(amount);
     }
+
+    /** Returns a Refund to the parts of the Account its Charge came from. */
+    void refund(BigDecimal grantedPart, BigDecimal earnedPart) {
+        granted = granted.add(grantedPart);
+        earned = earned.add(earnedPart);
+    }
 }

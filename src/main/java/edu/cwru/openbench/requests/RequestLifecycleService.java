@@ -6,17 +6,21 @@ import edu.cwru.openbench.allocation.Allocator;
 import edu.cwru.openbench.allocation.AllocatorRegistry;
 import edu.cwru.openbench.allocation.Evaluation;
 import edu.cwru.openbench.allocation.LineSnapshot;
+import edu.cwru.openbench.allocation.ReleasePart;
+import edu.cwru.openbench.allocation.Released;
 import edu.cwru.openbench.allocation.WaitingLine;
 import edu.cwru.openbench.allocation.Waitlistable;
 import edu.cwru.openbench.common.Actor;
 import edu.cwru.openbench.common.Credits;
 import edu.cwru.openbench.common.MemberId;
+import edu.cwru.openbench.common.NotFoundException;
 import edu.cwru.openbench.common.RequestId;
 import edu.cwru.openbench.common.RequestLineId;
 import edu.cwru.openbench.common.ResourceId;
 import edu.cwru.openbench.common.ResourceTypeId;
 import edu.cwru.openbench.common.RuleViolation;
 import edu.cwru.openbench.common.TeamId;
+import edu.cwru.openbench.common.TimeWindow;
 import edu.cwru.openbench.inventory.AllocationClass;
 import edu.cwru.openbench.inventory.InventoryQueries;
 import edu.cwru.openbench.ledger.ChargeSpec;
@@ -33,12 +37,16 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 import java.util.TreeSet;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -88,12 +96,13 @@ public class RequestLifecycleService {
     private final Clock clock;
     private final Notifier notifier;
     private final TransactionTemplate transactions;
+    private final Refunds refunds;
 
     RequestLifecycleService(RequestLineRepository lines, RequestEventRepository events, RequestAccess access,
             LineRules rules, RequestViews views, AllocationLock typeLock, AllocatorRegistry allocators,
             AllocationQueries allocation, LedgerService ledger, SettingsService settings, InventoryQueries inventory,
             MemberService members, EntityManager entityManager, Clock clock, Notifier notifier,
-            TransactionTemplate transactions) {
+            TransactionTemplate transactions, Refunds refunds) {
         this.notifier = notifier;
         this.transactions = transactions;
         this.lines = lines;
@@ -110,6 +119,7 @@ public class RequestLifecycleService {
         this.members = members;
         this.entityManager = entityManager;
         this.clock = clock;
+        this.refunds = refunds;
     }
 
     // ---------------------------------------------------------------- submit
@@ -372,7 +382,7 @@ public class RequestLifecycleService {
         Integer position = line.state() == RequestLineState.WAITING
                 ? allocation.waitlistPosition(line.id()).orElse(null)
                 : null;
-        return new LineDetail(line, assigned, reason, message, position);
+        return new LineDetail(line, assigned, reason, message, position, allocation.allocatedParts(line.id()));
     }
 
     // ---------------------------------------------------------------- steps
@@ -505,5 +515,220 @@ public class RequestLifecycleService {
     private void notifyManager(RequestRow request, String text) {
         members.findManagerOf(new TeamId(request.teamId())).ifPresent(manager ->
                 notifier.notify(manager, NotificationKind.REQUEST_UPDATE, text, "/requests/" + request.id()));
+    }
+
+    // ---------------------------------------------------------------- release and the waitlist fill
+
+    /**
+     * POST /api/requests/{id}/lines/{lineId}/release (Release.Line, Release.Refund; design scenario
+     * S6). In one transaction: lock the Request, then the line's type; give back the part
+     * ({@link Allocator#release}), the rest keeping its instances and prices; post one Refund, the
+     * sum over the released pieces of their share of the locked Quote times the Refund Schedule's
+     * fraction for the lead time to the start of their occurrence; record the Release, with the part,
+     * lead times, fractions, and Refund, in the line's history; and offer the freed capacity to the
+     * waitlist ({@link #onCapacityFreed}). The line is Released when nothing of it stays allocated,
+     * PartlyReleased otherwise. Returns the line and its Refund.
+     *
+     * @throws NotFoundException for another Team's Request, or a line not on it
+     * @throws RuleViolation {@code NOT_ALLOCATED} unless the line is an allocated Exclusive or Metered
+     *     line and the part lies inside its live allocation and has not started; the other codes of
+     *     {@link Allocator#release}
+     */
+    @PreAuthorize("hasAuthority('MANAGER')")
+    @Transactional
+    public ReleaseOutcome releaseLine(Actor actor, RequestId id, RequestLineId lineId, ReleasePart part) {
+        RequestRow request = access.lockForChange(actor, id);
+        RequestLineRow line = releasableLine(request, lineId);
+        Instant now = clock.instant();
+        ResourceTypeId type = new ResourceTypeId(line.typeId());
+        typeLock.lockTypes(new TreeSet<>(List.of(type)));
+
+        Released released = allocatorOf(line).release(snapshot(request, line), part);
+        RefundQuote refund = refunds.quote(line, released, now);
+        ledger.refund(new TeamId(request.teamId()), lineId, refund.refund());
+        changeLine(request, line, released.nothingLeft() ? RequestLineState.RELEASED : RequestLineState.PARTLY_RELEASED,
+                actor, now, refunds.note(refund, describe(part)));
+        notifyManager(request, "Line " + line.id() + " of Request " + request.id() + " was "
+                + (released.nothingLeft() ? "Released" : "partly Released") + "; Refund " + refund.refund() + " credits.");
+        log.info("event=line_released request={} line={} team={} refund={} actor={}", request.id(), line.id(),
+                request.teamId(), refund.refund(), actor.memberId().value());
+
+        onCapacityFreed(line.allocationClass(), type, freedWindow(released), now);
+        return new ReleaseOutcome(views.session().line(request, line), refund);
+    }
+
+    /**
+     * GET /api/requests/{id}/lines/{lineId}/release-preview: the Refund a Release of this part would
+     * post now, for the Manager to see before confirming. Changes nothing and takes no lock.
+     *
+     * @throws RuleViolation the codes of {@link #releaseLine}
+     */
+    @PreAuthorize("hasAuthority('MANAGER')")
+    public RefundQuote previewRelease(Actor actor, RequestId id, RequestLineId lineId, ReleasePart part) {
+        RequestRow request = access.visible(actor, id);
+        RequestAccess.requireTeamsManager(actor, request.teamId());
+        RequestLineRow line = releasableLine(request, lineId);
+        Released released = allocation.previewRelease(snapshot(request, line), part);
+        return refunds.quote(line, released, clock.instant());
+    }
+
+    /** The line, if it is on the Request ({@code NotFoundException}) and allocated ({@code NOT_ALLOCATED}). */
+    private RequestLineRow releasableLine(RequestRow request, RequestLineId lineId) {
+        RequestLineRow line = lines.findById(lineId.value())
+                .filter(row -> row.requestId().equals(request.id()))
+                .orElseThrow(() -> new NotFoundException(
+                        "Line " + lineId.value() + " is not on Request " + request.id() + "."));
+        boolean allocated = line.state() == RequestLineState.ALLOCATED
+                || line.state() == RequestLineState.PARTLY_RELEASED;
+        if (!allocated || line.allocationClass() == AllocationClass.MATCHED) {
+            throw new RuleViolation("NOT_ALLOCATED", "Line " + line.id() + " is "
+                    + line.state().name().toLowerCase().replace('_', ' ')
+                    + "; only an allocated Exclusive or Metered line can be released.");
+        }
+        return line;
+    }
+
+    private String describe(ReleasePart part) {
+        return switch (part) {
+            case ReleasePart.WholeLine whole -> "the whole line";
+            case ReleasePart.Occurrences occurrences -> occurrences.starts().stream().map(refunds::describe)
+                    .collect(Collectors.joining(", ", "the occurrences of ", ""));
+            case ReleasePart.EarlierEnd earlier -> "the hours from " + refunds.describe(earlier.newEnd());
+            case ReleasePart.FewerUnits fewer -> "units, keeping " + fewer.newUnits();
+        };
+    }
+
+    /** From the earliest released hour to the latest. */
+    private static TimeWindow freedWindow(Released released) {
+        Instant start = released.pieces().stream().map(piece -> piece.released().start())
+                .min(Comparator.naturalOrder()).orElseThrow();
+        Instant end = released.pieces().stream().map(piece -> piece.released().end())
+                .max(Comparator.naturalOrder()).orElseThrow();
+        return new TimeWindow(start, end);
+    }
+
+    /**
+     * Offers capacity freed on a type to its waitlist (Lifecycle.Waiting.Reevaluate; design
+     * {@code onCapacityFreed}): for each waiting line overlapping the freed window, in waitlist order
+     * (Bumped, Priority, submission time), its Request is allocated at its locked Quotes if every
+     * Required line fits at once and the Team can still afford them; otherwise it keeps its places
+     * and the next is tried. A line whose start has passed is skipped. Runs inside the freeing
+     * transaction, which holds the freed type; it then locks each waiting Request, its types, and its
+     * account, the one path that takes a type after an account, which the one retry covers.
+     */
+    private void onCapacityFreed(AllocationClass allocationClass, ResourceTypeId type, TimeWindow freed, Instant now) {
+        Optional<Waitlistable> waitlist = allocators.capability(allocationClass, Waitlistable.class);
+        if (waitlist.isEmpty()) {
+            return;
+        }
+        Set<Long> tried = new HashSet<>();
+        for (WaitingLine waiting : waitlist.get().waitingFor(type, freed)) {
+            if (!waiting.window().start().isAfter(now)) {
+                continue;
+            }
+            lines.findRequestIdById(waiting.lineId().value())
+                    .filter(tried::add)
+                    .ifPresent(request -> fillFromWaitlist(request, now));
+        }
+    }
+
+    /**
+     * Allocates a waiting Request if every Required line fits now and its Team can afford the Required
+     * Quotes (Lifecycle.Waiting.Reevaluate): all or nothing, never part of the Request.
+     */
+    private void fillFromWaitlist(Long requestId, Instant now) {
+        RequestRow request = access.lockForSystem(new RequestId(requestId));
+        if (request.state() != RequestState.WAITING) {
+            return;
+        }
+        List<RequestLineRow> open = lines.findByRequestIdOrderById(request.id()).stream()
+                .filter(row -> row.state() == RequestLineState.WAITING || row.state() == RequestLineState.EVALUATED)
+                .toList();
+        typeLock.lockTypes(new TreeSet<>(open.stream().map(row -> new ResourceTypeId(row.typeId())).toList()));
+        List<Evaluated> evaluated = open.stream().map(row -> {
+            LineSnapshot snapshot = snapshot(request, row);
+            return new Evaluated(row, snapshot, allocatorOf(row).evaluate(snapshot));
+        }).toList();
+        if (!evaluated.stream().filter(Evaluated::required).allMatch(Evaluated::fits)) {
+            return;
+        }
+        TeamId team = new TeamId(request.teamId());
+        BigDecimal required = evaluated.stream()
+                .filter(Evaluated::required)
+                .map(line -> line.row().lockedQuote())
+                .filter(Objects::nonNull)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        if (required.compareTo(ledger.lockedAvailable(team).amount()) > 0) {
+            log.info("event=waitlist_fill_unaffordable request={} team={} required={}", request.id(), team.value(),
+                    required);
+            return;
+        }
+        allocateFromWaitlist(request, evaluated, now);
+    }
+
+    /**
+     * Allocates a waiting Request whose Required lines fit, by the steps of {@code allocate}: hold
+     * each line, Required first, evaluated again so its own lines see each other; drop an Optional
+     * line that no longer fits or is unaffordable; then commit, charge the locked Quotes, and take the
+     * lines off the waitlist. If a Required line stops fitting only because of this Request's own
+     * Holds, they are undone and the Request keeps its places. The system is the actor.
+     */
+    private void allocateFromWaitlist(RequestRow request, List<Evaluated> evaluated, Instant now) {
+        TeamId team = new TeamId(request.teamId());
+        List<Evaluated> held = new ArrayList<>();
+        for (Evaluated line : requiredFirst(evaluated)) {
+            Evaluation fit = line.fits() ? allocatorOf(line.row()).evaluate(line.snapshot()) : line.evaluation();
+            if (!fit.fits() && line.required()) {
+                for (Evaluated hold : held) {
+                    allocatorOf(hold.row()).cancel(hold.snapshot());
+                    ledger.releaseCredits(team, hold.snapshot().lineId());
+                    if (hold.row().state() == RequestLineState.WAITING) {
+                        waitlistOf(hold.row()).join(hold.snapshot());
+                    }
+                }
+                return;
+            }
+            if (!fit.fits()) {
+                drop(request, line.row(), fit.reason(), fit.message(), null, now);
+                continue;
+            }
+            BigDecimal quote = line.row().lockedQuote();
+            if (!line.required() && quote != null && !affordable(team, quote)) {
+                drop(request, line.row(), "INSUFFICIENT_BALANCE", "The Optional line's Quote of " + new Credits(quote)
+                        + " credits no longer fits the Available Balance.", null, now);
+                continue;
+            }
+            allocatorOf(line.row()).hold(line.snapshot());
+            if (quote != null) {
+                ledger.holdCredits(team, line.snapshot().lineId(), new Credits(quote));
+            }
+            held.add(line);
+        }
+
+        List<ChargeSpec> charges = new ArrayList<>();
+        for (Evaluated line : held) {
+            allocatorOf(line.row()).commit(line.snapshot());
+            if (line.row().state() == RequestLineState.WAITING) {
+                waitlistOf(line.row()).leave(line.snapshot());
+            }
+            BigDecimal quote = line.row().lockedQuote();
+            if (quote != null) {
+                charges.add(new ChargeSpec(team, line.snapshot().lineId(), new Credits(quote)));
+            }
+        }
+        ledger.commitChargesBySystem(new RequestId(request.id()), charges);
+        for (Evaluated line : held) {
+            BigDecimal quote = line.row().lockedQuote();
+            changeLine(request, line.row(), RequestLineState.ALLOCATED, null, now, "Allocated from the waitlist: "
+                    + (quote == null ? "no Charge, the type has no pricing settings." : "charged the locked Quote of "
+                            + new Credits(quote) + " credits."));
+        }
+        request.moveTo(RequestState.ALLOCATED);
+        record(request, null, RequestState.WAITING.name(), RequestState.ALLOCATED.name(), null, now,
+                "Capacity freed and every Required line fits: allocated from the waitlist.");
+        members.findManagerOf(team).ifPresent(manager -> notifier.notify(manager, NotificationKind.WAITLIST_FILLED,
+                "Request " + request.id() + " is Allocated from the waitlist: capacity freed and every Required"
+                        + " line fits.", "/requests/" + request.id()));
+        log.info("event=waitlist_filled request={} team={} lines={}", request.id(), team.value(), held.size());
     }
 }

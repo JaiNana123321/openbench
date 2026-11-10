@@ -11,6 +11,7 @@ import edu.cwru.openbench.settings.Period;
 import edu.cwru.openbench.settings.SettingsService;
 import java.time.Clock;
 import java.time.Duration;
+import java.util.Collection;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -93,16 +94,36 @@ class ExclusiveAllocator implements Allocator, Waitlistable {
     }
 
     @Override
-    public void release(LineSnapshot line, ReleasePart part) {
+    public Released release(LineSnapshot line, ReleasePart part) {
         checkClass(line);
-        List<ExclusiveOccurrenceRow> allocated = rowsOf(line, Set.of(RowState.ALLOCATED));
-        if (allocated.isEmpty()) {
-            throw new RuleViolation("NOT_ALLOCATED", "This line holds no allocated " + typeName(line) + ".");
-        }
-        switch (part) {
-            case ReleasePart.WholeLine whole -> allocated.forEach(row -> row.changeState(RowState.RELEASED));
+        Map<Long, ExclusiveOccurrenceRow> allocated = new HashMap<>();
+        rowsOf(line, Set.of(RowState.ALLOCATED)).forEach(row -> allocated.put(row.id(), row));
+        ReleasePlan plan = plan(line, part, allocated.values());
+        for (ReleasePlan.Step step : plan.steps()) {
+            ExclusiveOccurrenceRow row = allocated.get(step.row().id());
+            switch (step) {
+                case ReleasePlan.Step.ReleaseRow whole -> row.changeState(RowState.RELEASED);
+                case ReleasePlan.Step.Shorten shorten -> {
+                    occurrences.save(row.tailFrom(shorten.newEnd()));
+                    row.endAt(shorten.newEnd());
+                }
+                case ReleasePlan.Step.Reduce reduce -> throw new IllegalStateException("An Exclusive row has no units.");
+            }
         }
         occurrences.flush();
+        return plan.released();
+    }
+
+    /** What the part would give back, without writing: the plan {@link #release} applies. */
+    Released preview(LineSnapshot line, ReleasePart part) {
+        checkClass(line);
+        return plan(line, part, rowsOf(line, Set.of(RowState.ALLOCATED))).released();
+    }
+
+    private ReleasePlan plan(LineSnapshot line, ReleasePart part, Collection<ExclusiveOccurrenceRow> rows) {
+        return ReleasePlan.of(
+                rows.stream().map(row -> new ReleasePlan.Row(row.id(), row.window(), 1)).toList(),
+                part, false, clock.instant(), clock.getZone(), typeName(line));
     }
 
     @Override

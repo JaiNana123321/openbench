@@ -1,5 +1,6 @@
 package edu.cwru.openbench.requests;
 
+import edu.cwru.openbench.allocation.AllocatedPart;
 import edu.cwru.openbench.common.ResourceId;
 import java.util.List;
 
@@ -9,17 +10,20 @@ import java.util.List;
  * waits or was Dropped, why: {@code reason} is a stable code ({@code NO_FREE_INSTANCE},
  * {@code POOL_FULL}, {@code QUOTA_EXCEEDED}, {@code INSUFFICIENT_BALANCE}) and {@code reasonMessage}
  * one sentence for the Manager. {@code waitlistPosition} counts from 1 while the line is on its
- * type's waitlist and is null otherwise.
+ * type's waitlist and is null otherwise. {@code allocatedParts} is what an Exclusive or Metered line
+ * holds now, one part per occurrence, after any partial Release; empty when nothing is allocated.
  */
 public record LineDetail(
         RequestLine line,
         List<AssignedResource> assignedResources,
         String reason,
         String reasonMessage,
-        Integer waitlistPosition) {
+        Integer waitlistPosition,
+        List<AllocatedPart> allocatedParts) {
 
     public LineDetail {
         assignedResources = List.copyOf(assignedResources);
+        allocatedParts = List.copyOf(allocatedParts);
     }
 
     /** A Resource a line is allocated on. JSON: {@code {"id": 21, "name": "Room A"}}. */

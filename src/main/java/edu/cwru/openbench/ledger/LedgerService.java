@@ -19,6 +19,7 @@ import edu.cwru.openbench.settings.SettingsService;
 import java.math.BigDecimal;
 import edu.cwru.openbench.notifications.NotificationKind;
 import edu.cwru.openbench.notifications.Notifier;
+import java.math.RoundingMode;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -161,11 +162,14 @@ public class LedgerService {
      */
     @Transactional
     public void commitCharges(RequestId request, List<ChargeSpec> charges) {
+        postCharges(request, charges, signedInMemberId());
+    }
+
+    private void postCharges(RequestId request, List<ChargeSpec> charges, Long actor) {
         // Accounts are locked in ascending Team id; a Request's lines normally share one Team.
         Map<TeamId, List<ChargeSpec>> byTeam = charges.stream().collect(Collectors.groupingBy(ChargeSpec::team,
                 () -> new TreeMap<>(Comparator.comparingLong(TeamId::value)), Collectors.toList()));
         PeriodId period = byTeam.isEmpty() ? null : settings.currentPeriod().id();
-        Long actor = signedInMemberId();
         byTeam.forEach((team, lines) -> {
             Account account = lock(team);
             BigDecimal total = BigDecimal.ZERO;
@@ -446,5 +450,79 @@ public class LedgerService {
                 + expired + " granted credits expired, and earned credits stay.";
         return grant == null ? text
                 : text + " A Grant of " + grant + " credits is posted for the Period starting " + day.format(start.startsOn()) + ".";
+    }
+
+    // ---------------------------------------------------------------- Refunds
+
+    /**
+     * (Unscoped) Posts a Refund on a charged line (Release.Refund): the credits return to the
+     * granted and earned parts in the proportions of the line's Charge, so that the line's Refunds
+     * together keep those proportions, each part rounded half-up and the earned part taking the
+     * rest. A zero amount posts nothing. Locks the account row and joins the caller's transaction;
+     * the Transaction names the signed-in Member as its actor.
+     *
+     * @throws RuleViolation {@code REFUND_EXCEEDS_CHARGE} if the line's Refunds would exceed its Charge,
+     *     or it has none
+     * @throws IllegalArgumentException for a negative amount, or a line charged to another Team
+     */
+    @Transactional
+    public void refund(TeamId team, RequestLineId line, Credits amount) {
+        if (amount.isNegative()) {
+            throw new IllegalArgumentException("A Refund cannot be negative.");
+        }
+        if (amount.amount().signum() == 0) {
+            return;
+        }
+        Account account = lock(team);
+        Transaction charge = transactions.findByLineIdAndKindOrderByIdAsc(line.value(), TransactionKind.CHARGE)
+                .stream().findFirst().orElse(null);
+        BigDecimal refundedBefore = BigDecimal.ZERO;
+        BigDecimal grantedBefore = BigDecimal.ZERO;
+        for (Transaction earlier : transactions.findByLineIdAndKindOrderByIdAsc(line.value(), TransactionKind.REFUND)) {
+            refundedBefore = refundedBefore.add(earlier.amount());
+            grantedBefore = grantedBefore.add(earlier.grantedPart());
+        }
+        BigDecimal charged = charge == null ? BigDecimal.ZERO : charge.amount();
+        BigDecimal refunded = refundedBefore.add(amount.amount());
+        if (refunded.compareTo(charged) > 0) {
+            throw new RuleViolation("REFUND_EXCEEDS_CHARGE", "Line " + line.value() + " was charged "
+                    + new Credits(charged) + " credits and has had " + new Credits(refundedBefore)
+                    + " refunded; a Refund of " + amount + " would exceed its Charge.");
+        }
+        if (!charge.teamId().equals(team.value())) {
+            throw new IllegalArgumentException("Line " + line.value() + " is charged to another Team.");
+        }
+        BigDecimal grantedInAll = new Credits(refunded.multiply(charge.grantedPart())
+                .divide(charged, 10, RoundingMode.HALF_UP)).amount();
+        BigDecimal fromGranted = grantedInAll.subtract(grantedBefore).max(BigDecimal.ZERO).min(amount.amount());
+        BigDecimal toEarned = amount.amount().subtract(fromGranted);
+        account.refund(fromGranted, toEarned);
+        Long actor = signedInMemberId();
+        Transaction posted = transactions.save(Transaction.refund(team.value(), fromGranted, toEarned,
+                settings.currentPeriod().id().value(), line.value(), actor, clock.instant()));
+        log.info("event=transaction kind=REFUND id={} team={} amount={} line={} actor={}",
+                posted.id(), team.value(), amount, line.value(), actorText(actor));
+    }
+
+    /**
+     * (Unscoped) The Team's Available Balance read under its account lock, which lasts to the end of
+     * the caller's transaction: for a decision whose Charges must still fit when they post, such as
+     * allocating a waiting Request when capacity frees.
+     */
+    @Transactional
+    public Credits lockedAvailable(TeamId team) {
+        return new Credits(lock(team).available());
+    }
+
+    /**
+     * (Unscoped) {@link #commitCharges} for a Request the system allocates on its own, such as a
+     * waiting Request filled from the waitlist when another Team releases capacity: the Charges name
+     * the system as actor, not the Member whose call freed the capacity.
+     *
+     * @throws RuleViolation {@code INSUFFICIENT_BALANCE}, with the {@code shortfall}
+     */
+    @Transactional
+    public void commitChargesBySystem(RequestId request, List<ChargeSpec> charges) {
+        postCharges(request, charges, null);
     }
 }
