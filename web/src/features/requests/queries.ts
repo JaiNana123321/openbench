@@ -183,3 +183,13 @@ export function useReleaseLine(requestId: Id) {
     onSuccess: invalidate,
   });
 }
+
+/** Marks a line Priority or standard; the server offers the mark on Exclusive lines only. */
+export function useSetPriority(requestId: Id) {
+  const invalidate = useInvalidateRequests();
+  return useMutation({
+    mutationFn: ({ lineId, priority }: { lineId: Id; priority: boolean }) =>
+      api.put<RequestLine>(`/api/requests/${requestId}/lines/${lineId}/priority`, { priority }),
+    onSuccess: invalidate,
+  });
+}

@@ -206,4 +206,26 @@ abstract class DemoWorldTest extends PostgresTest {
     private void grant(long team, String amount) {
         ledger.postGrant(new TeamId(team), new PeriodId(period), Credits.of(amount), null, null);
     }
+
+    // ---------------------------------------------------------------- weekly lines
+
+    /** Adds a line whose window recurs weekly for {@code occurrences} weeks in all, the first included. */
+    protected ResultActions addWeeklyLine(RequestPostProcessor caller, long draft, long type, int quantity,
+            Instant start, Instant end, Long namedResource, int occurrences) throws Exception {
+        String named = namedResource == null ? "" : ", \"namedResourceId\": " + namedResource;
+        return mvc.perform(post("/api/requests/{id}/lines", draft).with(caller)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"typeId\": " + type + ", \"quantity\": " + quantity + ", \"start\": \"" + start
+                        + "\", \"end\": \"" + end + "\"" + named + ", \"recurrence\": {\"occurrences\": "
+                        + occurrences + "}}"));
+    }
+
+    /** Adds a weekly line and returns its id. */
+    protected long weeklyLine(RequestPostProcessor caller, long draft, long type, int quantity, Instant start,
+            Instant end, Long namedResource, int occurrences) throws Exception {
+        String body = addWeeklyLine(caller, draft, type, quantity, start, end, namedResource, occurrences)
+                .andExpect(status().isCreated())
+                .andReturn().getResponse().getContentAsString();
+        return ((Number) JsonPath.read(body, "$.id")).longValue();
+    }
 }

@@ -155,6 +155,8 @@ public class RequestLifecycleService {
         for (RequestLineRow row : rows) {
             rules.check(new ResourceTypeId(row.typeId()), row.amount(), row.startsAt(), row.endsAt(),
                     row.namedResourceId() == null ? null : new ResourceId(row.namedResourceId()));
+            rules.checkRecurrence(new ResourceTypeId(row.typeId()), row.startsAt(), row.endsAt(), row.recurrence());
+            rules.checkPriority(new ResourceTypeId(row.typeId()), row.priority());
             row.lockQuote(views.currentQuote(row, current).map(Credits::amount).orElse(null));
         }
         request.submit(now);
@@ -401,8 +403,8 @@ public class RequestLifecycleService {
         }
     }
 
-    /** The copy of a submitted line that Allocation works on. Demo 1 has no Priority mark and no Bump. */
-    private static LineSnapshot snapshot(RequestRow request, RequestLineRow row) {
+    /** The copy of a submitted line that Allocation works on, with its occurrences in the company time zone. No Bump yet. */
+    private LineSnapshot snapshot(RequestRow request, RequestLineRow row) {
         boolean metered = row.allocationClass() == AllocationClass.METERED;
         return new LineSnapshot(
                 new RequestLineId(row.id()),
@@ -417,7 +419,8 @@ public class RequestLifecycleService {
                 row.required(),
                 row.priority(),
                 request.submittedAt(),
-                false);
+                false,
+                row.occurrences(clock.getZone()));
     }
 
     private Allocator allocatorOf(RequestLineRow row) {

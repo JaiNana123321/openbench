@@ -74,12 +74,20 @@ class ReleaseCasesTest extends ReleaseTest {
     }
 
     @Test
-    @DisplayName("rel-partial, steps 1, 2, and 4 (GPU): an earlier end returns 45.00 and 2 fewer units 22.50; L1 keeps its window, units, and prices")
-    @Verifies(value = "rel-partial", partial = true)
-    void releasesPartsOfAMeteredLine() throws Exception {
+    @DisplayName("rel-partial: an earlier end returns 45.00, 2 fewer units 22.50, and one weekly occurrence 22.50; the rest keeps its instances and prices")
+    @Verifies("rel-partial")
+    void releasesPartsOfALine() throws Exception {
         LocalDate d = dayD();
-        long[] a1 = submitted(alice, gpu, 4, at(d, 10), at(d, 14), null);
-        detail(as(alice), a1[0]).andExpect(jsonPath("$.lines[0].line.quote").value(120.00));
+        // Precondition: A1 with L1 GPU, 4 units, D 10:00-14:00 (120.00) and L2 Room B weekly on D, D+7, D+14 (90.00).
+        long request = createDraft(as(alice));
+        long l1 = line(as(alice), request, gpu, 4, at(d, 10), at(d, 14), null);
+        long l2 = weeklyLine(as(alice), request, room, 1, at(d, 10), at(d, 12), roomB, 3);
+        submit(as(alice), request).andExpect(jsonPath("$.state").value("ALLOCATED"));
+        long[] a1 = {request, l1};
+        detail(as(alice), a1[0])
+                .andExpect(jsonPath("$.lines[0].line.quote").value(120.00))
+                .andExpect(jsonPath("$.lines[1].line.quote").value(90.00))
+                .andExpect(jsonPath("$.lines[1].allocatedParts.length()").value(3));
 
         // 1. Release L1's hours 12:00-14:00: 4 units kept for 10:00-12:00; Refund 45.00 (60.00 x 0.75).
         release(alice, a1[0], a1[1], "{\"kind\": \"EARLIER_END\", \"newEnd\": \"" + at(d, 12) + "\"}")
@@ -101,13 +109,36 @@ class ReleaseCasesTest extends ReleaseTest {
                 .andExpect(jsonPath("$.refund.attributable").value(30.00))
                 .andExpect(jsonPath("$.refund.refund").value(22.50));
 
+        // 3. Release L2's occurrence on D+14: L2 keeps D and D+7 on Room B; Refund 22.50 (30.00 x 0.75).
+        release(alice, request, l2, "{\"kind\": \"OCCURRENCES\", \"occurrences\": [\"" + at(d.plusDays(14), 10) + "\"]}")
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.line.state").value("PARTLY_RELEASED"))
+                .andExpect(jsonPath("$.refund.attributable").value(30.00))
+                .andExpect(jsonPath("$.refund.pieces.length()").value(1))
+                .andExpect(jsonPath("$.refund.pieces[0].fraction").value(0.75))
+                .andExpect(jsonPath("$.refund.refund").value(22.50));
+        detail(as(alice), request)
+                .andExpect(jsonPath("$.lines[1].line.quote").value(90.00))
+                .andExpect(jsonPath("$.lines[1].allocatedParts.length()").value(2))
+                .andExpect(jsonPath("$.lines[1].allocatedParts[0].window.start").value(json(at(d, 10))))
+                .andExpect(jsonPath("$.lines[1].allocatedParts[1].window.start").value(json(at(d.plusDays(7), 10))))
+                .andExpect(jsonPath("$.lines[1].assignedResources[0].id").value(roomB));
+
         // 4. The GPU timeline: 2 units for Platform on D 10:00-12:00, and nothing else of L1 live.
         assertThat(jdbc.queryForList("""
                 SELECT units || ' ' || state || ' ' || to_char(starts_at AT TIME ZONE 'UTC', 'HH24') || '-'
                        || to_char(ends_at AT TIME ZONE 'UTC', 'HH24') || ' team ' || team_id
                 FROM metered_allocation WHERE line_id = ? AND state = 'ALLOCATED'""", String.class, a1[1]))
                 .containsExactly("2 ALLOCATED " + utcHour(at(d, 10)) + "-" + utcHour(at(d, 12)) + " team " + platform);
+        //    Room B: Platform on D and D+7 only; D+14 is free.
+        assertThat(liveOn(roomB, at(d, 10), at(d, 12))).containsExactly(l2 + ":ALLOCATED");
+        assertThat(liveOn(roomB, at(d.plusDays(7), 10), at(d.plusDays(7), 12))).containsExactly(l2 + ":ALLOCATED");
+        assertThat(liveOn(roomB, at(d.plusDays(14), 10), at(d.plusDays(14), 12))).isEmpty();
+
+        // Pass criteria: three Refunds totaling 90.00.
         assertThat(refundsOf(a1[1])).containsExactly("45.00/45.00/0.00", "22.50/22.50/0.00");
+        assertThat(refundsOf(l2)).containsExactly("22.50/22.50/0.00");
+        statement(as(alice), platform).andExpect(jsonPath("$.totals.refunds").value(90.00));
         assertThat(account(platform)).isEqualTo(foldOfTransactions(platform));
     }
 

@@ -1,5 +1,7 @@
 package edu.cwru.openbench.requests;
 
+import edu.cwru.openbench.common.TimeWindow;
+import edu.cwru.openbench.common.WeeklyRecurrence;
 import edu.cwru.openbench.inventory.AllocationClass;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -10,6 +12,8 @@ import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.time.ZoneId;
+import java.util.List;
 
 /**
  * A row of {@code request_line}: one need inside a Request, over the half-open window
@@ -57,6 +61,9 @@ class RequestLineRow {
     private Instant createdAt;
 
     private Long createdBy;
+
+    /** The weekly occurrences of an Exclusive line, the first included; null for a single occurrence. */
+    private Integer recurrence;
 
     protected RequestLineRow() {}
 
@@ -152,7 +159,29 @@ class RequestLineRow {
      */
     RequestLineRow split(int amountForNewLine, Instant at, Long actor) {
         change(amount() - amountForNewLine, startsAt, endsAt, namedResourceId);
-        return new RequestLineRow(requestId, typeId, allocationClass, amountForNewLine, startsAt, endsAt,
+        RequestLineRow part = new RequestLineRow(requestId, typeId, allocationClass, amountForNewLine, startsAt, endsAt,
                 namedResourceId, false, at, actor);
+        part.recurrence = recurrence;
+        part.priority = priority;
+        return part;
+    }
+
+    /** The line's weekly recurrence, or null for a line with one occurrence. */
+    WeeklyRecurrence recurrence() {
+        return recurrence == null ? null : new WeeklyRecurrence(recurrence);
+    }
+
+    /** Replaces the weekly recurrence; null for a single occurrence. */
+    void setRecurrence(WeeklyRecurrence recurrence) {
+        this.recurrence = recurrence == null ? null : recurrence.occurrences();
+    }
+
+    /** Every occurrence of the line, by start, in the company time zone: the window alone without a recurrence. */
+    List<TimeWindow> occurrences(ZoneId zone) {
+        return WeeklyRecurrence.occurrencesOf(new TimeWindow(startsAt, endsAt), recurrence(), zone);
+    }
+
+    void setPriority(boolean priority) {
+        this.priority = priority;
     }
 }

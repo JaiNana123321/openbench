@@ -11,18 +11,22 @@ import {
   Table,
   type Column,
 } from '../../ui';
-import { useRemoveLine, useSetRequired, useSplitLine } from './queries';
+import { useRemoveLine, useSetPriority, useSetRequired, useSplitLine } from './queries';
 
 interface LinesTableProps {
   requestId: Id;
   lines: RequestLine[];
-  /** True in a Draft its Manager edits: the Required toggle, split, and remove are offered. */
+  /** True in a Draft its Manager edits: the Required and Priority toggles, split, and remove are offered. */
   editable: boolean;
 }
 
-/** The Request's lines with their Quotes; in an editable Draft, the Required mark, split, and remove. */
+/**
+ * The Request's lines with their Quotes; in an editable Draft, the Required mark, the Priority mark
+ * (Exclusive lines only), split, and remove.
+ */
 export function LinesTable({ requestId, lines, editable }: LinesTableProps) {
   const setRequired = useSetRequired(requestId);
+  const setPriority = useSetPriority(requestId);
   const split = useSplitLine(requestId);
   const remove = useRemoveLine(requestId);
   const number = new Map(lines.map((line, index) => [line.id, index + 1]));
@@ -35,7 +39,7 @@ export function LinesTable({ requestId, lines, editable }: LinesTableProps) {
       cell: (line) => line.namedResourceName ?? (line.allocationClass === 'EXCLUSIVE' ? 'Any' : '—'),
     },
     { header: 'Quantity', cell: (line) => amountText(line), numeric: true },
-    { header: 'Window', cell: (line) => formatWindow(line.window) },
+    { header: 'Window', cell: (line) => lineWindowText(line) },
     { header: 'Quote', cell: (line) => (line.quote === null ? 'No price' : formatCredits(line.quote)), numeric: true },
     {
       header: 'Required',
@@ -55,6 +59,26 @@ export function LinesTable({ requestId, lines, editable }: LinesTableProps) {
           'Required'
         ) : (
           'Optional'
+        ),
+    },
+    {
+      header: 'Priority',
+      cell: (line) =>
+        editable && line.allocationClass === 'EXCLUSIVE' ? (
+          <label className="checkbox">
+            <input
+              type="checkbox"
+              checked={line.priority}
+              disabled={setPriority.isPending}
+              aria-label={`Line ${number.get(line.id)} Priority`}
+              onChange={(event) => setPriority.mutate({ lineId: line.id, priority: event.target.checked })}
+            />
+            {line.priority ? 'Priority' : 'Standard'}
+          </label>
+        ) : line.priority ? (
+          'Priority'
+        ) : (
+          '—'
         ),
     },
   ];
@@ -96,9 +120,15 @@ export function LinesTable({ requestId, lines, editable }: LinesTableProps) {
         rowKey={(line) => line.id}
         empty={<EmptyState title="No lines yet.">{editable && 'Add the first line above.'}</EmptyState>}
       />
-      <ProblemMessage error={setRequired.error ?? split.error ?? remove.error} />
+      <ProblemMessage error={setRequired.error ?? setPriority.error ?? split.error ?? remove.error} />
     </section>
   );
+}
+
+/** The window, and for a weekly line how many weeks it repeats: "Wed Dec 2, 10:00 to 12:00, weekly ×3". */
+export function lineWindowText(line: RequestLine): string {
+  const window = formatWindow(line.window);
+  return line.recurrence ? `${window}, weekly ×${line.recurrence.occurrences}` : window;
 }
 
 function amountText(line: RequestLine): string {

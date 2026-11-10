@@ -49,7 +49,7 @@ class RequestViews {
     /** The Quote of a line at these settings, or empty when its type has no pricing settings. */
     Optional<Credits> currentQuote(RequestLineRow line, PlannerSettings current) {
         return current.pricingOf(new ResourceTypeId(line.typeId())).map(pricing -> Pricing.quote(
-                new LineSpec(line.amount(), List.of(window(line)), line.priority(), clock.getZone()),
+                new LineSpec(line.amount(), line.occurrences(clock.getZone()), line.priority(), clock.getZone()),
                 pricing,
                 current.priorityPremium()).amount());
     }
@@ -103,7 +103,9 @@ class RequestViews {
                             : resourceNames.computeIfAbsent(named, id -> inventory.resource(new ResourceId(id)).name()),
                     row.required(),
                     row.state(),
-                    quote);
+                    quote,
+                    row.recurrence(),
+                    row.priority());
         }
 
         private TeamSummary team(Long id) {

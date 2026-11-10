@@ -49,8 +49,7 @@ class Refunds {
         Optional<TypePricing> pricing = settings.current().pricingOf(new ResourceTypeId(line.typeId()));
         Credits locked = line.lockedQuote() == null ? Credits.ZERO : new Credits(line.lockedQuote());
         RefundSchedule schedule = pricing.map(TypePricing::refundSchedule).orElse(RefundSchedule.NONE);
-        // A line has one occurrence, its window, until weekly recurrence (#19) lists each occurrence here.
-        LineSpec whole = new LineSpec(line.amount(), List.of(RequestViews.window(line)), line.priority(), zone);
+        LineSpec whole = new LineSpec(line.amount(), line.occurrences(zone), line.priority(), zone);
 
         List<RefundQuote.Piece> pieces = new ArrayList<>();
         Credits attributable = Credits.ZERO;

@@ -27,8 +27,9 @@ import org.springframework.transaction.annotation.Transactional;
  * Exclusive lines (requirements Exclusive.Conflict and Exclusive.Waitlist.Join): each instance is
  * held by at most one line at a time. A line fits when enough instances are free for its whole
  * window; without a named Resource it takes the free instances with the fewest ALLOCATED hours in
- * the current Period, ties by id. One row per occurrence and instance; Demo 1 has no recurrence, so
- * one occurrence, the window itself.
+ * the current Period, ties by id. One row per occurrence and instance: a line with a weekly
+ * recurrence needs the same instances free for every occurrence, and every occurrence lands on them,
+ * all or none.
  *
  * <p>Instances are chosen under the type lock, so {@code exclusive_occurrence_no_overlap} never
  * fires in normal operation; it stops a double allocation by a path that skipped the lock.
@@ -154,16 +155,17 @@ class ExclusiveAllocator implements Allocator, Waitlistable {
     private void insert(LineSnapshot line, RowState state) {
         List<Long> chosen = pick(line)
                 .orElseThrow(() -> new RuleViolation(NO_FREE_INSTANCE, noFreeInstance(line)));
-        TimeWindow window = line.window();
         occurrences.saveAllAndFlush(chosen.stream()
-                .map(resource -> new ExclusiveOccurrenceRow(line.lineId().value(), line.teamId().value(),
-                        line.requestId().value(), resource, window.start(), window.end(), state))
+                .flatMap(resource -> line.occurrences().stream()
+                        .map(window -> new ExclusiveOccurrenceRow(line.lineId().value(), line.teamId().value(),
+                                line.requestId().value(), resource, window.start(), window.end(), state)))
                 .toList());
     }
 
     /**
      * The instances the line would get: {@code quantity} free ones (or the named one) with the
-     * fewest ALLOCATED hours in the current Period, ties by id; empty when too few are free.
+     * fewest ALLOCATED hours in the current Period, ties by id; empty when too few are free. An
+     * instance is free when no live row on it overlaps any of the line's occurrences.
      */
     private Optional<List<Long>> pick(LineSnapshot line) {
         List<Long> candidates = inventory.instancesOf(line.typeId()).stream()
@@ -175,7 +177,9 @@ class ExclusiveAllocator implements Allocator, Waitlistable {
             return Optional.empty();
         }
         Set<Long> free = new HashSet<>(candidates);
-        free.removeAll(occurrences.busyAmong(candidates, RowState.LIVE, line.window().start(), line.window().end()));
+        for (TimeWindow occurrence : line.occurrences()) {
+            free.removeAll(occurrences.busyAmong(candidates, RowState.LIVE, occurrence.start(), occurrence.end()));
+        }
         if (free.size() < line.quantity()) {
             return Optional.empty();
         }
@@ -205,6 +209,9 @@ class ExclusiveAllocator implements Allocator, Waitlistable {
 
     private String noFreeInstance(LineSnapshot line) {
         String when = Windows.describe(line.window(), clock.getZone());
+        if (line.occurrences().size() > 1) {
+            when += " in every one of its " + line.occurrences().size() + " weekly occurrences";
+        }
         if (line.namedResource().isPresent()) {
             return inventory.resource(line.namedResource().get()).name() + " is not free from " + when + ".";
         }

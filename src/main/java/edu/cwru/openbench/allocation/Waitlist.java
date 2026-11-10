@@ -26,8 +26,9 @@ class Waitlist {
         if (entries.existsByLineId(line.lineId().value())) {
             return;
         }
+        // A recurring line waits over its whole span, so capacity freed in any of its weeks reaches it.
         entries.saveAndFlush(new WaitlistEntryRow(line.lineId().value(), line.typeId().value(),
-                line.window().start(), line.window().end(), line.priority(), line.bumped(), line.submittedAt()));
+                line.span().start(), line.span().end(), line.priority(), line.bumped(), line.submittedAt()));
     }
 
     void leave(LineSnapshot line) {
