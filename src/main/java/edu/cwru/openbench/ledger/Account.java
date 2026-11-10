@@ -46,4 +46,17 @@ class Account {
         earned = earned.subtract(amount.subtract(fromGranted));
         return fromGranted;
     }
+
+    BigDecimal granted() {
+        return granted;
+    }
+
+    BigDecimal earned() {
+        return earned;
+    }
+
+    /** The rollover: granted credits of the ended Period expire; earned and held credits are untouched. */
+    void expire(BigDecimal amount) {
+        granted = granted.subtract(amount);
+    }
 }

@@ -34,4 +34,7 @@ interface WaitlistEntryRepository extends JpaRepository<WaitlistEntryRow, Long> 
                             < (NOT me.bumped, NOT me.priority, me.joined_at, me.id))
             FROM waitlist_entry me WHERE me.line_id = :lineId""", nativeQuery = true)
     Integer positionOf(Long lineId);
+
+    /** Every entry whose window started at or before the instant, of any type. */
+    List<WaitlistEntryRow> findByStartsAtLessThanEqualOrderById(Instant now);
 }

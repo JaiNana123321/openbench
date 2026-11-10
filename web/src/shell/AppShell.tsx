@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import { Link, NavLink, Outlet } from 'react-router';
 import { useCurrentMember } from '../auth/currentMember';
 import { hasAnyRole } from '../auth/roles';
@@ -5,6 +6,7 @@ import { useSignOut } from '../auth/session';
 import { Button } from '../ui';
 import type { NavItem } from './feature';
 import { NavItemsContext } from './navigation';
+import { useUnreadNotifications } from './unreadNotifications';
 
 /** The frame of every signed-in page: the header with the menu and the Member, then the page. */
 export function AppShell({ nav }: { nav: readonly NavItem[] }) {
@@ -27,6 +29,7 @@ export function AppShell({ nav }: { nav: readonly NavItem[] }) {
             ))}
           </nav>
           <div className="session">
+            <UnreadLink />
             <div className="session__who">
               <span className="session__name">{me.name}</span>
               <span className="session__team">{me.team.name}</span>
@@ -43,3 +46,27 @@ export function AppShell({ nav }: { nav: readonly NavItem[] }) {
     </NavItemsContext>
   );
 }
+
+/**
+ * The header's link to the notifications page, with the number of unread notices once known.
+ * Memoized, so it renders only when its own query changes: when signing out re-renders the shell
+ * after the query cache was cleared, a render here would put the query back into the empty cache.
+ */
+const UnreadLink = memo(function UnreadLink() {
+  const unread = useUnreadNotifications();
+  const count = unread.data?.totalElements ?? 0;
+  return (
+    <NavLink
+      to="/notifications"
+      className="notices-link"
+      aria-label={count === 0 ? 'Notifications' : `Notifications, ${count} unread`}
+    >
+      Notifications
+      {count > 0 && (
+        <span className="notices-count" aria-hidden="true">
+          {count}
+        </span>
+      )}
+    </NavLink>
+  );
+});

@@ -163,7 +163,7 @@ describe('Team view', () => {
     const { user } = renderApp('/team');
 
     const table = await screen.findByRole('table', { name: 'Team Members' });
-    expect(server.calls[1].path).toBe(`/api/teams/${alice.team.id}/members`);
+    expect(server.callsTo('GET /api/teams/:id/members')[0].path).toBe(`/api/teams/${alice.team.id}/members`);
     expect(within(table).getByRole('row', { name: /Old Hand/ })).toHaveTextContent('Deactivated');
     await user.click(within(table).getByRole('link', { name: 'Ben Ortiz' }));
 

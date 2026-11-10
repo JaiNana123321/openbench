@@ -797,3 +797,38 @@ textarea:focus {
   color: var(--ink-muted);
   font-size: var(--text-sm);
 }
+
+/* ------------------------------------------------------------------ Notifications */
+
+.notices-link {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 6px var(--space-3);
+  border-radius: var(--radius);
+  color: rgb(255 255 255 / 78%);
+  font-weight: 500;
+}
+
+.notices-link:hover {
+  background: rgb(255 255 255 / 8%);
+  color: var(--brand-ink);
+  text-decoration: none;
+}
+
+.notices-link.active {
+  background: rgb(255 255 255 / 16%);
+  color: var(--brand-ink);
+}
+
+.notices-count {
+  min-width: 20px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: var(--brand-ink);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  line-height: 20px;
+  text-align: center;
+}

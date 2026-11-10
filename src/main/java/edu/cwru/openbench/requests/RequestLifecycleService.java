@@ -6,6 +6,7 @@ import edu.cwru.openbench.allocation.Allocator;
 import edu.cwru.openbench.allocation.AllocatorRegistry;
 import edu.cwru.openbench.allocation.Evaluation;
 import edu.cwru.openbench.allocation.LineSnapshot;
+import edu.cwru.openbench.allocation.WaitingLine;
 import edu.cwru.openbench.allocation.Waitlistable;
 import edu.cwru.openbench.common.Actor;
 import edu.cwru.openbench.common.Credits;
@@ -21,6 +22,8 @@ import edu.cwru.openbench.inventory.InventoryQueries;
 import edu.cwru.openbench.ledger.ChargeSpec;
 import edu.cwru.openbench.ledger.LedgerService;
 import edu.cwru.openbench.members.MemberService;
+import edu.cwru.openbench.notifications.NotificationKind;
+import edu.cwru.openbench.notifications.Notifier;
 import edu.cwru.openbench.settings.PlannerSettings;
 import edu.cwru.openbench.settings.SettingsService;
 import jakarta.persistence.EntityManager;
@@ -40,7 +43,9 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 
 /**
  * The Request lifecycle (design Section 4.8, {@code RequestLifecycleService}): submission to
@@ -81,11 +86,16 @@ public class RequestLifecycleService {
     private final MemberService members;
     private final EntityManager entityManager;
     private final Clock clock;
+    private final Notifier notifier;
+    private final TransactionTemplate transactions;
 
     RequestLifecycleService(RequestLineRepository lines, RequestEventRepository events, RequestAccess access,
             LineRules rules, RequestViews views, AllocationLock typeLock, AllocatorRegistry allocators,
             AllocationQueries allocation, LedgerService ledger, SettingsService settings, InventoryQueries inventory,
-            MemberService members, EntityManager entityManager, Clock clock) {
+            MemberService members, EntityManager entityManager, Clock clock, Notifier notifier,
+            TransactionTemplate transactions) {
+        this.notifier = notifier;
+        this.transactions = transactions;
         this.lines = lines;
         this.events = events;
         this.access = access;
@@ -227,6 +237,8 @@ public class RequestLifecycleService {
         }
         request.moveTo(RequestState.ALLOCATED);
         record(request, null, RequestState.SUBMITTED.name(), RequestState.ALLOCATED.name(), actor, now, null);
+        Credits charged = charges.stream().map(ChargeSpec::amount).reduce(Credits.ZERO, Credits::plus);
+        notifyManager(request, "Request " + request.id() + " is Allocated; its Charges total " + charged + " credits.");
     }
 
     /**
@@ -251,10 +263,13 @@ public class RequestLifecycleService {
         request.moveTo(RequestState.WAITING);
         record(request, null, RequestState.SUBMITTED.name(), RequestState.WAITING.name(), actor, now,
                 waiting == 1 ? "1 Required line waits for capacity." : waiting + " Required lines wait for capacity.");
+        notifyManager(request, "Request " + request.id() + " is Waiting: "
+                + (waiting == 1 ? "1 Required line waits for capacity." : waiting + " Required lines wait for capacity."));
     }
 
     private void drop(RequestRow request, RequestLineRow line, String reason, String message, Actor actor, Instant now) {
         changeLine(request, line, RequestLineState.DROPPED, actor, now, reason + ": " + message);
+        notifyManager(request, "An Optional line of Request " + request.id() + " was Dropped: " + message);
     }
 
     /** Whether the Available Balance, Holds already placed in this transaction included, covers the Quote. */
@@ -298,6 +313,7 @@ public class RequestLifecycleService {
         }
         request.moveTo(RequestState.WITHDRAWN);
         record(request, null, from, RequestState.WITHDRAWN.name(), actor, now, null);
+        notifyManager(request, "Request " + request.id() + " was withdrawn.");
         log.info("event=request_withdrawn request={} team={} from={} actor={}", request.id(), request.teamId(), from,
                 actor.memberId().value());
         return views.session().request(request);
@@ -430,5 +446,64 @@ public class RequestLifecycleService {
         Evaluated with(Evaluation newer) {
             return new Evaluated(row, snapshot, newer);
         }
+    }
+
+    // ---------------------------------------------------------------- jobs: waitlist expiry
+
+    /**
+     * (Unscoped, for {@code DueWorkJob}) Takes every waiting line whose window started at or before
+     * {@code now} off its waitlist (SRS Exclusive.Waitlist.Expire): the line stays Waiting, and so
+     * does its Request, until the Manager edits or withdraws it; a line event records the expiry with
+     * the system as actor. A line whose window has not started is never touched.
+     *
+     * <p>Each line is its own transaction, in the lock order of every transition (the Request, then
+     * the line's type), and is checked again under the locks. A line that fails is logged with its
+     * id and the run moves on; the next run retries it, since its entry is still there. Returns the
+     * number of lines taken off.
+     */
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
+    public int expireWaitingLines(Instant now) {
+        int expired = 0;
+        for (WaitingLine waiting : allocation.waitingStartedBy(now)) {
+            try {
+                if (Boolean.TRUE.equals(transactions.execute(status -> expireWaitingLine(waiting.lineId(), now)))) {
+                    expired++;
+                }
+            } catch (RuntimeException e) {
+                log.error("event=waitlist_expiry_failed line={} cause=\"{}\"", waiting.lineId().value(), e.getMessage(), e);
+            }
+        }
+        return expired;
+    }
+
+    /** One line's expiry, in the caller's transaction. False when there was nothing to do. */
+    private boolean expireWaitingLine(RequestLineId lineId, Instant now) {
+        Long requestId = lines.findRequestIdById(lineId.value())
+                .orElseThrow(() -> new IllegalStateException("Line " + lineId.value() + " does not exist."));
+        RequestRow request = access.lockForSystem(new RequestId(requestId));
+        RequestLineRow row = lines.findById(lineId.value()).orElseThrow();
+        if (row.startsAt().isAfter(now)) {
+            return false;
+        }
+        typeLock.lockTypes(new TreeSet<>(List.of(new ResourceTypeId(row.typeId()))));
+        if (allocation.waitlistPosition(lineId).isEmpty()) {
+            return false;
+        }
+        if (row.state() != RequestLineState.WAITING) {
+            throw new IllegalStateException("Line " + lineId.value() + " is on the waitlist but is "
+                    + row.state().name().toLowerCase() + ", not waiting.");
+        }
+        waitlistOf(row).leave(snapshot(request, row));
+        record(request, row.id(), RequestLineState.WAITING.name(), RequestLineState.WAITING.name(), null, now,
+                "WINDOW_STARTED: The line's window started before capacity freed, so it left the waitlist."
+                        + " Edit or withdraw the Request.");
+        log.info("event=waitlist_expired request={} line={} actor=system", request.id(), row.id());
+        return true;
+    }
+
+    /** A {@code REQUEST_UPDATE} notice to the Manager of the Request's Team, linking to the Request. */
+    private void notifyManager(RequestRow request, String text) {
+        members.findManagerOf(new TeamId(request.teamId())).ifPresent(manager ->
+                notifier.notify(manager, NotificationKind.REQUEST_UPDATE, text, "/requests/" + request.id()));
     }
 }

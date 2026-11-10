@@ -3,10 +3,12 @@ package edu.cwru.openbench;
 import jakarta.servlet.http.Cookie;
 import java.util.Arrays;
 import java.util.UUID;
+import org.junit.jupiter.api.AfterEach;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
+import org.springframework.context.annotation.Import;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors;
@@ -25,8 +27,13 @@ import org.testcontainers.utility.MountableFile;
  *
  * <p>For HTTP calls as a Member, add {@code .with(signedInAs(username))} and, on POST, PUT, and
  * DELETE, {@code .with(xsrf())}.
+ *
+ * <p>The scheduled jobs are off ({@code openbench.jobs.enabled=false}): a test calls a job's
+ * {@code run()} itself. The injected {@code Clock} is a {@link MovableClock}, the real time until a
+ * test sets it; a test that sets it resets it when it ends.
  */
-@SpringBootTest
+@SpringBootTest(properties = "openbench.jobs.enabled=false")
+@Import(MovableClock.Config.class)
 @AutoConfigureMockMvc
 public abstract class PostgresTest {
 
@@ -49,6 +56,15 @@ public abstract class PostgresTest {
 
     @Autowired
     private UserDetailsService userDetailsService;
+
+    /** The application's Clock; {@code set} it to move time. Every test ends with it reset. */
+    @Autowired
+    protected MovableClock movableClock;
+
+    @AfterEach
+    void resetTheClock() {
+        movableClock.reset();
+    }
 
     protected TestData testData() {
         return new TestData(jdbc);
