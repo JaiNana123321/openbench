@@ -1,7 +1,6 @@
 package edu.cwru.openbench;
 
 import edu.cwru.openbench.common.Role;
-import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
@@ -243,20 +242,19 @@ public final class TestData {
     // ---------------------------------------------------------------- Ledger: earned credits
 
     /**
-     * Earned credits for the Team, as {@code LedgerService} would post an Earning: an {@code EARNING}
-     * Transaction of {@code amount} (all earned part, no Loan) in the Period containing the database's
-     * current date, and the Team's account row's {@code earned} grown by it (the row is created if
-     * missing). For test setup until Loans post real Earnings.
+     * Earned credits for the Team, as {@code LedgerService} would post an Earning for a Loan (which
+     * comes with the Matched increment): an {@code EARNING} Transaction of the amount, all earned,
+     * into the Period containing today in the company zone, posted now by the system, and the
+     * Team's {@code account} row (created if missing) with {@code earned} grown by the amount.
      */
     public void postEarning(long teamId, String amount) {
-        BigDecimal earned = new BigDecimal(amount);
-        LocalDate today = jdbc.queryForObject("SELECT current_date", LocalDate.class);
-        long period = periodContaining(today);
+        long period = jdbc.queryForObject(
+                "SELECT id FROM period WHERE starts_on <= current_date AND ends_on >= current_date", Long.class);
         jdbc.update("""
                 INSERT INTO transaction (team_id, kind, amount, granted_part, earned_part, period_id, posted_at)
-                VALUES (?, 'EARNING', ?, 0, ?, ?, now())""", teamId, earned, earned, period);
+                VALUES (?, 'EARNING', ?::numeric, 0, ?::numeric, ?, now())""", teamId, amount, amount, period);
         jdbc.update("""
-                INSERT INTO account (team_id, earned) VALUES (?, ?)
-                ON CONFLICT (team_id) DO UPDATE SET earned = account.earned + EXCLUDED.earned""", teamId, earned);
+                INSERT INTO account (team_id, earned) VALUES (?, ?::numeric)
+                ON CONFLICT (team_id) DO UPDATE SET earned = account.earned + EXCLUDED.earned""", teamId, amount);
     }
 }
