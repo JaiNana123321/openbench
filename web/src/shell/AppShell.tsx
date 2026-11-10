@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import { Link, NavLink, Outlet } from 'react-router';
 import { useCurrentMember } from '../auth/currentMember';
 import { hasAnyRole } from '../auth/roles';
@@ -46,8 +47,12 @@ export function AppShell({ nav }: { nav: readonly NavItem[] }) {
   );
 }
 
-/** The header's link to the notifications page, with the number of unread notices once known. */
-function UnreadLink() {
+/**
+ * The header's link to the notifications page, with the number of unread notices once known.
+ * Memoized, so it renders only when its own query changes: when signing out re-renders the shell
+ * after the query cache was cleared, a render here would put the query back into the empty cache.
+ */
+const UnreadLink = memo(function UnreadLink() {
   const unread = useUnreadNotifications();
   const count = unread.data?.totalElements ?? 0;
   return (
@@ -64,4 +69,4 @@ function UnreadLink() {
       )}
     </NavLink>
   );
-}
+});
