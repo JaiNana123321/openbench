@@ -4,6 +4,7 @@ import edu.cwru.openbench.common.NotFoundException;
 import edu.cwru.openbench.common.ResourceId;
 import edu.cwru.openbench.common.ResourceTypeId;
 import edu.cwru.openbench.common.RuleViolation;
+import edu.cwru.openbench.common.WeeklyRecurrence;
 import edu.cwru.openbench.inventory.AllocationClass;
 import edu.cwru.openbench.inventory.InventoryQueries;
 import edu.cwru.openbench.inventory.Resource;
@@ -25,7 +26,10 @@ import org.springframework.stereotype.Component;
  * <li>the quantity is at least 1 ({@code QUANTITY_INVALID});
  * <li>a named Resource exists ({@code RESOURCE_UNKNOWN}), only on an Exclusive line
  *     ({@code NAMED_RESOURCE_NOT_OFFERED}), is of the line's type ({@code TYPE_MISMATCH}), is not
- *     retired ({@code RESOURCE_RETIRED}), and makes the quantity 1 ({@code QUANTITY_INVALID}).
+ *     retired ({@code RESOURCE_RETIRED}), and makes the quantity 1 ({@code QUANTITY_INVALID});
+ * <li>a weekly recurrence only on an Exclusive line ({@code RECURRENCE_NOT_OFFERED}), with 2 to 52
+ *     occurrences and a window of at most one week, so that its occurrences never overlap each other
+ *     ({@code RECURRENCE_INVALID}).
  * </ul>
  */
 @Component
@@ -105,6 +109,29 @@ class LineRules {
         }
         if (quantity != 1) {
             throw new RuleViolation("QUANTITY_INVALID", "A line that names " + resource.name() + " asks for 1 instance.");
+        }
+    }
+
+    /** Checks a line's weekly recurrence, if it has one; call after {@link #check} for the same line. */
+    void checkRecurrence(ResourceTypeId typeId, Instant start, Instant end, WeeklyRecurrence recurrence) {
+        if (recurrence == null) {
+            return;
+        }
+        ResourceType type = typeOf(typeId);
+        if (type.allocationClass() != AllocationClass.EXCLUSIVE) {
+            throw new RuleViolation("RECURRENCE_NOT_OFFERED",
+                    "A " + type.name() + " line cannot recur; only lines for Exclusive resources recur weekly.");
+        }
+        int occurrences = recurrence.occurrences();
+        if (occurrences < WeeklyRecurrence.MIN_OCCURRENCES || occurrences > WeeklyRecurrence.MAX_OCCURRENCES) {
+            throw new RuleViolation("RECURRENCE_INVALID", "A weekly line has " + WeeklyRecurrence.MIN_OCCURRENCES
+                    + " to " + WeeklyRecurrence.MAX_OCCURRENCES + " occurrences.");
+        }
+        Instant secondStart = LocalDateTime.ofInstant(start, clock.getZone()).plusWeeks(1)
+                .atZone(clock.getZone()).toInstant();
+        if (end.isAfter(secondStart)) {
+            throw new RuleViolation("RECURRENCE_INVALID",
+                    "A weekly line's window lasts at most one week, so that its occurrences do not overlap.");
         }
     }
 }

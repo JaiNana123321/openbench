@@ -7,7 +7,8 @@ import { useAddLine, useLineTypes, useResourcesOfType } from './queries';
 /**
  * Adds a line to a Draft: a Resource Type (Exclusive or Metered; People come later), for an
  * Exclusive type optionally one specific Resource, the instances or units, and a window on whole
- * hours. The server validates and prices it; the Draft view then refetches.
+ * hours, which an Exclusive line may repeat weekly. The server validates and prices it; the Draft
+ * view then refetches.
  */
 export function AddLineForm({ requestId }: { requestId: Id }) {
   const types = useLineTypes();
@@ -17,6 +18,7 @@ export function AddLineForm({ requestId }: { requestId: Id }) {
   const [quantity, setQuantity] = useState('1');
   const [start, setStart] = useState('');
   const [end, setEnd] = useState('');
+  const [weeks, setWeeks] = useState('1');
 
   const choices = (types.data ?? []).filter((type) => type.allocationClass !== 'MATCHED');
   const type = choices.find((choice) => String(choice.id) === typeId);
@@ -33,11 +35,13 @@ export function AddLineForm({ requestId }: { requestId: Id }) {
         start: toInstant(start),
         end: toInstant(end),
         namedResourceId: exclusive && resourceId !== '' ? Number(resourceId) : undefined,
+        recurrence: exclusive && Number(weeks) > 1 ? { occurrences: Number(weeks) } : undefined,
       },
       {
         onSuccess: () => {
           setResourceId('');
           setQuantity('1');
+          setWeeks('1');
         },
       },
     );
@@ -112,6 +116,23 @@ export function AddLineForm({ requestId }: { requestId: Id }) {
               onChange={(event) => setEnd(event.target.value)}
             />
           </Field>
+          {exclusive && (
+            <Field
+              label="Weekly occurrences"
+              hint="1 for this window only; up to 52 to repeat it on the same hours every week."
+              error={fieldError(add.error, 'recurrence')}
+            >
+              <input
+                type="number"
+                min={1}
+                max={52}
+                step={1}
+                value={weeks}
+                required
+                onChange={(event) => setWeeks(event.target.value)}
+              />
+            </Field>
+          )}
         </div>
         <ProblemMessage error={add.error} />
         <div className="actions">

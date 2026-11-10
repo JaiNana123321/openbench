@@ -6,6 +6,7 @@ import edu.cwru.openbench.common.RequestLineId;
 import edu.cwru.openbench.common.ResourceId;
 import edu.cwru.openbench.common.ResourceTypeId;
 import edu.cwru.openbench.common.TimeWindow;
+import edu.cwru.openbench.common.WeeklyRecurrence;
 import edu.cwru.openbench.inventory.AllocationClass;
 
 /**
@@ -13,7 +14,9 @@ import edu.cwru.openbench.inventory.AllocationClass;
  * units of a Metered type. {@code quote} is the line's price: in a Draft, computed now at the current
  * settings; once submitted, the locked Quote. It is null when the type has no pricing settings (a
  * Draft line counts 0.00 in the sums then). {@code namedResource} and {@code namedResourceName} are
- * null unless an Exclusive line names one Resource.
+ * null unless an Exclusive line names one Resource. {@code window} is the first occurrence;
+ * {@code recurrence} is null unless an Exclusive line recurs weekly, and the Quote then covers every
+ * occurrence.
  */
 public record RequestLine(
         RequestLineId id,
@@ -27,4 +30,5 @@ public record RequestLine(
         String namedResourceName,
         boolean required,
         RequestLineState state,
-        Credits quote) {}
+        Credits quote,
+        WeeklyRecurrence recurrence) {}

@@ -8,6 +8,7 @@ import edu.cwru.openbench.common.TeamId;
 import edu.cwru.openbench.common.TimeWindow;
 import edu.cwru.openbench.inventory.AllocationClass;
 import java.time.Instant;
+import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 
@@ -22,6 +23,9 @@ import java.util.Optional;
  * @param submittedAt the Request's submission time, which orders the waitlist
  * @param bumped whether the line lost its occurrences to a Priority line, which puts it at the head
  *     of the waitlist
+ * @param occurrences every occurrence of the line, by start: the window alone, or one window per week
+ *     of a weekly recurrence (only an Exclusive line recurs), expanded by Requests in the company time
+ *     zone; the first is {@code window}
  */
 public record LineSnapshot(
         RequestLineId lineId,
@@ -36,7 +40,8 @@ public record LineSnapshot(
         boolean required,
         boolean priority,
         Instant submittedAt,
-        boolean bumped) {
+        boolean bumped,
+        List<TimeWindow> occurrences) {
 
     public LineSnapshot {
         Objects.requireNonNull(lineId, "lineId");
@@ -56,5 +61,26 @@ public record LineSnapshot(
         if (namedResource.isPresent() && quantity != 1) {
             throw new IllegalArgumentException("A line that names a Resource asks for exactly that one instance.");
         }
+        occurrences = occurrences == null ? List.of(window) : List.copyOf(occurrences);
+        if (occurrences.isEmpty() || !occurrences.getFirst().equals(window)) {
+            throw new IllegalArgumentException("A line's first occurrence is its window.");
+        }
+        if (occurrences.size() > 1 && allocationClass != AllocationClass.EXCLUSIVE) {
+            throw new IllegalArgumentException("Only an Exclusive line recurs.");
+        }
+    }
+
+    /** A line with one occurrence, its window. */
+    public LineSnapshot(RequestLineId lineId, RequestId requestId, TeamId teamId, ResourceTypeId typeId,
+            AllocationClass allocationClass, int quantity, Integer units, TimeWindow window,
+            Optional<ResourceId> namedResource, boolean required, boolean priority, Instant submittedAt,
+            boolean bumped) {
+        this(lineId, requestId, teamId, typeId, allocationClass, quantity, units, window, namedResource, required,
+                priority, submittedAt, bumped, null);
+    }
+
+    /** From the start of the first occurrence to the end of the last: the window itself without a recurrence. */
+    public TimeWindow span() {
+        return new TimeWindow(window.start(), occurrences.getLast().end());
     }
 }

@@ -242,6 +242,8 @@ export interface RequestLine {
   required: boolean;
   state: RequestLineState;
   quote: Credits | null;
+  /** Null unless an Exclusive line recurs weekly; `window` is then the first occurrence and the Quote covers all. */
+  recurrence: WeeklyRecurrence | null;
 }
 
 /** The body of POST /api/requests/{id}/lines. `namedResourceId` is for an Exclusive line only. */
@@ -251,6 +253,8 @@ export interface NewLine {
   start: Instant;
   end: Instant;
   namedResourceId?: Id;
+  /** An Exclusive line only; absent for a single occurrence. */
+  recurrence?: WeeklyRecurrence;
 }
 
 /** The body of PUT /api/requests/{id}/lines/{lineId}: the line's ask, replaced whole; the type stays. */
@@ -259,6 +263,8 @@ export interface LineEdit {
   start: Instant;
   end: Instant;
   namedResourceId?: Id;
+  /** An Exclusive line only; absent for a single occurrence. */
+  recurrence?: WeeklyRecurrence;
 }
 
 /**
@@ -441,4 +447,11 @@ export interface RefundQuote {
 export interface ReleaseOutcome {
   line: RequestLine;
   refund: RefundQuote;
+}
+
+// ---------------------------------------------------------------- Requests: weekly recurrence
+
+/** An Exclusive line's window repeated on the same hours every week, `occurrences` weeks in all (2 to 52). */
+export interface WeeklyRecurrence {
+  occurrences: number;
 }

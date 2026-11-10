@@ -83,9 +83,11 @@ public class RequestService {
     public RequestLine addLine(Actor actor, RequestId id, NewLine line) {
         RequestRow request = access.editableDraft(actor, id);
         ResourceType type = rules.check(line.typeId(), line.quantity(), line.start(), line.end(), line.namedResourceId());
+        rules.checkRecurrence(type.id(), line.start(), line.end(), line.recurrence());
         RequestLineRow row = lines.save(new RequestLineRow(request.id(), type.id().value(), type.allocationClass(),
                 line.quantity(), line.start(), line.end(), idOrNull(line.namedResourceId()), true,
                 clock.instant(), actor.memberId().value()));
+        row.setRecurrence(line.recurrence());
         return views.session().line(request, row);
     }
 
@@ -96,7 +98,9 @@ public class RequestService {
         RequestRow request = access.editableDraft(actor, id);
         RequestLineRow row = lineOf(request, lineId);
         rules.check(new ResourceTypeId(row.typeId()), edit.quantity(), edit.start(), edit.end(), edit.namedResourceId());
+        rules.checkRecurrence(new ResourceTypeId(row.typeId()), edit.start(), edit.end(), edit.recurrence());
         row.change(edit.quantity(), edit.start(), edit.end(), idOrNull(edit.namedResourceId()));
+        row.setRecurrence(edit.recurrence());
         return views.session().line(request, row);
     }
 

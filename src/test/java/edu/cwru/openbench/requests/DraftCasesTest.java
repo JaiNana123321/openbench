@@ -160,6 +160,24 @@ class DraftCasesTest extends DemoWorldTest {
                 .andExpect(jsonPath("$.code").value("PRIORITY_NOT_OFFERED"));
     }
 
+    @Test
+    @DisplayName("drf-line-options, step 3 (weekly part): a Meeting room line weekly on D, D+7, D+14 has three occurrences; Quote 90.00 (Q5)")
+    @Verifies(value = "drf-line-options", partial = true)
+    void acceptsAWeeklyExclusiveLine() throws Exception {
+        LocalDate d = dayD();
+        long draft = createDraft(as(alice));
+
+        // 3. L2 without its Priority mark: Meeting room, quantity 1, D 10:00-12:00, weekly on D, D+7, D+14.
+        addWeeklyLine(as(alice), draft, room, 1, at(d, 10), at(d, 12), null, 3)
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.recurrence.occurrences").value(3))
+                .andExpect(jsonPath("$.quote").value(90.00));
+        draftView(as(alice), draft)
+                .andExpect(jsonPath("$.lines.length()").value(1))
+                .andExpect(jsonPath("$.lines[0].recurrence.occurrences").value(3))
+                .andExpect(jsonPath("$.requiredSum").value(90.00));
+    }
+
     // ---------------------------------------------------------------- API calls
 
     private ResultActions draftView(RequestPostProcessor caller, long draft) throws Exception {

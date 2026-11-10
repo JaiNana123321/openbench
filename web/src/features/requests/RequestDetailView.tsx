@@ -17,6 +17,7 @@ import {
   Table,
   type Column,
 } from '../../ui';
+import { lineWindowText } from './LinesTable';
 import { useRequestDetail, useWithdrawRequest } from './queries';
 import { ReleaseForm } from './ReleaseForm';
 
@@ -122,7 +123,7 @@ function lineColumns(number: Map<Id, number>): Column<LineDetail>[] {
     { header: '#', cell: ({ line }) => number.get(line.id), numeric: true },
     { header: 'Resource Type', cell: ({ line }) => `${line.typeName} (${formatEnum(line.allocationClass)})` },
     { header: 'Quantity', cell: ({ line }) => amountText(line.allocationClass, line.quantity), numeric: true },
-    { header: 'Window', cell: ({ line }) => formatWindow(line.window) },
+    { header: 'Window', cell: ({ line }) => lineWindowText(line) },
     { header: 'Required', cell: ({ line }) => (line.required ? 'Required' : 'Optional') },
     { header: 'State', cell: ({ line }) => <StatusBadge status={line.state} /> },
     {

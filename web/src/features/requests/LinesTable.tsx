@@ -35,7 +35,7 @@ export function LinesTable({ requestId, lines, editable }: LinesTableProps) {
       cell: (line) => line.namedResourceName ?? (line.allocationClass === 'EXCLUSIVE' ? 'Any' : '—'),
     },
     { header: 'Quantity', cell: (line) => amountText(line), numeric: true },
-    { header: 'Window', cell: (line) => formatWindow(line.window) },
+    { header: 'Window', cell: (line) => lineWindowText(line) },
     { header: 'Quote', cell: (line) => (line.quote === null ? 'No price' : formatCredits(line.quote)), numeric: true },
     {
       header: 'Required',
@@ -99,6 +99,12 @@ export function LinesTable({ requestId, lines, editable }: LinesTableProps) {
       <ProblemMessage error={setRequired.error ?? split.error ?? remove.error} />
     </section>
   );
+}
+
+/** The window, and for a weekly line how many weeks it repeats: "Wed Dec 2, 10:00 to 12:00, weekly ×3". */
+export function lineWindowText(line: RequestLine): string {
+  const window = formatWindow(line.window);
+  return line.recurrence ? `${window}, weekly ×${line.recurrence.occurrences}` : window;
 }
 
 function amountText(line: RequestLine): string {
