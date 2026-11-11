@@ -12,7 +12,8 @@ import java.util.Optional;
  * Every Capacity Planner setting as one typed snapshot (design Section 4.3), read by the modules
  * that do the arithmetic. {@code pricing} has an entry per priced Exclusive or Metered type;
  * {@code quotas} the Quotas that exist (no entry: no Quota); {@code grants} each Team's planned
- * Grant for the current Period, which is that Period's plan or else the Team's most recent earlier one.
+ * Grant for the current Period, which is that Period's plan or else the Team's most recent earlier one;
+ * {@code periodMonths} the length of Periods not yet started, in calendar months.
  */
 public record PlannerSettings(
         Period currentPeriod,
@@ -21,7 +22,8 @@ public record PlannerSettings(
         BigDecimal priorityPremium,
         Map<ResourceTypeId, TypePricing> pricing,
         Map<TeamTypeKey, Integer> quotas,
-        Map<TeamId, Credits> grants) {
+        Map<TeamId, Credits> grants,
+        int periodMonths) {
 
     public PlannerSettings {
         Objects.requireNonNull(currentPeriod, "currentPeriod");

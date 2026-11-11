@@ -183,7 +183,7 @@ class SettingsUpdateTest extends PostgresTest {
         LocalDate current = jdbc.queryForObject("SELECT starts_on FROM period WHERE id = ?", LocalDate.class, currentPeriod);
         testData().grantPlan(team, second, "900.00");
         try {
-            set("period_months", "3").andExpect(status().isOk());
+            set("period_months", "3").andExpect(status().isOk()).andExpect(jsonPath("$.periodMonths").value(3));
 
             assertThat(jdbc.queryForObject("SELECT starts_on FROM period WHERE id = ?", LocalDate.class, currentPeriod))
                     .as("the current Period is unchanged").isEqualTo(current);

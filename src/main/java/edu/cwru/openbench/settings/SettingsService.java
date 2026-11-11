@@ -42,6 +42,7 @@ public class SettingsService {
     static final String DAY_RATE = "day_rate";
     static final String PRIORITY_PREMIUM = "priority_premium";
     static final String OBJECTION_WINDOW = "objection_window_working_days";
+    static final String PERIOD_MONTHS = "period_months";
 
     private final Clock clock;
     private final PeriodRepository periods;
@@ -151,7 +152,8 @@ public class SettingsService {
                 new BigDecimal(required(values, PRIORITY_PREMIUM)),
                 pricing(),
                 quotaMap,
-                grants);
+                grants,
+                Integer.parseInt(required(values, PERIOD_MONTHS)));
     }
 
     /**
