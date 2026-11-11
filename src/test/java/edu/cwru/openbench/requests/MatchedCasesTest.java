@@ -11,6 +11,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.jayway.jsonpath.JsonPath;
 import edu.cwru.openbench.Verifies;
+import java.sql.Timestamp;
 import java.time.DayOfWeek;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -165,7 +166,7 @@ class MatchedCasesTest extends MatchedWorldTest {
                 approval);
         assertThat(row.get("state")).isEqualTo("APPROVED");
         assertThat(row.get("decided_by")).isEqualTo(world.oscar().id());
-        assertThat(((java.sql.Timestamp) row.get("decided_at")).toInstant()).isBetween(now.minusSeconds(60), now.plusSeconds(60));
+        assertThat(((Timestamp) row.get("decided_at")).toInstant()).isBetween(now.minusSeconds(60), now.plusSeconds(60));
         detail(as(alice), a1)
                 .andExpect(jsonPath("$.lines[0].line.state").value("APPROVED"))
                 .andExpect(jsonPath("$.lines[0].candidates[0].decidedByName").value("Oscar Reed"));
