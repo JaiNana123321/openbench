@@ -1,10 +1,13 @@
 package edu.cwru.openbench.settings;
 
+import edu.cwru.openbench.common.Actor;
 import edu.cwru.openbench.common.Credits;
+import edu.cwru.openbench.common.MemberId;
 import edu.cwru.openbench.common.NotFoundException;
 import edu.cwru.openbench.common.PeriodId;
 import edu.cwru.openbench.common.ResourceTypeId;
 import edu.cwru.openbench.common.TeamId;
+import edu.cwru.openbench.members.MemberService;
 import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.Duration;
@@ -15,13 +18,17 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.stream.Collectors;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * Every Capacity Planner setting, read as one typed snapshot (design Section 4.3). Demo 1 has the
- * reads; {@code update} and its change log come in a later increment.
+ * Every Capacity Planner setting, read as one typed snapshot, and changed one {@link SettingChange}
+ * at a time with a change log (design Section 4.3).
  *
  * <p>Methods a controller calls carry {@code @PreAuthorize}; {@link #current()}, {@link #periods()},
  * and the other unscoped reads are for other modules and carry no role check, so jobs may call them.
@@ -29,6 +36,8 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 @Transactional(readOnly = true)
 public class SettingsService {
+
+    private static final Logger log = LoggerFactory.getLogger(SettingsService.class);
 
     static final String DAY_RATE = "day_rate";
     static final String PRIORITY_PREMIUM = "priority_premium";
@@ -42,10 +51,14 @@ public class SettingsService {
     private final RefundStepRepository refundSteps;
     private final QuotaRepository quotas;
     private final GrantPlanRepository grantPlans;
+    private final SettingChangeRepository changes;
+    private final SettingWriter writer;
+    private final MemberService members;
 
     SettingsService(Clock clock, PeriodRepository periods, PlannerSettingRepository plannerSettings,
             TypePricingRepository typePricing, PriceBandRepository priceBands, RefundStepRepository refundSteps,
-            QuotaRepository quotas, GrantPlanRepository grantPlans) {
+            QuotaRepository quotas, GrantPlanRepository grantPlans, SettingChangeRepository changes,
+            SettingWriter writer, MemberService members) {
         this.clock = clock;
         this.periods = periods;
         this.plannerSettings = plannerSettings;
@@ -54,6 +67,45 @@ public class SettingsService {
         this.refundSteps = refundSteps;
         this.quotas = quotas;
         this.grantPlans = grantPlans;
+        this.changes = changes;
+        this.writer = writer;
+        this.members = members;
+    }
+
+    /**
+     * PUT /api/settings/{key}: changes one setting and logs it with the actor, the old and new value,
+     * and the time, in one transaction, so a refused change saves nothing and logs nothing. It takes
+     * effect for what comes after: Quotes not yet locked, Releases, evaluations, and submissions after
+     * the commit, and Periods not yet started. Concurrent changes are serialized (see
+     * {@link SettingWriter}), so the logged values chain. Returns every setting after the change.
+     *
+     * @throws edu.cwru.openbench.common.RuleViolation {@code VALUE_OUT_OF_RANGE}, {@code PERIOD_STARTED},
+     *     {@code CLASS_MISMATCH}, {@code BAND_INVALID}, {@code BANDS_OVERLAP}, {@code REFUND_STEP_TOO_HIGH},
+     *     or {@code UNIT_PRICE_REQUIRED} (a bump cutoff for a type with no Unit Price)
+     * @throws NotFoundException when the change names a Team, Period, or type that does not exist
+     */
+    @PreAuthorize("hasAuthority('PLANNER')")
+    @Transactional
+    public PlannerSettings update(Actor actor, SettingChange change) {
+        writer.lock();
+        SettingWriter.Values values = writer.apply(change, actor.memberId().value());
+        SettingChangeRow logged = changes.save(new SettingChangeRow(change.key(), values.oldValue(), values.newValue(),
+                actor.memberId().value(), clock.instant()));
+        log.info("event=setting_change id={} key={} old={} new={} actor={}",
+                logged.id(), change.key(), values.oldValue(), values.newValue(), actor.memberId().value());
+        return current();
+    }
+
+    /** GET /api/settings/changes: the setting-change log, newest first, paged. */
+    @PreAuthorize("hasAuthority('PLANNER')")
+    public Page<SettingChangeEntry> changes(int page, int size) {
+        Map<Long, String> names = new HashMap<>();
+        return changes.findAllByOrderByAtDescIdDesc(PageRequest.of(page, size)).map(row -> new SettingChangeEntry(
+                row.id(), row.key(), row.oldValue(), row.newValue(),
+                row.actorId() == null ? null : new MemberId(row.actorId()),
+                row.actorId() == null ? null
+                        : names.computeIfAbsent(row.actorId(), id -> members.summary(new MemberId(id)).name()),
+                row.at()));
     }
 
     /** GET /api/settings: every setting, for the Capacity Planner. */

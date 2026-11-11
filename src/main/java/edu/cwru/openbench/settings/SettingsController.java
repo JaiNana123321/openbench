@@ -1,19 +1,31 @@
 package edu.cwru.openbench.settings;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import edu.cwru.openbench.common.Actor;
+import edu.cwru.openbench.common.PageResponse;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
 import java.util.List;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
-/** The Settings endpoints (design Table "Endpoints by module"); Demo 1 has the reads. */
+/** The Settings endpoints (design Table "Endpoints by module"), and the change log's read. */
 @RestController
 @RequestMapping("/api/settings")
 class SettingsController {
 
     private final SettingsService settings;
+    private final ObjectMapper json;
 
-    SettingsController(SettingsService settings) {
+    SettingsController(SettingsService settings, ObjectMapper json) {
         this.settings = settings;
+        this.json = json;
     }
 
     @GetMapping
@@ -24,5 +36,18 @@ class SettingsController {
     @GetMapping("/periods")
     List<Period> periods() {
         return settings.listPeriods();
+    }
+
+    /** One setting's new value, as {@code {"value": ...}}; {@link SettingKeys} lists the keys and shapes. */
+    @PutMapping("/{key}")
+    PlannerSettings update(Actor actor, @PathVariable String key, @RequestBody(required = false) JsonNode body) {
+        return settings.update(actor, SettingKeys.parse(key, body, json));
+    }
+
+    @GetMapping("/changes")
+    PageResponse<SettingChangeEntry> changes(
+            @RequestParam(defaultValue = "0") @Min(0) int page,
+            @RequestParam(defaultValue = "50") @Min(1) @Max(200) int size) {
+        return PageResponse.of(settings.changes(page, size));
     }
 }

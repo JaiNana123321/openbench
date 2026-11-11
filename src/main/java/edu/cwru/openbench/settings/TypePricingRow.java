@@ -18,7 +18,16 @@ class TypePricingRow {
     /** Null for a Metered type, which has no Bump. */
     private Integer bumpCutoffHours;
 
+    private Long createdBy;
+
     protected TypePricingRow() {}
+
+    /** A type's first price, set by the Capacity Planner {@code createdBy}; it has no bump cutoff yet. */
+    TypePricingRow(Long typeId, BigDecimal unitPrice, Long createdBy) {
+        this.typeId = typeId;
+        this.unitPrice = unitPrice;
+        this.createdBy = createdBy;
+    }
 
     Long typeId() {
         return typeId;
@@ -30,5 +39,13 @@ class TypePricingRow {
 
     Integer bumpCutoffHours() {
         return bumpCutoffHours;
+    }
+
+    void changeUnitPrice(BigDecimal unitPrice) {
+        this.unitPrice = unitPrice;
+    }
+
+    void changeBumpCutoffHours(int hours) {
+        this.bumpCutoffHours = hours;
     }
 }
