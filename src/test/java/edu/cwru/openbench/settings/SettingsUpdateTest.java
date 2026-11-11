@@ -3,11 +3,13 @@ package edu.cwru.openbench.settings;
 import static edu.cwru.openbench.TestData.unique;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import edu.cwru.openbench.PostgresTest;
+import edu.cwru.openbench.Verifies;
 import edu.cwru.openbench.common.Role;
 import java.time.Clock;
 import java.time.LocalDate;
@@ -108,10 +110,42 @@ class SettingsUpdateTest extends PostgresTest {
             }
             mvc.perform(get("/api/settings/changes").with(signedInAs(username)))
                     .andExpect(status().isForbidden());
+            mvc.perform(get("/api/settings/grants/{period}", nextPeriod).with(signedInAs(username)))
+                    .andExpect(status().isForbidden());
         }
         assertThat(count("SELECT count(*) FROM setting_change")).isEqualTo(logged);
         assertThat(count("SELECT count(*) FROM quota WHERE team_id = " + team)).isZero();
         assertThat(count("SELECT count(*) FROM type_pricing WHERE unit_price = 10.00 AND type_id = " + room)).isOne();
+    }
+
+    @Test
+    @DisplayName("adm-skills-no-policy: the Administrator adds a skill but is refused the settings and a Day Rate change")
+    @Verifies("adm-skills-no-policy")
+    void givesTheAdministratorNoPolicySetting() throws Exception {
+        String carol = member(Role.ADMIN);
+        String python = unique("Python");
+        String dayRate = value("day_rate");
+        int logged = count("SELECT count(*) FROM setting_change");
+
+        // 1. Add a skill: listed, so Members can choose it.
+        mvc.perform(post("/api/admin/skills").with(signedInAs(carol)).with(xsrf())
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"name\": \"" + python + "\"}"))
+                .andExpect(status().isCreated());
+        mvc.perform(get("/api/skills").with(signedInAs(planner)))
+                .andExpect(jsonPath("$[?(@.name == '%s')].retired", python).value(false));
+
+        // 2. No policy setting is offered (the screens: SkillsPage.test.tsx); the server refuses the settings too.
+        mvc.perform(get("/api/settings").with(signedInAs(carol))).andExpect(status().isForbidden());
+
+        // 3. Change the Day Rate through the API: FORBIDDEN.
+        mvc.perform(put("/api/settings/day_rate").with(signedInAs(carol)).with(xsrf())
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"value\": 1.00}"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("FORBIDDEN"));
+
+        // Pass criteria: the skill list changed and no setting did.
+        assertThat(value("day_rate")).isEqualTo(dayRate);
+        assertThat(count("SELECT count(*) FROM setting_change")).isEqualTo(logged);
     }
 
     // ---------------------------------------------------------------- single-valued settings

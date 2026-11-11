@@ -3,10 +3,14 @@ package edu.cwru.openbench.settings;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import edu.cwru.openbench.common.Actor;
+import edu.cwru.openbench.common.Credits;
 import edu.cwru.openbench.common.PageResponse;
+import edu.cwru.openbench.common.PeriodId;
+import edu.cwru.openbench.common.TeamId;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import java.util.List;
+import java.util.Map;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PutMapping;
@@ -36,6 +40,11 @@ class SettingsController {
     @GetMapping("/periods")
     List<Period> periods() {
         return settings.listPeriods();
+    }
+
+    @GetMapping("/grants/{periodId}")
+    Map<TeamId, Credits> plannedGrants(@PathVariable PeriodId periodId) {
+        return settings.viewPlannedGrants(periodId);
     }
 
     /** One setting's new value, as {@code {"value": ...}}; {@link SettingKeys} lists the keys and shapes. */

@@ -96,6 +96,15 @@ public class SettingsService {
         return current();
     }
 
+    /**
+     * GET /api/settings/grants/{periodId}: each Team's planned Grant for the Period, its own plan or
+     * the Team's most recent earlier one, so the Capacity Planner sees the Grants of coming Periods.
+     */
+    @PreAuthorize("hasAuthority('PLANNER')")
+    public Map<TeamId, Credits> viewPlannedGrants(PeriodId id) {
+        return plannedGrants(id);
+    }
+
     /** GET /api/settings/changes: the setting-change log, newest first, paged. */
     @PreAuthorize("hasAuthority('PLANNER')")
     public Page<SettingChangeEntry> changes(int page, int size) {
