@@ -1,8 +1,10 @@
 package edu.cwru.openbench.requests;
 
 import edu.cwru.openbench.allocation.ReleasePart;
+import edu.cwru.openbench.allocation.Shortlist;
 import edu.cwru.openbench.common.Actor;
 import edu.cwru.openbench.common.ConcurrencyRetry;
+import edu.cwru.openbench.common.MemberId;
 import edu.cwru.openbench.common.PageResponse;
 import edu.cwru.openbench.common.RequestId;
 import edu.cwru.openbench.common.RequestLineId;
@@ -184,4 +186,20 @@ class RequestsController {
             return value;
         }
     }
+
+    /** The Person line's Shortlist, computed now. */
+    @GetMapping("/{id}/lines/{lineId}/shortlist")
+    Shortlist shortlist(Actor actor, @PathVariable RequestId id, @PathVariable RequestLineId lineId) {
+        return lifecycle.shortlist(actor, id, lineId);
+    }
+
+    /** Selects Candidates for a Person line; answers 200 with the Request's detail. */
+    @PostMapping("/{id}/lines/{lineId}/candidates")
+    RequestDetail selectCandidates(Actor actor, @PathVariable RequestId id, @PathVariable RequestLineId lineId,
+            @Valid @RequestBody Candidates candidates) {
+        return ConcurrencyRetry.once(() -> lifecycle.selectCandidates(actor, id, lineId, candidates.members()));
+    }
+
+    /** The body of POST .../candidates: {@code {"members": [12]}}, the Members selected from the Shortlist. */
+    record Candidates(@NotNull List<MemberId> members) {}
 }

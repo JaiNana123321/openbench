@@ -17,4 +17,7 @@ interface MemberRepository extends JpaRepository<Member, Long> {
     long countByTeamIdAndActiveTrue(Long teamId);
 
     Page<Member> findByTeamId(Long teamId, Pageable page);
+
+    /** The active Members outside the Team, by name. */
+    List<Member> findByActiveTrueAndTeamIdNotOrderByName(Long teamId);
 }

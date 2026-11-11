@@ -1,15 +1,18 @@
 package edu.cwru.openbench.allocation;
 
+import edu.cwru.openbench.common.MemberId;
 import edu.cwru.openbench.common.RequestId;
 import edu.cwru.openbench.common.RequestLineId;
 import edu.cwru.openbench.common.ResourceId;
 import edu.cwru.openbench.common.ResourceTypeId;
+import edu.cwru.openbench.common.SkillId;
 import edu.cwru.openbench.common.TeamId;
 import edu.cwru.openbench.common.TimeWindow;
 import edu.cwru.openbench.inventory.AllocationClass;
 import java.time.Instant;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 
 /**
  * An immutable copy of a submitted Request Line, built by Requests: the only thing Allocation knows
@@ -22,6 +25,9 @@ import java.util.Optional;
  * @param submittedAt the Request's submission time, which orders the waitlist
  * @param bumped whether the line lost its occurrences to a Priority line, which puts it at the head
  *     of the waitlist
+ * @param namedMember the one Person a Matched line names, if any; then the quantity is 1
+ * @param skills the skills a skill-based Matched line asks for; empty otherwise. A Matched line's
+ *     window runs from midnight of its first day to midnight after its last, company time
  */
 public record LineSnapshot(
         RequestLineId lineId,
@@ -36,7 +42,9 @@ public record LineSnapshot(
         boolean required,
         boolean priority,
         Instant submittedAt,
-        boolean bumped) {
+        boolean bumped,
+        Optional<MemberId> namedMember,
+        Set<SkillId> skills) {
 
     public LineSnapshot {
         Objects.requireNonNull(lineId, "lineId");
@@ -56,5 +64,19 @@ public record LineSnapshot(
         if (namedResource.isPresent() && quantity != 1) {
             throw new IllegalArgumentException("A line that names a Resource asks for exactly that one instance.");
         }
+        Objects.requireNonNull(namedMember, "namedMember");
+        skills = Set.copyOf(skills);
+        if (namedMember.isPresent() && (allocationClass != AllocationClass.MATCHED || quantity != 1)) {
+            throw new IllegalArgumentException("Only a Matched line of quantity 1 names a Person.");
+        }
+    }
+
+    /** An Exclusive or Metered line: no named Person, no skills. */
+    public LineSnapshot(RequestLineId lineId, RequestId requestId, TeamId teamId, ResourceTypeId typeId,
+            AllocationClass allocationClass, int quantity, Integer units, TimeWindow window,
+            Optional<ResourceId> namedResource, boolean required, boolean priority, Instant submittedAt,
+            boolean bumped) {
+        this(lineId, requestId, teamId, typeId, allocationClass, quantity, units, window, namedResource, required,
+                priority, submittedAt, bumped, Optional.empty(), Set.of());
     }
 }

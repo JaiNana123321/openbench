@@ -1,5 +1,6 @@
 package edu.cwru.openbench.allocation;
 
+import edu.cwru.openbench.common.DateRange;
 import edu.cwru.openbench.common.TimeWindow;
 import java.time.Duration;
 import java.time.Instant;
@@ -52,6 +53,22 @@ final class Windows {
     static String describe(TimeWindow window, ZoneId zone) {
         return describe(window.start(), zone) + " to " + describe(window.end(), zone);
     }
+
+    /**
+     * The days a window touches in the zone, inclusive at both ends: for a Matched line's window, from
+     * midnight of its first day to midnight after its last, exactly its days.
+     */
+    static DateRange daysOf(TimeWindow window, ZoneId zone) {
+        return new DateRange(LocalDate.ofInstant(window.start(), zone),
+                LocalDate.ofInstant(window.end().minusNanos(1), zone));
+    }
+
+    /** The days for a message, such as "Wed 25 Nov 2026 to Thu 26 Nov 2026". */
+    static String describe(DateRange days) {
+        return DAY.format(days.from()) + (days.from().equals(days.to()) ? "" : " to " + DAY.format(days.to()));
+    }
+
+    private static final DateTimeFormatter DAY = DateTimeFormatter.ofPattern("EEE d MMM uuuu", Locale.US);
 
     /** The days {@code first} to {@code last}, both included, from midnight to midnight in the zone. */
     static TimeWindow ofDays(LocalDate first, LocalDate last, ZoneId zone) {

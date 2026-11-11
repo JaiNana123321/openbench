@@ -7,5 +7,8 @@ import java.time.Instant;
 /**
  * A Request as other modules and the API see it, without its lines. {@code submittedAt} is null
  * until submission. JSON: {@code {"id": 42, "team": {"id": 1, "name": "Platform"}, "state": "DRAFT", ...}}.
+ * {@code windowEndsAt} is the end of the Objection Window, set at submission when a line needs
+ * approval and never changed; null otherwise.
  */
-public record Request(RequestId id, TeamSummary team, RequestState state, Instant createdAt, Instant submittedAt) {}
+public record Request(RequestId id, TeamSummary team, RequestState state, Instant createdAt, Instant submittedAt,
+        Instant windowEndsAt) {}

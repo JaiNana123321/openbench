@@ -93,4 +93,20 @@ class RequestRow {
         }
         this.state = next;
     }
+
+    /**
+     * Starts the Objection Window at submission (Lifecycle.Window.Start): it ends at {@code endsAt}
+     * and never changes once set.
+     */
+    void startWindow(Instant endsAt) {
+        if (windowEndsAt != null) {
+            throw new IllegalStateException("Request " + id + "'s Objection Window is already set.");
+        }
+        this.windowEndsAt = endsAt;
+    }
+
+    /** Whether the Objection Window was set and is still running at {@code now}. */
+    boolean windowRunsAt(Instant now) {
+        return windowEndsAt != null && now.isBefore(windowEndsAt);
+    }
 }

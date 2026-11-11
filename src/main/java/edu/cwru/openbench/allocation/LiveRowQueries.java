@@ -1,5 +1,8 @@
 package edu.cwru.openbench.allocation;
 
+import edu.cwru.openbench.common.ApprovalId;
+import edu.cwru.openbench.common.MemberId;
+import edu.cwru.openbench.common.RequestId;
 import edu.cwru.openbench.common.RequestLineId;
 import edu.cwru.openbench.common.ResourceId;
 import edu.cwru.openbench.common.ResourceTypeId;
@@ -25,10 +28,12 @@ class LiveRowQueries implements AllocationQueries {
     private final MeteredAllocationRepository metered;
     private final ExclusiveAllocator exclusiveAllocator;
     private final MeteredAllocator meteredAllocator;
+    private final MatchedAllocator matchedAllocator;
 
     LiveRowQueries(WaitlistEntryRepository waitlist, ExclusiveOccurrenceRepository occurrences, HourlySums sums,
             MeteredAllocationRepository metered, ExclusiveAllocator exclusiveAllocator,
-            MeteredAllocator meteredAllocator) {
+            MeteredAllocator meteredAllocator, MatchedAllocator matchedAllocator) {
+        this.matchedAllocator = matchedAllocator;
         this.waitlist = waitlist;
         this.occurrences = occurrences;
         this.sums = sums;
@@ -75,5 +80,30 @@ class LiveRowQueries implements AllocationQueries {
         metered.findByLineIdAndStateIn(line.value(), Set.of(RowState.ALLOCATED))
                 .forEach(row -> parts.merge(row.window(), row.units(), Integer::sum));
         return parts.entrySet().stream().map(part -> new AllocatedPart(part.getKey(), part.getValue())).toList();
+    }
+
+    @Override
+    public List<Approval> approvalsAwaiting(MemberId approver) {
+        return matchedAllocator.awaiting(approver);
+    }
+
+    @Override
+    public Optional<Approval> approval(ApprovalId id) {
+        return matchedAllocator.approval(id);
+    }
+
+    @Override
+    public List<Approval> approvalsOf(RequestLineId line) {
+        return matchedAllocator.ofLine(line);
+    }
+
+    @Override
+    public List<Approval> approvalsOfRequest(RequestId request) {
+        return matchedAllocator.ofRequest(request);
+    }
+
+    @Override
+    public Set<RequestId> requestsWithUnescalatedOutstanding() {
+        return matchedAllocator.requestsWithUnescalatedOutstanding();
     }
 }

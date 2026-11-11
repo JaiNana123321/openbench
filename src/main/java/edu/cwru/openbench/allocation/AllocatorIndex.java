@@ -9,8 +9,7 @@ import org.springframework.stereotype.Component;
 
 /**
  * Every {@link Allocator} bean, indexed by its Allocation Class. Start-up fails when two allocators
- * claim one class. The design also fails start-up for a class without one, but Matched has none
- * until its increment, so {@link #forClass} refuses it when called instead.
+ * claim one class; {@link #forClass} refuses a class without one when called.
  */
 @Component
 class AllocatorIndex implements AllocatorRegistry {

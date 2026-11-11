@@ -1,12 +1,16 @@
 package edu.cwru.openbench.requests;
 
 import edu.cwru.openbench.common.Credits;
+import edu.cwru.openbench.common.DateRange;
+import edu.cwru.openbench.common.MemberId;
 import edu.cwru.openbench.common.RequestId;
 import edu.cwru.openbench.common.RequestLineId;
 import edu.cwru.openbench.common.ResourceId;
 import edu.cwru.openbench.common.ResourceTypeId;
+import edu.cwru.openbench.common.SkillId;
 import edu.cwru.openbench.common.TeamId;
 import edu.cwru.openbench.common.TimeWindow;
+import edu.cwru.openbench.inventory.AllocationClass;
 import edu.cwru.openbench.inventory.InventoryQueries;
 import edu.cwru.openbench.ledger.LineSpec;
 import edu.cwru.openbench.ledger.Pricing;
@@ -15,6 +19,7 @@ import edu.cwru.openbench.members.TeamSummary;
 import edu.cwru.openbench.settings.PlannerSettings;
 import edu.cwru.openbench.settings.SettingsService;
 import java.time.Clock;
+import java.time.LocalDate;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -58,6 +63,12 @@ class RequestViews {
         return new TimeWindow(line.startsAt(), line.endsAt());
     }
 
+    /** The whole days of a Person line, inclusive at both ends, company time. */
+    DateRange days(RequestLineRow line) {
+        return new DateRange(LocalDate.ofInstant(line.startsAt(), clock.getZone()),
+                LocalDate.ofInstant(line.endsAt().minusNanos(1), clock.getZone()));
+    }
+
     /** The sum of the Quotes of the lines with this Required mark; a line without a Quote counts 0.00. */
     static Credits sum(List<RequestLine> lines, boolean required) {
         return lines.stream()
@@ -73,9 +84,11 @@ class RequestViews {
         private final Map<Long, TeamSummary> teams = new HashMap<>();
         private final Map<Long, String> typeNames = new HashMap<>();
         private final Map<Long, String> resourceNames = new HashMap<>();
+        private final Map<Long, String> memberNames = new HashMap<>();
 
         Request request(RequestRow row) {
-            return new Request(new RequestId(row.id()), team(row.teamId()), row.state(), row.createdAt(), row.submittedAt());
+            return new Request(new RequestId(row.id()), team(row.teamId()), row.state(), row.createdAt(), row.submittedAt(),
+                    row.windowEndsAt());
         }
 
         List<RequestLine> lines(RequestRow request, List<RequestLineRow> rows) {
@@ -103,7 +116,13 @@ class RequestViews {
                             : resourceNames.computeIfAbsent(named, id -> inventory.resource(new ResourceId(id)).name()),
                     row.required(),
                     row.state(),
-                    quote);
+                    quote,
+                    row.namedMemberId() == null ? null : new MemberId(row.namedMemberId()),
+                    row.namedMemberId() == null ? null : memberNames.computeIfAbsent(row.namedMemberId(),
+                            id -> members.summary(new MemberId(id)).name()),
+                    row.skills().isEmpty() ? List.of()
+                            : members.skillsById(row.skills().stream().map(SkillId::new).toList()),
+                    row.allocationClass() == AllocationClass.MATCHED ? days(row) : null);
         }
 
         private TeamSummary team(Long id) {

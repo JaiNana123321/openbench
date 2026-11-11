@@ -4,20 +4,28 @@ import edu.cwru.openbench.allocation.AllocationLock;
 import edu.cwru.openbench.allocation.AllocationQueries;
 import edu.cwru.openbench.allocation.Allocator;
 import edu.cwru.openbench.allocation.AllocatorRegistry;
+import edu.cwru.openbench.allocation.Approval;
+import edu.cwru.openbench.allocation.ApprovalDriven;
+import edu.cwru.openbench.allocation.ApprovalState;
+import edu.cwru.openbench.allocation.Decision;
 import edu.cwru.openbench.allocation.Evaluation;
 import edu.cwru.openbench.allocation.LineSnapshot;
 import edu.cwru.openbench.allocation.ReleasePart;
 import edu.cwru.openbench.allocation.Released;
+import edu.cwru.openbench.allocation.Shortlist;
 import edu.cwru.openbench.allocation.WaitingLine;
 import edu.cwru.openbench.allocation.Waitlistable;
 import edu.cwru.openbench.common.Actor;
+import edu.cwru.openbench.common.ApprovalId;
 import edu.cwru.openbench.common.Credits;
+import edu.cwru.openbench.common.DateRange;
 import edu.cwru.openbench.common.MemberId;
 import edu.cwru.openbench.common.NotFoundException;
 import edu.cwru.openbench.common.RequestId;
 import edu.cwru.openbench.common.RequestLineId;
 import edu.cwru.openbench.common.ResourceId;
 import edu.cwru.openbench.common.ResourceTypeId;
+import edu.cwru.openbench.common.SkillId;
 import edu.cwru.openbench.common.RuleViolation;
 import edu.cwru.openbench.common.TeamId;
 import edu.cwru.openbench.common.TimeWindow;
@@ -26,6 +34,7 @@ import edu.cwru.openbench.inventory.InventoryQueries;
 import edu.cwru.openbench.ledger.ChargeSpec;
 import edu.cwru.openbench.ledger.LedgerService;
 import edu.cwru.openbench.members.MemberService;
+import edu.cwru.openbench.members.MemberSummary;
 import edu.cwru.openbench.notifications.NotificationKind;
 import edu.cwru.openbench.notifications.Notifier;
 import edu.cwru.openbench.settings.PlannerSettings;
@@ -36,6 +45,7 @@ import java.time.Clock;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -57,8 +67,11 @@ import org.springframework.transaction.support.TransactionTemplate;
 
 /**
  * The Request lifecycle (design Section 4.8, {@code RequestLifecycleService}): submission to
- * Allocated or Waiting, withdrawal, and the Request detail. Demo 1 has Exclusive and Metered lines
- * only, so a submitted Request never needs approval and never enters Pending.
+ * Allocated, Pending, or Waiting, withdrawal, the Request detail, and the Matched steps: the
+ * Shortlist, the Manager's selection, the lending Managers' decisions, and the Objection Window's
+ * lapse. A Request whose Required Person lines need approval is Pending: its Exclusive and Metered
+ * lines are Held with their credits until the window ends. Forming Loans, and so allocating a
+ * Request with Person lines, comes with issue #6.
  *
  * <p>One transaction per transition, and always this lock order: (0) the Request row, before its
  * lines' type ids are read, so no Draft edit adds a line of a type left unlocked; (1) the lines'
@@ -97,12 +110,16 @@ public class RequestLifecycleService {
     private final Notifier notifier;
     private final TransactionTemplate transactions;
     private final Refunds refunds;
+    private final PersonLineRules personRules;
+    private final RequestRepository requests;
 
     RequestLifecycleService(RequestLineRepository lines, RequestEventRepository events, RequestAccess access,
             LineRules rules, RequestViews views, AllocationLock typeLock, AllocatorRegistry allocators,
             AllocationQueries allocation, LedgerService ledger, SettingsService settings, InventoryQueries inventory,
             MemberService members, EntityManager entityManager, Clock clock, Notifier notifier,
-            TransactionTemplate transactions, Refunds refunds) {
+            TransactionTemplate transactions, Refunds refunds, PersonLineRules personRules, RequestRepository requests) {
+        this.personRules = personRules;
+        this.requests = requests;
         this.notifier = notifier;
         this.transactions = transactions;
         this.lines = lines;
@@ -153,8 +170,12 @@ public class RequestLifecycleService {
         Instant now = clock.instant();
         PlannerSettings current = settings.current();
         for (RequestLineRow row : rows) {
-            rules.check(new ResourceTypeId(row.typeId()), row.amount(), row.startsAt(), row.endsAt(),
-                    row.namedResourceId() == null ? null : new ResourceId(row.namedResourceId()));
+            if (row.allocationClass() == AllocationClass.MATCHED) {
+                checkPersonLine(request, row);
+            } else {
+                rules.check(new ResourceTypeId(row.typeId()), row.amount(), row.startsAt(), row.endsAt(),
+                        row.namedResourceId() == null ? null : new ResourceId(row.namedResourceId()));
+            }
             row.lockQuote(views.currentQuote(row, current).map(Credits::amount).orElse(null));
         }
         request.submit(now);
@@ -166,12 +187,22 @@ public class RequestLifecycleService {
             return new Evaluated(row, snapshot, allocatorOf(row).evaluate(snapshot));
         }).toList();
 
+        if (evaluated.stream().anyMatch(Evaluated::needsApproval)) {
+            request.startWindow(ObjectionWindow.endsAt(now, current.objectionWindowWorkingDays(), clock.getZone()));
+        }
+        settleMatchedLines(request, evaluated, actor, now);
+        boolean awaitingApproval = evaluated.stream().anyMatch(line -> line.required() && line.needsApproval());
+        boolean matchedLineShort = evaluated.stream()
+                .anyMatch(line -> line.required() && line.matched() && !line.fits() && !line.needsApproval());
         boolean everyRequiredLineFits = evaluated.stream().filter(Evaluated::required).allMatch(Evaluated::fits);
         if (everyRequiredLineFits) {
             allocate(request, evaluated, actor, now);
+        } else if (awaitingApproval && !matchedLineShort) {
+            toPending(request, evaluated, actor, now);
         } else {
             toWaiting(request, evaluated, actor, now);
         }
+        routeApprovals(request, evaluated);
         log.info("event=request_submitted request={} team={} state={} actor={}", request.id(), request.teamId(),
                 request.state(), actor.memberId().value());
         return views.session().request(request);
@@ -204,6 +235,9 @@ public class RequestLifecycleService {
         List<Evaluated> held = new ArrayList<>();
         List<Evaluated> outcome = new ArrayList<>(evaluated);
         for (Evaluated line : requiredFirst(evaluated)) {
+            if (line.matched()) {
+                continue;
+            }
             Evaluation fit = line.fits() ? allocatorOf(line.row()).evaluate(line.snapshot()) : line.evaluation();
             if (!fit.fits() && line.required()) {
                 for (Evaluated hold : held) {
@@ -258,6 +292,10 @@ public class RequestLifecycleService {
     private void toWaiting(RequestRow request, List<Evaluated> evaluated, Actor actor, Instant now) {
         int waiting = 0;
         for (Evaluated line : evaluated) {
+            if (line.matched()) {
+                waiting += line.row().state() == RequestLineState.WAITING ? 1 : 0;
+                continue;
+            }
             if (line.fits()) {
                 changeLine(request, line.row(), RequestLineState.EVALUATED, actor, now,
                         "Fits now; waits for the Request's other lines.");
@@ -308,6 +346,7 @@ public class RequestLifecycleService {
         List<RequestLineRow> rows = lines.findByRequestIdOrderById(request.id());
         Instant now = clock.instant();
         String from = request.state().name();
+        List<RequestLineRow> held = rows.stream().filter(row -> row.state() == RequestLineState.HELD).toList();
         if (!request.isDraft()) {
             TeamId team = new TeamId(request.teamId());
             typeLock.lockTypes(new TreeSet<>(rows.stream().map(row -> new ResourceTypeId(row.typeId())).toList()));
@@ -326,6 +365,9 @@ public class RequestLifecycleService {
         notifyManager(request, "Request " + request.id() + " was withdrawn.");
         log.info("event=request_withdrawn request={} team={} from={} actor={}", request.id(), request.teamId(), from,
                 actor.memberId().value());
+        for (RequestLineRow row : held) {
+            onCapacityFreed(row.allocationClass(), new ResourceTypeId(row.typeId()), RequestViews.window(row), now);
+        }
         return views.session().request(request);
     }
 
@@ -338,7 +380,10 @@ public class RequestLifecycleService {
      */
     @PreAuthorize("hasAnyAuthority('MANAGER', 'PLANNER')")
     public RequestDetail detail(Actor actor, RequestId id) {
-        RequestRow request = access.visible(actor, id);
+        return detailOf(access.visible(actor, id));
+    }
+
+    private RequestDetail detailOf(RequestRow request) {
         List<RequestEventRow> history = events.findByRequestIdOrderByAtAscIdAsc(request.id());
         Map<Long, String> lastNoteByLine = new HashMap<>();
         for (RequestEventRow event : history) {
@@ -382,7 +427,8 @@ public class RequestLifecycleService {
         Integer position = line.state() == RequestLineState.WAITING
                 ? allocation.waitlistPosition(line.id()).orElse(null)
                 : null;
-        return new LineDetail(line, assigned, reason, message, position, allocation.allocatedParts(line.id()));
+        return new LineDetail(line, assigned, reason, message, position, allocation.allocatedParts(line.id()),
+                line.allocationClass() == AllocationClass.MATCHED ? candidatesOf(line.id()) : List.of());
     }
 
     // ---------------------------------------------------------------- steps
@@ -417,7 +463,9 @@ public class RequestLifecycleService {
                 row.required(),
                 row.priority(),
                 request.submittedAt(),
-                false);
+                false,
+                Optional.ofNullable(row.namedMemberId()).map(MemberId::new),
+                row.skills().stream().map(SkillId::new).collect(Collectors.toSet()));
     }
 
     private Allocator allocatorOf(RequestLineRow row) {
@@ -451,6 +499,14 @@ public class RequestLifecycleService {
 
         boolean fits() {
             return evaluation.fits();
+        }
+
+        boolean matched() {
+            return row.allocationClass() == AllocationClass.MATCHED;
+        }
+
+        boolean needsApproval() {
+            return evaluation.outcome() == Evaluation.Outcome.NEEDS_APPROVAL;
         }
 
         Evaluated with(Evaluation newer) {
@@ -652,6 +708,17 @@ public class RequestLifecycleService {
         if (!evaluated.stream().filter(Evaluated::required).allMatch(Evaluated::fits)) {
             return;
         }
+        List<RequestLineRow> all = lines.findByRequestIdOrderById(request.id());
+        boolean hasRequiredPersonLines = all.stream().anyMatch(row -> row.required()
+                && row.allocationClass() == AllocationClass.MATCHED && row.state() != RequestLineState.CANCELED);
+        if (hasRequiredPersonLines) {
+            // #6 allocates here once every Required Person line is approved and Loans can form. Until
+            // then a Request with Required Person lines goes back to Pending while its window runs.
+            if (request.windowRunsAt(now) && personLinesOpen(all)) {
+                backToPending(request, evaluated, null, now);
+            }
+            return;
+        }
         TeamId team = new TeamId(request.teamId());
         BigDecimal required = evaluated.stream()
                 .filter(Evaluated::required)
@@ -730,5 +797,386 @@ public class RequestLifecycleService {
                 "Request " + request.id() + " is Allocated from the waitlist: capacity freed and every Required"
                         + " line fits.", "/requests/" + request.id()));
         log.info("event=waitlist_filled request={} team={} lines={}", request.id(), team.value(), held.size());
+    }
+
+    // ---------------------------------------------------------------- Person lines: submission
+
+    /** Checks a submitted Person line again, as when it was added ({@link PersonLineRules}). */
+    private void checkPersonLine(RequestRow request, RequestLineRow row) {
+        personRules.check(new TeamId(request.teamId()), new ResourceTypeId(row.typeId()), row.amount(), row.startsAt(),
+                row.endsAt(), null, row.namedMemberId() == null ? null : new MemberId(row.namedMemberId()),
+                row.skills().stream().map(SkillId::new).toList());
+    }
+
+    /**
+     * The Person lines' states at submission: a line that needs approval awaits its Candidates'
+     * selection or approval; a Required line with too few eligible Members waits with its reason; an
+     * Optional one is Dropped.
+     */
+    private void settleMatchedLines(RequestRow request, List<Evaluated> evaluated, Actor actor, Instant now) {
+        for (Evaluated line : evaluated) {
+            if (!line.matched()) {
+                continue;
+            }
+            if (line.needsApproval()) {
+                changeLine(request, line.row(), RequestLineState.AWAITING_APPROVAL, actor, now,
+                        line.row().namedMemberId() != null ? "Awaiting the approval of the named Person's Manager."
+                                : "Awaiting the selection of " + line.row().amount() + " from the Shortlist.");
+            } else if (!line.fits() && line.required()) {
+                changeLine(request, line.row(), RequestLineState.WAITING, actor, now,
+                        line.evaluation().reason() + ": " + line.evaluation().message());
+            } else if (!line.fits()) {
+                drop(request, line.row(), line.evaluation().reason(), line.evaluation().message(), actor, now);
+            }
+        }
+    }
+
+    /**
+     * A Required Person line needs approval: the Request is Pending until its Objection Window ends,
+     * with its Exclusive and Metered lines Held ({@link #placeHolds}).
+     */
+    private void toPending(RequestRow request, List<Evaluated> evaluated, Actor actor, Instant now) {
+        placeHolds(request, evaluated, actor, now);
+        request.moveTo(RequestState.PENDING);
+        record(request, null, RequestState.SUBMITTED.name(), RequestState.PENDING.name(), actor, now,
+                "Objection Window until " + refunds.describe(request.windowEndsAt()) + ".");
+        notifyManager(request, "Request " + request.id() + " is Pending until " + refunds.describe(request.windowEndsAt())
+                + ": its Person lines await selection and approval, and its other lines are Held.");
+    }
+
+    /**
+     * Holds the Request's Exclusive and Metered lines that fit, with their credits, Required lines
+     * first, each evaluated again so the Request's own Holds count (design {@code placeHolds}). A
+     * Required line that does not fit waits on its type's waitlist; an Optional one that does not fit,
+     * or no longer fits the Balance, is Dropped. Does nothing once the window has ended.
+     */
+    private void placeHolds(RequestRow request, List<Evaluated> evaluated, Actor actor, Instant now) {
+        if (!request.windowRunsAt(now)) {
+            return;
+        }
+        TeamId team = new TeamId(request.teamId());
+        for (Evaluated line : requiredFirst(evaluated)) {
+            if (line.matched()) {
+                continue;
+            }
+            Evaluation fit = allocatorOf(line.row()).evaluate(line.snapshot());
+            if (!fit.fits() && line.required()) {
+                waitlistOf(line.row()).join(line.snapshot());
+                if (line.row().state() != RequestLineState.WAITING) {
+                    changeLine(request, line.row(), RequestLineState.WAITING, actor, now, fit.reason() + ": " + fit.message());
+                }
+                continue;
+            }
+            if (!fit.fits()) {
+                drop(request, line.row(), fit.reason(), fit.message(), actor, now);
+                continue;
+            }
+            BigDecimal quote = line.row().lockedQuote();
+            if (!line.required() && quote != null && !affordable(team, quote)) {
+                drop(request, line.row(), "INSUFFICIENT_BALANCE", "The Optional line's Quote of " + new Credits(quote)
+                        + " credits no longer fits the Available Balance.", actor, now);
+                continue;
+            }
+            if (line.row().state() == RequestLineState.WAITING) {
+                waitlistOf(line.row()).leave(line.snapshot());
+            }
+            allocatorOf(line.row()).hold(line.snapshot());
+            if (quote != null) {
+                ledger.holdCredits(team, line.snapshot().lineId(), new Credits(quote));
+            }
+            changeLine(request, line.row(), RequestLineState.HELD, actor, now, "Held until the Objection Window ends at "
+                    + refunds.describe(request.windowEndsAt()) + (quote == null ? "." : "; " + new Credits(quote)
+                    + " credits held."));
+        }
+    }
+
+    /** Selects each named Person whose line needs approval: naming counts as the Manager's selection. */
+    private void routeApprovals(RequestRow request, List<Evaluated> evaluated) {
+        for (Evaluated line : evaluated) {
+            if (line.matched() && line.needsApproval() && line.row().namedMemberId() != null) {
+                approvalDriven().select(line.snapshot(), List.of(new MemberId(line.row().namedMemberId())));
+            }
+        }
+    }
+
+    /**
+     * Whether every Required Person line is awaiting approval or approved: no Required Person line
+     * lacks Candidates for good. Only then may a Waiting Request go back to Pending.
+     */
+    private static boolean personLinesOpen(List<RequestLineRow> rows) {
+        return rows.stream()
+                .filter(row -> row.required() && row.allocationClass() == AllocationClass.MATCHED)
+                .allMatch(row -> row.state() == RequestLineState.AWAITING_APPROVAL
+                        || row.state() == RequestLineState.APPROVED);
+    }
+
+    /**
+     * Waiting back to Pending while the window runs (design: {@code placeHolds}, window not
+     * restarted): the lines that fit are Held again if the Team can afford the Required ones, which is
+     * checked under the account lock first so that nothing throws inside another transition. Returns
+     * whether the Request is Pending now.
+     */
+    private boolean backToPending(RequestRow request, List<Evaluated> evaluated, Actor actor, Instant now) {
+        TeamId team = new TeamId(request.teamId());
+        BigDecimal required = evaluated.stream()
+                .filter(line -> !line.matched() && line.required())
+                .map(line -> line.row().lockedQuote())
+                .filter(Objects::nonNull)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        if (required.compareTo(ledger.lockedAvailable(team).amount()) > 0) {
+            log.info("event=pending_unaffordable request={} team={} required={}", request.id(), team.value(), required);
+            return false;
+        }
+        placeHolds(request, evaluated, actor, now);
+        request.moveTo(RequestState.PENDING);
+        record(request, null, RequestState.WAITING.name(), RequestState.PENDING.name(), actor, now,
+                "Approvals outstanding: Pending again; the Objection Window still ends at "
+                        + refunds.describe(request.windowEndsAt()) + ".");
+        notifyManager(request, "Request " + request.id() + " is Pending again until "
+                + refunds.describe(request.windowEndsAt()) + ".");
+        return true;
+    }
+
+    // ---------------------------------------------------------------- Person lines: Shortlist and selection
+
+    /**
+     * GET /api/requests/{id}/lines/{lineId}/shortlist (Matched.Shortlist.Build): the Person line's
+     * Shortlist, computed now. The system selects no one. A Capacity Planner may read any Team's.
+     *
+     * @throws NotFoundException for a Request out of scope, or a line not on it
+     * @throws RuleViolation {@code WRONG_STATE} for a line that is not a Person line, or a Request
+     *     not yet submitted
+     */
+    @PreAuthorize("hasAnyAuthority('MANAGER', 'PLANNER')")
+    public Shortlist shortlist(Actor actor, RequestId id, RequestLineId lineId) {
+        RequestRow request = access.visible(actor, id);
+        RequestLineRow line = personLine(request, lineId);
+        return approvalDriven().buildShortlist(snapshot(request, line));
+    }
+
+    /**
+     * POST /api/requests/{id}/lines/{lineId}/candidates (Matched.Approve.Route): the requesting
+     * Manager selects Candidates from the Shortlist; together with those Outstanding or Approved they
+     * must be exactly the line's quantity. Each gets an approval request to their own Manager and a
+     * notice. A Waiting Request whose window still runs goes back to Pending with its Holds; the
+     * window is not restarted. Returns the Request's detail.
+     *
+     * @throws RuleViolation {@code LINE_NOT_ATOMIC}, {@code NOT_A_CANDIDATE}, {@code OWN_TEAM};
+     *     {@code WRONG_STATE} unless the Request is Pending, Waiting, or Allocated and the line awaits
+     *     Candidates
+     */
+    @PreAuthorize("hasAuthority('MANAGER')")
+    @Transactional
+    public RequestDetail selectCandidates(Actor actor, RequestId id, RequestLineId lineId, List<MemberId> picked) {
+        RequestRow request = access.lockForChange(actor, id);
+        RequestLineRow line = personLine(request, lineId);
+        boolean open = line.state() == RequestLineState.AWAITING_APPROVAL || line.state() == RequestLineState.WAITING;
+        if (!open || !EnumSet.of(RequestState.PENDING, RequestState.WAITING, RequestState.ALLOCATED)
+                .contains(request.state())) {
+            throw new RuleViolation("WRONG_STATE", "Line " + line.id() + " is "
+                    + line.state().name().toLowerCase().replace('_', ' ') + " on a "
+                    + request.state().name().toLowerCase() + " Request; it takes no Candidates now.");
+        }
+        Instant now = clock.instant();
+        List<RequestLineRow> rows = lines.findByRequestIdOrderById(request.id());
+        typeLock.lockTypes(new TreeSet<>(rows.stream().map(row -> new ResourceTypeId(row.typeId())).toList()));
+        approvalDriven().select(snapshot(request, line), picked);
+        String names = picked.stream().map(member -> members.summary(member).name()).collect(Collectors.joining(", "));
+        changeLine(request, line, RequestLineState.AWAITING_APPROVAL, actor, now,
+                "Selected " + names + "; approval requested.");
+        if (request.state() == RequestState.WAITING && request.windowRunsAt(now) && personLinesOpen(rows)) {
+            List<Evaluated> capacity = rows.stream()
+                    .filter(row -> row.allocationClass() != AllocationClass.MATCHED)
+                    .filter(row -> row.state() == RequestLineState.EVALUATED || row.state() == RequestLineState.WAITING)
+                    .map(row -> {
+                        LineSnapshot snapshot = snapshot(request, row);
+                        return new Evaluated(row, snapshot, allocatorOf(row).evaluate(snapshot));
+                    })
+                    .toList();
+            backToPending(request, capacity, actor, now);
+        }
+        log.info("event=candidates_selected request={} line={} candidates={} actor={}", request.id(), line.id(),
+                picked.stream().map(member -> Long.toString(member.value())).collect(Collectors.joining(",")),
+                actor.memberId().value());
+        return detailOf(request);
+    }
+
+    /** The line, if it is a Person line on the Request and the Request was submitted. */
+    private RequestLineRow personLine(RequestRow request, RequestLineId lineId) {
+        RequestLineRow line = lines.findById(lineId.value())
+                .filter(row -> row.requestId().equals(request.id()))
+                .orElseThrow(() -> new NotFoundException(
+                        "Line " + lineId.value() + " is not on Request " + request.id() + "."));
+        if (line.allocationClass() != AllocationClass.MATCHED || request.submittedAt() == null) {
+            throw new RuleViolation("WRONG_STATE", "Line " + line.id()
+                    + (request.submittedAt() == null ? " is in a Draft; submit the Request first."
+                            : " is not a Person line; it has no Shortlist."));
+        }
+        return line;
+    }
+
+    // ---------------------------------------------------------------- approvals
+
+    /**
+     * GET /api/approvals: the Outstanding approvals addressed to the caller, oldest first, each with
+     * the requesting Team, the days, the Earning, and the end of the Objection Window.
+     */
+    @PreAuthorize("hasAnyAuthority('MANAGER', 'PLANNER')")
+    public List<ApprovalView> approvals(Actor actor) {
+        return allocation.approvalsAwaiting(actor.memberId()).stream().map(this::view).toList();
+    }
+
+    /**
+     * POST /api/approvals/{id}/decision (Matched.Approve.Route): the lending Manager approves or
+     * refuses with a reason; the decision is recorded with its actor and time. When the line has its
+     * quantity approved it is Approved. A refusal leaves the line awaiting a replacement Candidate,
+     * and the requesting Manager is told. Returns the approval as decided.
+     *
+     * @throws NotFoundException for an unknown approval
+     * @throws edu.cwru.openbench.common.ForbiddenException unless the caller is the approver
+     * @throws RuleViolation {@code ALREADY_DECIDED}, {@code WINDOW_LAPSED}, {@code NOT_A_CANDIDATE}
+     */
+    @PreAuthorize("hasAnyAuthority('MANAGER', 'PLANNER')")
+    @Transactional
+    public ApprovalView decideApproval(Actor actor, ApprovalId approvalId, Decision decision, String reason) {
+        Approval approval = allocation.approval(approvalId)
+                .orElseThrow(() -> new NotFoundException("Approval " + approvalId.value() + " does not exist."));
+        RequestRow request = access.lockForSystem(approval.requestId());
+        List<RequestLineRow> rows = lines.findByRequestIdOrderById(request.id());
+        RequestLineRow line = rows.stream().filter(row -> row.id().equals(approval.lineId().value())).findFirst()
+                .orElseThrow();
+        typeLock.lockTypes(new TreeSet<>(rows.stream().map(row -> new ResourceTypeId(row.typeId())).toList()));
+        Instant now = clock.instant();
+        boolean lapsed = request.windowEndsAt() != null && !now.isBefore(request.windowEndsAt());
+        Approval decided = approvalDriven().decide(snapshot(request, line), approvalId, decision, reason, actor, lapsed);
+
+        String candidate = members.summary(decided.candidate()).name();
+        String by = members.summary(actor.memberId()).name();
+        String because = reason == null || reason.isBlank() ? "" : ": " + reason;
+        if (decision == Decision.APPROVE) {
+            long approved = allocation.approvalsOf(approval.lineId()).stream()
+                    .filter(each -> each.state() == ApprovalState.APPROVED).count();
+            changeLine(request, line, approved >= line.amount() ? RequestLineState.APPROVED : line.state(), actor, now,
+                    candidate + " approved by " + by + because);
+            boolean everyRequiredPersonLineApproved = rows.stream()
+                    .filter(row -> row.required() && row.allocationClass() == AllocationClass.MATCHED)
+                    .allMatch(row -> row.state() == RequestLineState.APPROVED);
+            if (everyRequiredPersonLineApproved) {
+                // Seam for #6: allocate(request, ...) runs here. It re-evaluates every line under the locks,
+                // commits the Holds, posts the Charges, forms the Loans, and posts the Earnings. Until Loans
+                // can form, the Request stays as it is, with its Holds.
+                log.info("event=request_approved request={} next=allocate", request.id());
+            }
+        } else {
+            changeLine(request, line, line.state(), actor, now, candidate + " refused by " + by + because
+                    + ". Select a replacement.");
+            notifyManager(request, by + " refused " + candidate + " for Request " + request.id() + because
+                    + ". Select a replacement from the Shortlist.");
+        }
+        log.info("event=approval_decided request={} line={} approval={} decision={} actor={}", request.id(), line.id(),
+                approvalId.value(), decision, actor.memberId().value());
+        return view(decided);
+    }
+
+    private ApprovalView view(Approval approval) {
+        RequestRow request = requests.findById(approval.requestId().value()).orElseThrow();
+        RequestLineRow line = lines.findById(approval.lineId().value()).orElseThrow();
+        DateRange days = views.days(line);
+        Credits earning = new Credits(settings.current().dayRate().amount().multiply(BigDecimal.valueOf(days.weekdays())));
+        return new ApprovalView(approval.id(), approval.requestId(), approval.lineId(), approval.candidate(),
+                members.summary(approval.candidate()).name(), members.team(approval.requestingTeam()), days, earning,
+                request.windowEndsAt(), approval.state(), approval.escalated(),
+                approval.decidedBy() == null ? null : members.summary(approval.decidedBy()).name(),
+                approval.decidedAt(), approval.reason());
+    }
+
+    /** The Candidates of a Person line with their approvals, for the Request detail. */
+    private List<LineDetail.CandidateApproval> candidatesOf(RequestLineId line) {
+        return allocation.approvalsOf(line).stream().map(approval -> {
+            MemberSummary candidate = members.summary(approval.candidate());
+            return new LineDetail.CandidateApproval(approval.id(), approval.candidate(), candidate.name(),
+                    candidate.team(), approval.state(), approval.escalated(),
+                    approval.decidedBy() == null ? null : members.summary(approval.decidedBy()).name(),
+                    approval.decidedAt(), approval.reason());
+        }).toList();
+    }
+
+    private ApprovalDriven approvalDriven() {
+        return allocators.capability(AllocationClass.MATCHED, ApprovalDriven.class)
+                .orElseThrow(() -> new IllegalStateException("No allocator decides Matched approvals."));
+    }
+
+    // ---------------------------------------------------------------- jobs: the Objection Window's lapse
+
+    /**
+     * (Read-only, for {@code DueWorkJob}) The Pending, Waiting, or Allocated Requests whose Objection
+     * Window ended at or before {@code now} with an approval still Outstanding and not yet escalated,
+     * by id.
+     */
+    public List<RequestId> lapsedWindows(Instant now) {
+        Set<RequestId> unescalated = allocation.requestsWithUnescalatedOutstanding();
+        if (unescalated.isEmpty()) {
+            return List.of();
+        }
+        return requests.findIdsWithWindowEndedBy(now,
+                        List.of(RequestState.PENDING, RequestState.WAITING, RequestState.ALLOCATED)).stream()
+                .map(RequestId::new)
+                .filter(unescalated::contains)
+                .toList();
+    }
+
+    /**
+     * (Unscoped, for {@code DueWorkJob}; Lifecycle.Window.Start) The Objection Window lapsed: a
+     * Pending Request goes to Waiting, releasing every Hold and its credits and offering the freed
+     * capacity to the waitlist; then every Outstanding approval is escalated. A Waiting or Allocated
+     * Request is escalated only. Idempotent: a Request whose window runs, or with no unescalated
+     * Outstanding approval, is skipped. One transaction; the system is the actor. Escalation notices
+     * and the Capacity Planner's list come with issue #7.
+     */
+    @Transactional
+    public void onWindowLapse(RequestId id) {
+        RequestRow request = access.lockForSystem(id);
+        Instant now = clock.instant();
+        if (request.windowEndsAt() == null || request.windowRunsAt(now)) {
+            return;
+        }
+        if (approvalDriven().outstanding(id).stream().allMatch(Approval::escalated)) {
+            return;
+        }
+        List<RequestLineRow> rows = lines.findByRequestIdOrderById(request.id());
+        typeLock.lockTypes(new TreeSet<>(rows.stream().map(row -> new ResourceTypeId(row.typeId())).toList()));
+        List<RequestLineRow> freed = List.of();
+        if (request.state() == RequestState.PENDING) {
+            freed = releaseHolds(request, rows, now, "Hold released: the Objection Window ended.");
+            request.moveTo(RequestState.WAITING);
+            record(request, null, RequestState.PENDING.name(), RequestState.WAITING.name(), null, now,
+                    "The Objection Window ended with approvals outstanding; every Hold was released.");
+            notifyManager(request, "Request " + request.id() + " is Waiting: its Objection Window ended with approvals"
+                    + " outstanding, so its Holds were released.");
+        }
+        List<Approval> escalated = approvalDriven().escalate(id);
+        record(request, null, request.state().name(), request.state().name(), null, now, "ESCALATED: "
+                + (escalated.size() == 1 ? "1 approval" : escalated.size() + " approvals")
+                + " outstanding when the Objection Window ended went to the Capacity Planner.");
+        log.info("event=window_lapsed request={} team={} state={} escalated={} actor=system", request.id(),
+                request.teamId(), request.state(), escalated.size());
+        for (RequestLineRow row : freed) {
+            onCapacityFreed(row.allocationClass(), new ResourceTypeId(row.typeId()), RequestViews.window(row), now);
+        }
+    }
+
+    /**
+     * Cancels the Holds of the Request's Held lines and releases their credits; each line fits and
+     * waits for its Request again. Returns the lines whose capacity was freed.
+     */
+    private List<RequestLineRow> releaseHolds(RequestRow request, List<RequestLineRow> rows, Instant now, String note) {
+        TeamId team = new TeamId(request.teamId());
+        List<RequestLineRow> held = rows.stream().filter(row -> row.state() == RequestLineState.HELD).toList();
+        for (RequestLineRow row : held) {
+            allocatorOf(row).cancel(snapshot(request, row));
+            ledger.releaseCredits(team, new RequestLineId(row.id()));
+            changeLine(request, row, RequestLineState.EVALUATED, null, now, note);
+        }
+        return held;
     }
 }
