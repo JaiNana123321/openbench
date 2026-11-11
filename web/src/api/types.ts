@@ -457,3 +457,55 @@ export interface ReleaseOutcome {
 export interface WeeklyRecurrence {
   occurrences: number;
 }
+
+// ---------------------------------------------------------------- Settings: the Capacity Planner's settings
+
+export type DayOfWeek = 'MONDAY' | 'TUESDAY' | 'WEDNESDAY' | 'THURSDAY' | 'FRIDAY' | 'SATURDAY' | 'SUNDAY';
+
+/** A Price Band: on its weekdays, from `start` to `end` ("HH:MM:SS"; an end of 00:00 is midnight), `multiplier` times the Unit Price. */
+export interface PriceBand {
+  weekdays: DayOfWeek[];
+  start: string;
+  end: string;
+  multiplier: number;
+}
+
+/** A step of a Refund Schedule: a Release at least `minLead` (ISO-8601, such as "PT168H") ahead returns `fraction`. */
+export interface RefundStep {
+  minLead: string;
+  fraction: number;
+}
+
+/** The prices of an Exclusive or Metered type. `bumpCutoff` is an ISO-8601 duration, null for a Metered type. */
+export interface TypePricing {
+  unitPrice: Credits;
+  bands: PriceBand[];
+  refundSchedule: { steps: RefundStep[] };
+  bumpCutoff: string | null;
+}
+
+/**
+ * GET /api/settings: every setting. `pricing` is keyed by type id, `quotas` by "teamId:typeId", and
+ * `grants` (each Team's planned Grant for the current Period) by Team id.
+ */
+export interface PlannerSettings {
+  currentPeriod: Period;
+  objectionWindowWorkingDays: number;
+  dayRate: Credits;
+  priorityPremium: number;
+  pricing: Record<string, TypePricing>;
+  quotas: Record<string, number>;
+  grants: Record<string, Credits>;
+  periodMonths: number;
+}
+
+/** GET /api/settings/changes (paged, newest first): one logged change; a null value was not set. */
+export interface SettingChangeEntry {
+  id: Id;
+  key: string;
+  oldValue: string | null;
+  newValue: string | null;
+  actor: Id | null;
+  actorName: string | null;
+  at: Instant;
+}
