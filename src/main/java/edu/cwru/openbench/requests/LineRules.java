@@ -19,7 +19,7 @@ import org.springframework.stereotype.Component;
  *
  * <ul>
  * <li>the type exists ({@code TYPE_UNKNOWN}), is not retired ({@code TYPE_RETIRED}), and is Exclusive
- *     or Metered: Matched lines are not offered yet ({@code CLASS_NOT_OFFERED});
+ *     or Metered ({@code CLASS_NOT_OFFERED}): Person lines are checked by {@link PersonLineRules};
  * <li>the window ends after it starts and both ends fall on whole hours of the company time zone
  *     ({@code WINDOW_INVALID}), and it starts after now ({@code WINDOW_NOT_FUTURE});
  * <li>the quantity is at least 1 ({@code QUANTITY_INVALID});
