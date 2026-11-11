@@ -442,3 +442,98 @@ export interface ReleaseOutcome {
   line: RequestLine;
   refund: RefundQuote;
 }
+
+// ---------------------------------------------------------------- Matched: Person lines, Shortlists, approvals
+//
+// The fields below extend interfaces declared above (TypeScript merges the declarations). They are
+// optional so that Exclusive and Metered lines, and fixtures written before Person lines, need not
+// name them; the server always sends them.
+
+export interface RequestRecord {
+  /** The end of the Objection Window, set at submission when a line needs approval and never changed. */
+  windowEndsAt?: Instant | null;
+}
+
+export interface RequestLine {
+  /** The one Person a Person line names (quantity 1), or null. */
+  namedMember?: Id | null;
+  namedMemberName?: string | null;
+  /** The skills a skill-based Person line asks for; empty on any other line. */
+  skills?: Skill[];
+  /** A Person line's whole days, inclusive; null on other lines. */
+  days?: DayRange | null;
+}
+
+/**
+ * A Person line in POST /api/requests/{id}/lines and PUT .../lines/{lineId}: `start` is midnight of
+ * the first day and `end` midnight after the last, company time; it names one Person in
+ * `namedMemberId` (quantity 1) or asks for `skills`, a list of skill ids.
+ */
+export interface NewLine {
+  namedMemberId?: Id;
+  skills?: Id[];
+}
+
+export interface LineEdit {
+  namedMemberId?: Id;
+  skills?: Id[];
+}
+
+export type ApprovalState = 'OUTSTANDING' | 'APPROVED' | 'REFUSED' | 'CANCELED';
+
+export type Decision = 'APPROVE' | 'REFUSE';
+
+/** A Candidate selected for a Person line, with the state of their approval. */
+export interface CandidateApproval {
+  approval: Id;
+  member: Id;
+  name: string;
+  team: TeamRef;
+  state: ApprovalState;
+  escalated: boolean;
+  decidedByName: string | null;
+  decidedAt: Instant | null;
+  reason: string | null;
+}
+
+export interface LineDetail {
+  /** A Person line's selected Candidates, in the order selected; empty on other lines. */
+  candidates?: CandidateApproval[];
+}
+
+/** One row of a Shortlist: only what a Manager needs to choose. `position` counts from 1. */
+export interface ShortlistEntry {
+  position: number;
+  member: Id;
+  name: string;
+  team: TeamRef;
+  skills: string[];
+  personDaysLent: number;
+}
+
+/** GET /api/requests/{id}/lines/{lineId}/shortlist: by person-days lent this Period, then name. */
+export interface Shortlist {
+  lineId: Id;
+  candidates: ShortlistEntry[];
+}
+
+/**
+ * GET /api/approvals and POST /api/approvals/{id}/decision: an approval as its lending Manager sees
+ * it, with the Earning the lending Team would get and the end of the Objection Window.
+ */
+export interface ApprovalView {
+  id: Id;
+  requestId: Id;
+  lineId: Id;
+  candidate: Id;
+  candidateName: string;
+  requestingTeam: TeamRef;
+  days: DayRange;
+  earning: Credits;
+  windowEndsAt: Instant | null;
+  state: ApprovalState;
+  escalated: boolean;
+  decidedByName: string | null;
+  decidedAt: Instant | null;
+  reason: string | null;
+}

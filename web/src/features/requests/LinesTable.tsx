@@ -5,12 +5,12 @@ import {
   EmptyState,
   formatCredits,
   formatEnum,
-  formatWindow,
   ProblemMessage,
   StatusBadge,
   Table,
   type Column,
 } from '../../ui';
+import { personAsk, personCount, whenText } from './personLineText';
 import { useRemoveLine, useSetRequired, useSplitLine } from './queries';
 
 interface LinesTableProps {
@@ -32,10 +32,11 @@ export function LinesTable({ requestId, lines, editable }: LinesTableProps) {
     { header: 'Resource Type', cell: (line) => `${line.typeName} (${formatEnum(line.allocationClass)})` },
     {
       header: 'Resource',
-      cell: (line) => line.namedResourceName ?? (line.allocationClass === 'EXCLUSIVE' ? 'Any' : '—'),
+      cell: (line) =>
+        personAsk(line) ?? line.namedResourceName ?? (line.allocationClass === 'EXCLUSIVE' ? 'Any' : '—'),
     },
     { header: 'Quantity', cell: (line) => amountText(line), numeric: true },
-    { header: 'Window', cell: (line) => formatWindow(line.window) },
+    { header: 'Window', cell: (line) => whenText(line) },
     { header: 'Quote', cell: (line) => (line.quote === null ? 'No price' : formatCredits(line.quote)), numeric: true },
     {
       header: 'Required',
@@ -102,6 +103,8 @@ export function LinesTable({ requestId, lines, editable }: LinesTableProps) {
 }
 
 function amountText(line: RequestLine): string {
+  const people = personCount(line);
+  if (people) return people;
   if (line.allocationClass === 'METERED') return `${line.quantity} ${line.quantity === 1 ? 'unit' : 'units'}`;
   return `${line.quantity} ${line.quantity === 1 ? 'instance' : 'instances'}`;
 }

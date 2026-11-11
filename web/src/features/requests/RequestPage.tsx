@@ -6,6 +6,7 @@ import { useCurrentMember } from '../../auth/currentMember';
 import { ErrorPage } from '../../shell/ErrorPage';
 import { Button, formatCredits, Loading, PageHeader, ProblemMessage, StatusBadge } from '../../ui';
 import { AddLineForm } from './AddLineForm';
+import { AddPersonLineForm } from './AddPersonLineForm';
 import { LinesTable } from './LinesTable';
 import { RequestDetailView } from './RequestDetailView';
 import { TotalsPanel } from './TotalsPanel';
@@ -49,6 +50,7 @@ export function DraftEditor({ view, totalsActions }: DraftEditorProps) {
       <div className="draft-layout">
         <div>
           <AddLineForm requestId={request.id} />
+          <AddPersonLineForm requestId={request.id} />
           <LinesTable requestId={request.id} lines={view.lines} editable />
         </div>
         <TotalsPanel view={view}>{totalsActions}</TotalsPanel>
