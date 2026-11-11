@@ -321,10 +321,10 @@ class DraftRequestTest extends PostgresTest {
     }
 
     @Test
-    @DisplayName("Matched lines are not in Demo 1: a Matched type is refused with 422 CLASS_NOT_OFFERED")
-    void refusesAMatchedType() throws Exception {
+    @DisplayName("A Person line covers whole days: a window of hours is refused with 422 WINDOW_INVALID")
+    void refusesAPersonLineOfHours() throws Exception {
         long person = jdbc.queryForObject("SELECT id FROM resource_type WHERE name = 'Person'", Long.class);
-        refused(addLine(alice, createDraft(alice), person, 1, tuesdayAt(14), tuesdayAt(16), null), 422, "CLASS_NOT_OFFERED");
+        refused(addLine(alice, createDraft(alice), person, 1, tuesdayAt(14), tuesdayAt(16), null), 422, "WINDOW_INVALID");
     }
 
     @Test

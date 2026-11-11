@@ -22,12 +22,12 @@ class AllocatorRegistryTest extends AllocationTest {
     }
 
     @Test
-    @DisplayName("refuses Matched, which has no allocator in this increment, with a clear error")
-    void refusesMatched() {
-        assertThatThrownBy(() -> registry.forClass(AllocationClass.MATCHED))
-                .isInstanceOf(IllegalStateException.class)
-                .hasMessageContaining("MATCHED");
+    @DisplayName("finds the Matched allocator, which is ApprovalDriven and never waits")
+    void findsMatched() {
+        assertThat(registry.forClass(AllocationClass.MATCHED).allocationClass()).isEqualTo(AllocationClass.MATCHED);
+        assertThat(registry.capability(AllocationClass.MATCHED, ApprovalDriven.class)).isPresent();
         assertThat(registry.capability(AllocationClass.MATCHED, Waitlistable.class)).isEmpty();
+        assertThat(registry.capability(AllocationClass.EXCLUSIVE, ApprovalDriven.class)).isEmpty();
     }
 
     @Test
