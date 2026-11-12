@@ -39,7 +39,10 @@ class Transaction {
     /** The Request Line it concerns, or null. */
     private Long lineId;
 
-    /** The mid-Period Grant's reason, or null. */
+    /** The Loan an Earning pays for, or null. */
+    private Long loanId;
+
+    /** The mid-Period Grant's reason, an Earning's Loan in words, or null. */
     private String reason;
 
     /** The Member who caused it, or null for the system. */
@@ -81,8 +84,21 @@ class Transaction {
                 actorId, postedAt);
     }
 
+    /** An Earning: all of it into earned credits, for the Loan, described in {@code reason}. */
+    static Transaction earning(Long teamId, BigDecimal amount, Long periodId, Long lineId, Long loanId,
+            String description, Long actorId, Instant postedAt) {
+        Transaction earning = new Transaction(teamId, TransactionKind.EARNING, BigDecimal.ZERO, amount, periodId,
+                lineId, description, actorId, postedAt);
+        earning.loanId = loanId;
+        return earning;
+    }
+
     Long id() {
         return id;
+    }
+
+    Long loanId() {
+        return loanId;
     }
 
     Long teamId() {

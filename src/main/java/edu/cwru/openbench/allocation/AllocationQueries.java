@@ -70,4 +70,10 @@ public interface AllocationQueries {
 
     /** The Requests with an Outstanding approval not yet escalated, by id: what a lapse acts on. */
     Set<RequestId> requestsWithUnescalatedOutstanding();
+
+    /** The Loans a Matched line's commit formed, by id; empty before its commit (for {@code postEarning}). */
+    List<Loan> loansFor(RequestLineId line);
+
+    /** Every Loan of the Member, past and future, by first day. Unscoped: callers check who may see them. */
+    List<Loan> loansOf(MemberId member);
 }
