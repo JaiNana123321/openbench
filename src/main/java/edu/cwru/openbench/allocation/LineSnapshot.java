@@ -1,9 +1,11 @@
 package edu.cwru.openbench.allocation;
 
+import edu.cwru.openbench.common.MemberId;
 import edu.cwru.openbench.common.RequestId;
 import edu.cwru.openbench.common.RequestLineId;
 import edu.cwru.openbench.common.ResourceId;
 import edu.cwru.openbench.common.ResourceTypeId;
+import edu.cwru.openbench.common.SkillId;
 import edu.cwru.openbench.common.TeamId;
 import edu.cwru.openbench.common.TimeWindow;
 import edu.cwru.openbench.inventory.AllocationClass;
@@ -11,6 +13,7 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 
 /**
  * An immutable copy of a submitted Request Line, built by Requests: the only thing Allocation knows
@@ -26,6 +29,9 @@ import java.util.Optional;
  * @param occurrences every occurrence of the line, by start: the window alone, or one window per week
  *     of a weekly recurrence (only an Exclusive line recurs), expanded by Requests in the company time
  *     zone; the first is {@code window}
+ * @param namedMember the one Person a Matched line names, if any; then the quantity is 1
+ * @param skills the skills a skill-based Matched line asks for; empty otherwise. A Matched line's
+ *     window runs from midnight of its first day to midnight after its last, company time
  */
 public record LineSnapshot(
         RequestLineId lineId,
@@ -41,7 +47,9 @@ public record LineSnapshot(
         boolean priority,
         Instant submittedAt,
         boolean bumped,
-        List<TimeWindow> occurrences) {
+        List<TimeWindow> occurrences,
+        Optional<MemberId> namedMember,
+        Set<SkillId> skills) {
 
     public LineSnapshot {
         Objects.requireNonNull(lineId, "lineId");
@@ -68,15 +76,20 @@ public record LineSnapshot(
         if (occurrences.size() > 1 && allocationClass != AllocationClass.EXCLUSIVE) {
             throw new IllegalArgumentException("Only an Exclusive line recurs.");
         }
+        Objects.requireNonNull(namedMember, "namedMember");
+        skills = Set.copyOf(skills);
+        if (namedMember.isPresent() && (allocationClass != AllocationClass.MATCHED || quantity != 1)) {
+            throw new IllegalArgumentException("Only a Matched line of quantity 1 names a Person.");
+        }
     }
 
-    /** A line with one occurrence, its window. */
+    /** An Exclusive or Metered line with one occurrence, its window: no recurrence, no named Person, no skills. */
     public LineSnapshot(RequestLineId lineId, RequestId requestId, TeamId teamId, ResourceTypeId typeId,
             AllocationClass allocationClass, int quantity, Integer units, TimeWindow window,
             Optional<ResourceId> namedResource, boolean required, boolean priority, Instant submittedAt,
             boolean bumped) {
         this(lineId, requestId, teamId, typeId, allocationClass, quantity, units, window, namedResource, required,
-                priority, submittedAt, bumped, null);
+                priority, submittedAt, bumped, null, Optional.empty(), Set.of());
     }
 
     /** From the start of the first occurrence to the end of the last: the window itself without a recurrence. */

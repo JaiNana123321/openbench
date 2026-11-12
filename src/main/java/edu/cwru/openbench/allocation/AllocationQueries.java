@@ -1,11 +1,15 @@
 package edu.cwru.openbench.allocation;
 
+import edu.cwru.openbench.common.ApprovalId;
+import edu.cwru.openbench.common.MemberId;
+import edu.cwru.openbench.common.RequestId;
 import edu.cwru.openbench.common.RequestLineId;
 import edu.cwru.openbench.common.ResourceId;
 import edu.cwru.openbench.common.ResourceTypeId;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 /** Read-only questions about live (HELD or ALLOCATED) rows and the waitlist. */
 public interface AllocationQueries {
@@ -51,4 +55,19 @@ public interface AllocationQueries {
      * (Exclusive) or units (Metered). Empty for a line with nothing allocated.
      */
     List<AllocatedPart> allocatedParts(RequestLineId line);
+
+    /** The Outstanding approvals addressed to this Manager, by id (escalated ones for a Planner come with #7). */
+    List<Approval> approvalsAwaiting(MemberId approver);
+
+    /** One approval, in any state; empty when it does not exist. */
+    Optional<Approval> approval(ApprovalId id);
+
+    /** Every approval of a Matched line, in the order its Candidates were selected. */
+    List<Approval> approvalsOf(RequestLineId line);
+
+    /** Every approval of a Request's Matched lines, in the order their Candidates were selected. */
+    List<Approval> approvalsOfRequest(RequestId request);
+
+    /** The Requests with an Outstanding approval not yet escalated, by id: what a lapse acts on. */
+    Set<RequestId> requestsWithUnescalatedOutstanding();
 }

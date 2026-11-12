@@ -1,9 +1,12 @@
 package edu.cwru.openbench.requests;
 
+import edu.cwru.openbench.common.MemberId;
 import edu.cwru.openbench.common.ResourceId;
 import edu.cwru.openbench.common.WeeklyRecurrence;
+import edu.cwru.openbench.common.SkillId;
 import jakarta.validation.constraints.NotNull;
 import java.time.Instant;
+import java.util.List;
 
 /**
  * The body of PUT /api/requests/{id}/lines/{lineId}: what the line asks for, replaced whole. The
@@ -15,4 +18,6 @@ public record LineEdit(
         @NotNull Instant start,
         @NotNull Instant end,
         ResourceId namedResourceId,
-        WeeklyRecurrence recurrence) {}
+        WeeklyRecurrence recurrence,
+        MemberId namedMemberId,
+        List<SkillId> skills) {}

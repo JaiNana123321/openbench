@@ -9,7 +9,7 @@ public interface AllocatorRegistry {
     /**
      * The class's allocator.
      *
-     * @throws IllegalStateException for a class without one (MATCHED, until its increment)
+     * @throws IllegalStateException for a class without one
      */
     Allocator forClass(AllocationClass allocationClass);
 

@@ -10,6 +10,7 @@ import edu.cwru.openbench.common.ResourceTypeId;
 import edu.cwru.openbench.common.Role;
 import edu.cwru.openbench.common.RuleViolation;
 import edu.cwru.openbench.common.TeamId;
+import edu.cwru.openbench.inventory.AllocationClass;
 import edu.cwru.openbench.inventory.ResourceType;
 import edu.cwru.openbench.ledger.LedgerService;
 import java.time.Clock;
@@ -18,6 +19,7 @@ import java.util.Collection;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
@@ -53,9 +55,12 @@ public class RequestService {
     private final RequestViews views;
     private final LedgerService ledger;
     private final Clock clock;
+    private final PersonLineRules personRules;
 
     RequestService(RequestRepository requests, RequestLineRepository lines, RequestEventRepository events,
-            RequestAccess access, LineRules rules, RequestViews views, LedgerService ledger, Clock clock) {
+            RequestAccess access, LineRules rules, RequestViews views, LedgerService ledger, Clock clock,
+            PersonLineRules personRules) {
+        this.personRules = personRules;
         this.requests = requests;
         this.lines = lines;
         this.events = events;
@@ -82,6 +87,9 @@ public class RequestService {
     @Transactional
     public RequestLine addLine(Actor actor, RequestId id, NewLine line) {
         RequestRow request = access.editableDraft(actor, id);
+        if (personRules.isPersonType(line.typeId())) {
+            return addPersonLine(actor, request, line);
+        }
         ResourceType type = rules.check(line.typeId(), line.quantity(), line.start(), line.end(), line.namedResourceId());
         rules.checkRecurrence(type.id(), line.start(), line.end(), line.recurrence());
         RequestLineRow row = lines.save(new RequestLineRow(request.id(), type.id().value(), type.allocationClass(),
@@ -97,6 +105,9 @@ public class RequestService {
     public RequestLine editLine(Actor actor, RequestId id, RequestLineId lineId, LineEdit edit) {
         RequestRow request = access.editableDraft(actor, id);
         RequestLineRow row = lineOf(request, lineId);
+        if (row.allocationClass() == AllocationClass.MATCHED) {
+            return editPersonLine(actor, request, row, edit);
+        }
         rules.check(new ResourceTypeId(row.typeId()), edit.quantity(), edit.start(), edit.end(), edit.namedResourceId());
         rules.checkRecurrence(new ResourceTypeId(row.typeId()), edit.start(), edit.end(), edit.recurrence());
         row.change(edit.quantity(), edit.start(), edit.end(), idOrNull(edit.namedResourceId()));
@@ -234,5 +245,27 @@ public class RequestService {
 
     private static Long idOrNull(ResourceId id) {
         return id == null ? null : id.value();
+    }
+
+    // ---------------------------------------------------------------- Person lines
+
+    /** Adds a Required Person line, naming one Person or asking for skills ({@link PersonLineRules}). */
+    private RequestLine addPersonLine(Actor actor, RequestRow request, NewLine line) {
+        rules.checkRecurrence(line.typeId(), line.start(), line.end(), line.recurrence());
+        Set<Long> skills = personRules.check(new TeamId(request.teamId()), line.typeId(), line.quantity(), line.start(),
+                line.end(), line.namedResourceId(), line.namedMemberId(), line.skills());
+        RequestLineRow row = lines.save(RequestLineRow.person(request.id(), line.typeId().value(), line.quantity(),
+                line.start(), line.end(), line.namedMemberId() == null ? null : line.namedMemberId().value(), skills,
+                clock.instant(), actor.memberId().value()));
+        return views.session().line(request, row);
+    }
+
+    private RequestLine editPersonLine(Actor actor, RequestRow request, RequestLineRow row, LineEdit edit) {
+        rules.checkRecurrence(new ResourceTypeId(row.typeId()), edit.start(), edit.end(), edit.recurrence());
+        Set<Long> skills = personRules.check(new TeamId(request.teamId()), new ResourceTypeId(row.typeId()),
+                edit.quantity(), edit.start(), edit.end(), edit.namedResourceId(), edit.namedMemberId(), edit.skills());
+        row.changePerson(edit.quantity(), edit.start(), edit.end(),
+                edit.namedMemberId() == null ? null : edit.namedMemberId().value(), skills);
+        return views.session().line(request, row);
     }
 }

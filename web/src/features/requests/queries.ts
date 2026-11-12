@@ -4,6 +4,7 @@ import type {
   DraftView,
   Id,
   LineEdit,
+  MemberSummary,
   NewLine,
   Page,
   RefundQuote,
@@ -15,6 +16,8 @@ import type {
   RequestSummary,
   Resource,
   ResourceType,
+  Shortlist,
+  Skill,
 } from '../../api/types';
 
 // The Requests API (design Section 7, "Requests"). Keys start with 'requests': ['requests', 'list', ...]
@@ -171,6 +174,43 @@ export function useReleasePreview(requestId: Id, lineId: Id, body: ReleaseBody |
         occurrences: body?.occurrences?.join(','),
       }),
     enabled: body !== undefined,
+  });
+}
+
+// ---------------------------------------------------------------- Person lines
+
+/** The skill list, offered skills only, under the same key as the profiles feature. */
+export function useOfferedSkills() {
+  return useQuery({
+    queryKey: ['skills', { includeRetired: false }],
+    queryFn: () => api.get<Skill[]>('/api/skills', { includeRetired: false }),
+  });
+}
+
+/** The active Members of other Teams, whom a Person line may name. */
+export function useLendableMembers() {
+  return useQuery({
+    queryKey: ['members', 'lendable'],
+    queryFn: () => api.get<MemberSummary[]>('/api/members/lendable'),
+  });
+}
+
+/** A Person line's Shortlist, computed by the server on every call; waits while `enabled` is false. */
+export function useShortlist(requestId: Id, lineId: Id, enabled: boolean) {
+  return useQuery({
+    queryKey: [...requestKeys.request(requestId), 'shortlist', lineId] as const,
+    queryFn: () => api.get<Shortlist>(`/api/requests/${requestId}/lines/${lineId}/shortlist`),
+    enabled,
+  });
+}
+
+/** Selects Candidates for a Person line; a Waiting Request may go back to Pending and hold again. */
+export function useSelectCandidates(requestId: Id) {
+  const invalidate = useInvalidateTransition();
+  return useMutation({
+    mutationFn: ({ lineId, members }: { lineId: Id; members: Id[] }) =>
+      api.post<RequestDetail>(`/api/requests/${requestId}/lines/${lineId}/candidates`, { members }),
+    onSuccess: invalidate,
   });
 }
 

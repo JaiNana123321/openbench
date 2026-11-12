@@ -280,4 +280,33 @@ public final class TestData {
 
     /** See {@link #periodBoundary()}. */
     public record PeriodBoundary(long ending, long starting, LocalDate endingOn, LocalDate startsOn) {}
+
+    // ---------------------------------------------------------------- Allocation: Loans
+
+    /**
+     * A formed Loan of the Member, lent by one Team to another for the days {@code startsOn} to
+     * {@code endsOn}, inclusive, with {@code days_lent} their Monday-to-Friday days: a {@code loan}
+     * row on a Person line of a new Request of the borrowing Team, as Matched allocation forms one
+     * (issue #6). A Loan overlapping another of the Member's breaks {@code loan_one_at_a_time}.
+     */
+    public long loan(long memberId, long lendingTeamId, long borrowingTeamId, LocalDate startsOn, LocalDate endsOn) {
+        long person = jdbc.queryForObject("SELECT id FROM resource_type WHERE name = 'Person'", Long.class);
+        long request = jdbc.queryForObject("INSERT INTO request (team_id, state) VALUES (?, 'ALLOCATED') RETURNING id",
+                Long.class, borrowingTeamId);
+        long line = jdbc.queryForObject("""
+                INSERT INTO request_line (request_id, type_id, allocation_class, quantity, starts_at, ends_at,
+                                          named_member_id, state)
+                VALUES (?, ?, 'MATCHED', 1, ?, ?, ?, 'LOANED') RETURNING id""",
+                Long.class, request, person, startsOn, endsOn.plusDays(1), memberId);
+        int weekdays = 0;
+        for (LocalDate day = startsOn; !day.isAfter(endsOn); day = day.plusDays(1)) {
+            if (day.getDayOfWeek().getValue() <= 5) {
+                weekdays++;
+            }
+        }
+        return jdbc.queryForObject("""
+                INSERT INTO loan (line_id, member_id, lending_team_id, borrowing_team_id, starts_on, ends_on, days_lent)
+                VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING id""",
+                Long.class, line, memberId, lendingTeamId, borrowingTeamId, startsOn, endsOn, weekdays);
+    }
 }

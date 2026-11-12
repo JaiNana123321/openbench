@@ -55,6 +55,12 @@ class MembersController {
         return members.profile(actor, actor.memberId());
     }
 
+    /** The Members of other Teams a Person line may name. */
+    @GetMapping("/members/lendable")
+    List<MemberSummary> lendable(Actor actor) {
+        return members.lendable(actor);
+    }
+
     @GetMapping("/members/{id}/profile")
     MemberProfile profile(Actor actor, @PathVariable MemberId id) {
         return members.profile(actor, id);

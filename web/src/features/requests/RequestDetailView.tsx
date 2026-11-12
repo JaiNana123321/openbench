@@ -17,9 +17,10 @@ import {
   Table,
   type Column,
 } from '../../ui';
-import { lineWindowText } from './LinesTable';
 import { useRequestDetail, useWithdrawRequest } from './queries';
 import { ReleaseForm } from './ReleaseForm';
+import { PersonLines } from './PersonLines';
+import { personAsk, personCount, whenText } from './personLineText';
 
 /** The states a Request may be withdrawn from (design Table "Request transitions"); the server decides. */
 const WITHDRAWABLE: ReadonlySet<RequestState> = new Set(['DRAFT', 'PENDING', 'WAITING']);
@@ -58,6 +59,7 @@ export function RequestDetailView({ id }: { id: Id }) {
           <>
             {request.team.name} Team <StatusBadge status={request.state} />
             {request.submittedAt && <> Submitted {formatInstant(request.submittedAt)}</>}
+            {request.windowEndsAt && <> Objection Window until {formatInstant(request.windowEndsAt)}</>}
           </>
         }
         actions={
@@ -87,6 +89,8 @@ export function RequestDetailView({ id }: { id: Id }) {
           empty={<EmptyState title="This Request has no lines." />}
         />
       </section>
+
+      <PersonLines requestId={id} lines={lines} number={number} canSelect={ownManager} />
 
       {released && (
         <ReleaseForm
@@ -122,8 +126,12 @@ function lineColumns(number: Map<Id, number>): Column<LineDetail>[] {
   return [
     { header: '#', cell: ({ line }) => number.get(line.id), numeric: true },
     { header: 'Resource Type', cell: ({ line }) => `${line.typeName} (${formatEnum(line.allocationClass)})` },
-    { header: 'Quantity', cell: ({ line }) => amountText(line.allocationClass, line.quantity), numeric: true },
-    { header: 'Window', cell: ({ line }) => lineWindowText(line) },
+    {
+      header: 'Quantity',
+      cell: ({ line }) => personCount(line) ?? amountText(line.allocationClass, line.quantity),
+      numeric: true,
+    },
+    { header: 'Window', cell: ({ line }) => whenText(line) },
     { header: 'Required', cell: ({ line }) => (line.required ? 'Required' : 'Optional') },
     { header: 'State', cell: ({ line }) => <StatusBadge status={line.state} /> },
     {
@@ -133,7 +141,7 @@ function lineColumns(number: Map<Id, number>): Column<LineDetail>[] {
           ? assignedResources.map((resource) => resource.name).join(', ')
           : line.namedResourceName
             ? `Asked for ${line.namedResourceName}`
-            : '—',
+            : (personAsk(line) ?? '—'),
     },
     {
       header: 'Locked Quote',

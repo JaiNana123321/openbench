@@ -3,6 +3,7 @@ package edu.cwru.openbench.requests;
 import edu.cwru.openbench.common.TimeWindow;
 import edu.cwru.openbench.common.WeeklyRecurrence;
 import edu.cwru.openbench.inventory.AllocationClass;
+import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
@@ -14,6 +15,7 @@ import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.util.List;
+import java.util.Set;
 
 /**
  * A row of {@code request_line}: one need inside a Request, over the half-open window
@@ -163,6 +165,7 @@ class RequestLineRow {
                 namedResourceId, false, at, actor);
         part.recurrence = recurrence;
         part.priority = priority;
+        part.skills = skills;
         return part;
     }
 
@@ -183,5 +186,36 @@ class RequestLineRow {
 
     void setPriority(boolean priority) {
         this.priority = priority;
+    }
+
+    // ---------------------------------------------------------------- Person lines
+
+    /** The skill ids a skill-based Person line asks for; null on any other line. */
+    @Column(columnDefinition = "bigint[]")
+    private Long[] skills;
+
+    /** A new Draft Person line: one named Person (quantity 1), or a set of skills. */
+    static RequestLineRow person(Long requestId, Long typeId, int quantity, Instant startsAt, Instant endsAt,
+            Long namedMemberId, Set<Long> skills, Instant createdAt, Long createdBy) {
+        RequestLineRow row = new RequestLineRow(requestId, typeId, AllocationClass.MATCHED, quantity, startsAt, endsAt,
+                null, true, createdAt, createdBy);
+        row.changePerson(quantity, startsAt, endsAt, namedMemberId, skills);
+        return row;
+    }
+
+    /** Replaces what a Person line asks for. */
+    void changePerson(int quantity, Instant startsAt, Instant endsAt, Long namedMemberId, Set<Long> skills) {
+        change(quantity, startsAt, endsAt, null);
+        this.namedMemberId = namedMemberId;
+        this.skills = namedMemberId == null ? skills.stream().sorted().toArray(Long[]::new) : null;
+    }
+
+    Long namedMemberId() {
+        return namedMemberId;
+    }
+
+    /** The skill ids of a skill-based Person line; empty on any other line. */
+    Set<Long> skills() {
+        return skills == null ? Set.of() : Set.of(skills);
     }
 }

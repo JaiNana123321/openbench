@@ -317,4 +317,36 @@ public class MemberService {
     public Optional<MemberId> findManagerOf(TeamId team) {
         return teams.findById(team.value()).map(Team::managerMemberId).map(MemberId::new);
     }
+
+    // ---------------------------------------------------------------- Matched lines
+
+    /** (Unscoped) {@link #summary}, or empty for an unknown Member, without throwing. */
+    public Optional<MemberSummary> findSummary(MemberId id) {
+        return members.findById(id.value())
+                .map(member -> summaryOf(member, teams.findById(member.teamId()).orElseThrow()));
+    }
+
+    /** (Unscoped) The skills a Member holds, by name: what a Shortlist row shows. */
+    public List<Skill> skillsOf(MemberId id) {
+        return skills.findAllById(memberSkills.skillIdsOf(id.value())).stream()
+                .map(SkillRow::toSkill).sorted(BY_NAME).toList();
+    }
+
+    /** (Unscoped) The skills with these ids, by name, retired or not; unknown ids are left out. */
+    public List<Skill> skillsById(Collection<SkillId> ids) {
+        return skills.findAllById(ids.stream().map(SkillId::value).toList()).stream()
+                .map(SkillRow::toSkill).sorted(BY_NAME).toList();
+    }
+
+    /**
+     * GET /api/members/lendable: the active Members of every other Team, by name, whom the caller's
+     * Team could name on a Person line.
+     */
+    @PreAuthorize("hasAuthority('MANAGER')")
+    public List<MemberSummary> lendable(Actor actor) {
+        Map<Long, Team> byId = teams.findAll().stream().collect(Collectors.toMap(Team::id, Function.identity()));
+        return members.findByActiveTrueAndTeamIdNotOrderByName(actor.teamId().value()).stream()
+                .map(member -> summaryOf(member, byId.get(member.teamId())))
+                .toList();
+    }
 }

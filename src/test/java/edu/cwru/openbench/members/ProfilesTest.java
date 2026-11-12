@@ -56,7 +56,7 @@ class ProfilesTest extends PostgresTest {
     }
 
     @Test
-    @Verifies(value = "prf-skills", partial = true)
+    @Verifies("prf-skills")
     @DisplayName("prf-skills: a Member maintains their own skills from the skill list, and not their Team")
     void aMemberMaintainsTheirOwnSkillsFromTheList() throws Exception {
         Login ben = world.ben();
@@ -92,14 +92,20 @@ class ProfilesTest extends PostgresTest {
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.code").value("FORBIDDEN"));
 
-        // Pass criteria (step 5, the Shortlist, waits for Matched allocation).
+        // Step 5: Alice submits a Person line for Statistics, D to D+1; Ben is not on its Shortlist.
+        shortlist(world.alice(), submittedPersonLine(world.alice(), d, d.plusDays(1)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.candidates[*].member", hasItem((int) world.dave().id())))
+                .andExpect(jsonPath("$.candidates[*].member", not(hasItem((int) ben.id()))));
+
+        // Pass criteria.
         myProfile(ben)
                 .andExpect(jsonPath("$.skills[*].name", contains("Java", "Statistics")))
                 .andExpect(jsonPath("$.team.id").value((int) world.platform()));
     }
 
     @Test
-    @Verifies(value = "prf-availability", partial = true)
+    @Verifies("prf-availability")
     @DisplayName("prf-availability: a Member is available only when one range holds every day of the window")
     void availabilityRangesDecideWhetherAMemberIsAvailable() throws Exception {
         Login dave = world.dave();
@@ -126,6 +132,42 @@ class ProfilesTest extends PostgresTest {
         TeamId platform = new TeamId(world.platform());
         assertThat(members.availableWithSkills(statistics, m1, platform)).contains(ritaId).doesNotContain(daveId);
         assertThat(members.availableWithSkills(statistics, m2, platform)).contains(daveId, ritaId);
+
+        // Step 2: Alice's Shortlist for M1 holds Rita Gomez only of this world: D+1 is outside Dave's ranges.
+        String thisWorld = "[?(@.member in [%d, %d, %d])]".formatted(dave.id(), world.rita().id(), world.ben().id());
+        shortlist(world.alice(), submittedPersonLine(world.alice(), d, d.plusDays(1)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.candidates" + thisWorld + ".name", contains("Rita Gomez")));
+
+        // Step 3: for M2 (D+2 to D+3) every day lies inside a range: Dave Kim, then Rita Gomez.
+        shortlist(world.alice(), submittedPersonLine(world.alice(), d.plusDays(2), d.plusDays(3)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.candidates" + thisWorld + ".name", contains("Dave Kim", "Rita Gomez")));
+    }
+
+    /**
+     * Submits a Request of the Manager's Team with one Person line for Statistics over the days,
+     * inclusive, and returns the Request's and the line's ids.
+     */
+    private long[] submittedPersonLine(Login manager, LocalDate from, LocalDate to) throws Exception {
+        long person = jdbc.queryForObject("SELECT id FROM resource_type WHERE name = 'Person'", Long.class);
+        String created = mvc.perform(post("/api/requests").with(signedInAs(manager.username())).with(xsrf()))
+                .andExpect(status().isCreated()).andReturn().getResponse().getContentAsString();
+        long request = ((Number) JsonPath.read(created, "$.id")).longValue();
+        String body = "{'typeId': %d, 'quantity': 1, 'start': '%s', 'end': '%s', 'skills': [%d]}".formatted(person,
+                from.atStartOfDay(clock.getZone()).toInstant(), to.plusDays(1).atStartOfDay(clock.getZone()).toInstant(),
+                world.statistics()).replace('\'', '"');
+        String line = mvc.perform(post("/api/requests/{id}/lines", request).with(signedInAs(manager.username()))
+                        .with(xsrf()).contentType(MediaType.APPLICATION_JSON).content(body))
+                .andExpect(status().isCreated()).andReturn().getResponse().getContentAsString();
+        mvc.perform(post("/api/requests/{id}/submit", request).with(signedInAs(manager.username())).with(xsrf()))
+                .andExpect(status().isOk());
+        return new long[] {request, ((Number) JsonPath.read(line, "$.id")).longValue()};
+    }
+
+    private ResultActions shortlist(Login manager, long[] requestAndLine) throws Exception {
+        return mvc.perform(get("/api/requests/{id}/lines/{line}/shortlist", requestAndLine[0], requestAndLine[1])
+                .with(signedInAs(manager.username())));
     }
 
     @Test

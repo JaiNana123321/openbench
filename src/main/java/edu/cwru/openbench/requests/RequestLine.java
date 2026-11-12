@@ -1,6 +1,10 @@
 package edu.cwru.openbench.requests;
 
 import edu.cwru.openbench.common.Credits;
+import edu.cwru.openbench.common.DateRange;
+import edu.cwru.openbench.common.MemberId;
+import edu.cwru.openbench.members.Skill;
+import java.util.List;
 import edu.cwru.openbench.common.RequestId;
 import edu.cwru.openbench.common.RequestLineId;
 import edu.cwru.openbench.common.ResourceId;
@@ -18,6 +22,12 @@ import edu.cwru.openbench.inventory.AllocationClass;
  * {@code recurrence} is null unless an Exclusive line recurs weekly, and the Quote then covers every
  * occurrence. {@code priority} is the Priority mark, offered on Exclusive lines only; the Quote
  * then carries the priority premium.
+ *
+ * <p>A Person (Matched) line asks for {@code quantity} Persons over whole days: {@code days} holds
+ * them, inclusive at both ends ({@code {"from": "2026-11-25", "to": "2026-11-26"}}), and its
+ * {@code window} runs from midnight of the first day to midnight after the last, company time. It
+ * either names one Person ({@code namedMember}, {@code namedMemberName}; quantity 1) or asks for
+ * {@code skills}. It has no Quote (ADR-0004). These four are null, or empty, on other lines.
  */
 public record RequestLine(
         RequestLineId id,
@@ -33,4 +43,8 @@ public record RequestLine(
         RequestLineState state,
         Credits quote,
         WeeklyRecurrence recurrence,
-        boolean priority) {}
+        boolean priority,
+        MemberId namedMember,
+        String namedMemberName,
+        List<Skill> skills,
+        DateRange days) {}

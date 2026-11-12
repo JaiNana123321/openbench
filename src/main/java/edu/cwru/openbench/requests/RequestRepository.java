@@ -1,6 +1,9 @@
 package edu.cwru.openbench.requests;
 
 import jakarta.persistence.LockModeType;
+import java.time.Instant;
+import java.util.Collection;
+import java.util.List;
 import java.util.Optional;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -30,4 +33,8 @@ interface RequestRepository extends JpaRepository<RequestRow, Long> {
     Page<RequestRow> findByTeamIdAndState(Long teamId, RequestState state, Pageable page);
 
     Page<RequestRow> findByState(RequestState state, Pageable page);
+
+    /** The Requests in these states whose Objection Window ended at or before the instant, by id. */
+    @Query("select r.id from RequestRow r where r.windowEndsAt <= :now and r.state in :states order by r.id")
+    List<Long> findIdsWithWindowEndedBy(Instant now, Collection<RequestState> states);
 }
