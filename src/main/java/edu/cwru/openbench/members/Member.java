@@ -28,7 +28,20 @@ class Member {
 
     private boolean active;
 
+    private Long createdBy;
+
     protected Member() {}
+
+    /** A new active Member; {@code passwordHash} is the bcrypt hash, never the password itself. */
+    Member(Long teamId, String name, String email, String username, String passwordHash, Long createdBy) {
+        this.teamId = teamId;
+        this.name = name;
+        this.email = email;
+        this.username = username;
+        this.passwordHash = passwordHash;
+        this.active = true;
+        this.createdBy = createdBy;
+    }
 
     Long id() {
         return id;
@@ -57,6 +70,11 @@ class Member {
     /** False once an Administrator deactivates the Member: they can no longer sign in. */
     boolean active() {
         return active;
+    }
+
+    /** The Member can no longer sign in; their rows and history stay. */
+    void deactivate() {
+        this.active = false;
     }
 
     /** Moves the Member to another Team; their stored roles follow by the foreign key's cascade. */

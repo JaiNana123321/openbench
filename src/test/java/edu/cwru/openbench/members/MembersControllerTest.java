@@ -13,7 +13,7 @@ import edu.cwru.openbench.Verifies;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
-@Verifies("adm-roles-server")
+@Verifies(value = "adm-roles-server", partial = true)
 class MembersControllerTest extends PostgresTest {
 
     @Test

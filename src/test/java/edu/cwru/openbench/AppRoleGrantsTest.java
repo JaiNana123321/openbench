@@ -56,7 +56,7 @@ class AppRoleGrantsTest extends PostgresTest {
     }
 
     @ParameterizedTest
-    @ValueSource(strings = {"transaction", "request_event", "setting_change"})
+    @ValueSource(strings = {"transaction", "request_event", "setting_change", "admin_change"})
     void leavesTheHistoryTablesInsertOnly(String table) {
         assertThat(privilege(table, "SELECT")).isTrue();
         assertThat(privilege(table, "INSERT")).isTrue();

@@ -16,6 +16,10 @@ interface MemberRepository extends JpaRepository<Member, Long> {
 
     long countByTeamIdAndActiveTrue(Long teamId);
 
+    boolean existsByUsername(String username);
+
+    boolean existsByEmailIgnoreCase(String email);
+
     Page<Member> findByTeamId(Long teamId, Pageable page);
 
     /** The active Members outside the Team, by name. */

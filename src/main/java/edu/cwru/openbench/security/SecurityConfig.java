@@ -1,16 +1,20 @@
 package edu.cwru.openbench.security;
 
+import edu.cwru.openbench.common.Problems;
 import java.util.List;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
+import org.springframework.security.core.session.SessionRegistry;
+import org.springframework.security.core.session.SessionRegistryImpl;
 import org.springframework.security.crypto.factory.PasswordEncoderFactories;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.logout.HttpStatusReturningLogoutSuccessHandler;
 import org.springframework.security.web.csrf.CookieCsrfTokenRepository;
+import org.springframework.security.web.session.HttpSessionEventPublisher;
 import org.springframework.security.web.savedrequest.NullRequestCache;
 import org.springframework.web.method.support.HandlerMethodArgumentResolver;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
@@ -27,6 +31,8 @@ import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
  *       {@code X-XSRF-TOKEN} on every POST, PUT, and DELETE, the login included (403
  *       {@code CSRF_REJECTED} otherwise).
  *   <li>Paths outside /api are the client's and are open.
+ *   <li>Deactivating a Member, granting or revoking a role, and moving a Member to another Team end
+ *       the Member's sessions ({@link SessionExpiry}); the next call answers 401 {@code UNAUTHENTICATED}.
  * </ul>
  */
 @Configuration(proxyBeanMethods = false)
@@ -34,7 +40,8 @@ import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 class SecurityConfig {
 
     @Bean
-    SecurityFilterChain securityFilterChain(HttpSecurity http, LoginHandler login, SecurityProblems problems) throws Exception {
+    SecurityFilterChain securityFilterChain(HttpSecurity http, LoginHandler login, SecurityProblems problems,
+            SessionRegistry sessions) throws Exception {
         return http
                 .authorizeHttpRequests(requests -> requests
                         .requestMatchers("/api/**").authenticated()
@@ -54,9 +61,29 @@ class SecurityConfig {
                 .exceptionHandling(errors -> errors
                         .authenticationEntryPoint(problems)
                         .accessDeniedHandler(problems))
+                // Every session is registered, so SessionExpiry can end a Member's sessions when an
+                // Administrator changes them; the next call of an ended session answers 401.
+                .sessionManagement(session -> session
+                        .maximumSessions(-1)
+                        .sessionRegistry(sessions)
+                        .expiredSessionStrategy(event -> problems.write(event.getRequest(), event.getResponse(),
+                                Problems.of(HttpStatus.UNAUTHORIZED, "UNAUTHENTICATED",
+                                        "Your session has ended. Sign in to continue."))))
                 // A 401 answers the call; there is no page to return to after signing in.
                 .requestCache(cache -> cache.requestCache(new NullRequestCache()))
                 .build();
+    }
+
+    /** The open sessions by Member, kept in the memory of the one process like the sessions themselves. */
+    @Bean
+    SessionRegistry sessionRegistry() {
+        return new SessionRegistryImpl();
+    }
+
+    /** Tells the session registry when the servlet container ends a session (sign-out, 12 hours idle). */
+    @Bean
+    HttpSessionEventPublisher httpSessionEventPublisher() {
+        return new HttpSessionEventPublisher();
     }
 
     /** bcrypt, stored with its algorithm id ({@code {bcrypt}...}) so it can be upgraded later. */
