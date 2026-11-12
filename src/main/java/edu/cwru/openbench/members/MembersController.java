@@ -3,6 +3,7 @@ package edu.cwru.openbench.members;
 import edu.cwru.openbench.common.Actor;
 import edu.cwru.openbench.common.MemberId;
 import edu.cwru.openbench.common.PageResponse;
+import edu.cwru.openbench.common.Role;
 import edu.cwru.openbench.common.SkillId;
 import edu.cwru.openbench.common.TeamId;
 import jakarta.validation.Valid;
@@ -11,6 +12,7 @@ import jakarta.validation.constraints.Min;
 import java.net.URI;
 import java.util.List;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -97,8 +99,59 @@ class MembersController {
         return members.retireSkill(id);
     }
 
+    @PostMapping("/admin/members")
+    ResponseEntity<MemberSummary> createMember(Actor actor, @Valid @RequestBody NewMember member) {
+        MemberSummary created = members.createMember(actor, member);
+        return ResponseEntity.created(URI.create("/api/members/" + created.id().value() + "/profile")).body(created);
+    }
+
+    @PostMapping("/admin/members/{id}/deactivate")
+    MemberSummary deactivate(Actor actor, @PathVariable MemberId id) {
+        return members.deactivate(actor, id);
+    }
+
     @PostMapping("/admin/members/{id}/move")
-    MemberSummary moveToTeam(@PathVariable MemberId id, @Valid @RequestBody TeamMove move) {
-        return members.moveToTeam(id, move);
+    MemberSummary moveToTeam(Actor actor, @PathVariable MemberId id, @Valid @RequestBody TeamMove move) {
+        return members.moveToTeam(actor, id, move);
+    }
+
+    @PostMapping("/admin/roles")
+    MemberSummary grantRole(Actor actor, @Valid @RequestBody RoleGrant grant) {
+        return members.grantRole(actor, grant);
+    }
+
+    @DeleteMapping("/admin/roles/{memberId}/{role}")
+    MemberSummary revokeRole(Actor actor, @PathVariable MemberId memberId, @PathVariable Role role) {
+        return members.revokeRole(actor, memberId, role);
+    }
+
+    /** Every Team with its Manager and active Members, retired ones included: the Administrator's Teams screen. */
+    @GetMapping("/admin/teams")
+    List<TeamOverview> teamOverview() {
+        return members.teamOverview();
+    }
+
+    @PostMapping("/admin/teams")
+    ResponseEntity<TeamOverview> createTeam(Actor actor, @Valid @RequestBody TeamName team) {
+        TeamOverview created = members.createTeam(actor, team);
+        return ResponseEntity.created(URI.create("/api/teams/" + created.id().value() + "/members")).body(created);
+    }
+
+    @PutMapping("/admin/teams/{id}")
+    TeamOverview renameTeam(Actor actor, @PathVariable TeamId id, @Valid @RequestBody TeamName team) {
+        return members.renameTeam(actor, id, team);
+    }
+
+    @PostMapping("/admin/teams/{id}/retire")
+    TeamOverview retireTeam(Actor actor, @PathVariable TeamId id) {
+        return members.retireTeam(actor, id);
+    }
+
+    /** The record of the Administrators' changes to Members, Teams, and roles, newest first. */
+    @GetMapping("/admin/changes")
+    PageResponse<AdminChange> changes(
+            @RequestParam(defaultValue = "0") @Min(0) int page,
+            @RequestParam(defaultValue = "50") @Min(1) @Max(200) int size) {
+        return PageResponse.of(members.changes(page, size));
     }
 }

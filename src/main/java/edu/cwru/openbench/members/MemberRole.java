@@ -25,7 +25,16 @@ class MemberRole {
 
     private Long teamId;
 
+    private Long createdBy;
+
     protected MemberRole() {}
+
+    MemberRole(Long memberId, Role role, Long teamId, Long createdBy) {
+        this.memberId = memberId;
+        this.role = role;
+        this.teamId = teamId;
+        this.createdBy = createdBy;
+    }
 
     Role role() {
         return role;
