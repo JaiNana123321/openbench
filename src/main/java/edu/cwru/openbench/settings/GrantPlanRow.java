@@ -21,7 +21,32 @@ class GrantPlanRow {
 
     private BigDecimal amount;
 
+    private Long createdBy;
+
     protected GrantPlanRow() {}
+
+    GrantPlanRow(Long teamId, Long periodId, BigDecimal amount, Long createdBy) {
+        this.teamId = teamId;
+        this.periodId = periodId;
+        this.amount = amount;
+        this.createdBy = createdBy;
+    }
+
+    Long teamId() {
+        return teamId;
+    }
+
+    Long periodId() {
+        return periodId;
+    }
+
+    BigDecimal amount() {
+        return amount;
+    }
+
+    void changeAmount(BigDecimal amount) {
+        this.amount = amount;
+    }
 
     record Key(Long teamId, Long periodId) implements Serializable {}
 }

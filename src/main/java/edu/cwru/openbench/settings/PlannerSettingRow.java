@@ -27,4 +27,8 @@ class PlannerSettingRow {
     String value() {
         return value;
     }
+
+    void change(String value) {
+        this.value = value;
+    }
 }

@@ -1,6 +1,8 @@
 package edu.cwru.openbench.settings;
 
 import jakarta.persistence.Entity;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import java.math.BigDecimal;
@@ -15,6 +17,7 @@ import java.util.Set;
 class PriceBandRow {
 
     @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
     private Long typeId;
@@ -27,7 +30,20 @@ class PriceBandRow {
 
     private BigDecimal multiplier;
 
+    private Long createdBy;
+
     protected PriceBandRow() {}
+
+    PriceBandRow(Long typeId, PriceBand band, Long createdBy) {
+        this.typeId = typeId;
+        StringBuilder digits = new StringBuilder();
+        band.weekdays().stream().sorted().forEach(day -> digits.append(day.getValue()));
+        this.weekdays = digits.toString();
+        this.startTime = band.start();
+        this.endTime = band.end();
+        this.multiplier = band.multiplier();
+        this.createdBy = createdBy;
+    }
 
     Long typeId() {
         return typeId;

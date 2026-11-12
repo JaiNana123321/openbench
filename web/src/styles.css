@@ -858,3 +858,36 @@ textarea:focus {
 .decision-form input[type='text'] {
   min-width: 12rem;
 }
+
+/* ------------------------------------------------------------------ Settings (Capacity Planner) */
+
+.setting-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-3) var(--space-5);
+  margin-bottom: var(--space-3);
+}
+
+.band-row,
+.step-row {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr)) auto;
+  gap: 0 var(--space-3);
+  align-items: end;
+  margin: 0 0 var(--space-3);
+  padding: var(--space-3) 0 0;
+  border: 0;
+  border-top: 1px solid var(--line);
+}
+
+.step-row {
+  grid-template-columns: repeat(2, minmax(0, 1fr)) auto;
+}
+
+.band-row__days {
+  display: flex;
+  flex-wrap: wrap;
+  grid-column: 1 / -1;
+  gap: var(--space-3);
+  margin-bottom: var(--space-2);
+}

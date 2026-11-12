@@ -20,7 +20,16 @@ class QuotaRow {
 
     private int maxUnits;
 
+    private Long createdBy;
+
     protected QuotaRow() {}
+
+    QuotaRow(Long teamId, Long typeId, int maxUnits, Long createdBy) {
+        this.teamId = teamId;
+        this.typeId = typeId;
+        this.maxUnits = maxUnits;
+        this.createdBy = createdBy;
+    }
 
     Long teamId() {
         return teamId;
@@ -32,6 +41,10 @@ class QuotaRow {
 
     int maxUnits() {
         return maxUnits;
+    }
+
+    void changeMaxUnits(int maxUnits) {
+        this.maxUnits = maxUnits;
     }
 
     record Key(Long teamId, Long typeId) implements Serializable {}

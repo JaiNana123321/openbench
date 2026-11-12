@@ -2,6 +2,8 @@ package edu.cwru.openbench.settings;
 
 import edu.cwru.openbench.common.PeriodId;
 import jakarta.persistence.Entity;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import java.time.LocalDate;
@@ -13,13 +15,22 @@ import java.util.Optional;
 class PeriodRow {
 
     @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
     private LocalDate startsOn;
 
     private LocalDate endsOn;
 
+    private Long createdBy;
+
     protected PeriodRow() {}
+
+    PeriodRow(LocalDate startsOn, LocalDate endsOn, Long createdBy) {
+        this.startsOn = startsOn;
+        this.endsOn = endsOn;
+        this.createdBy = createdBy;
+    }
 
     Long id() {
         return id;
@@ -27,6 +38,10 @@ class PeriodRow {
 
     LocalDate startsOn() {
         return startsOn;
+    }
+
+    LocalDate endsOn() {
+        return endsOn;
     }
 
     Period toPeriod(Optional<PeriodRow> previous) {
