@@ -604,3 +604,55 @@ export interface SettingChangeEntry {
   actorName: string | null;
   at: Instant;
 }
+
+// ---------------------------------------------------------------- Administration: Members, Teams, and roles
+
+/** GET /api/admin/teams: every Team, retired ones included, with its Manager (null while none) and active Members. */
+export interface TeamOverview {
+  id: Id;
+  name: string;
+  retired: boolean;
+  manager: Id | null;
+  managerName: string | null;
+  activeMembers: number;
+}
+
+/** POST /api/admin/members: a new Member, their Team, and their initial password (8 to 72 characters). */
+export interface NewMember {
+  name: string;
+  email: string;
+  username: string;
+  password: string;
+  teamId: Id;
+}
+
+/** The roles an Administrator grants and revokes; MEMBER is held by every active Member. */
+export type StoredRole = Exclude<Role, 'MEMBER'>;
+
+export type AdminChangeKind =
+  | 'MEMBER_CREATED'
+  | 'MEMBER_DEACTIVATED'
+  | 'MEMBER_MOVED'
+  | 'ROLE_GRANTED'
+  | 'ROLE_REVOKED'
+  | 'TEAM_CREATED'
+  | 'TEAM_RENAMED'
+  | 'TEAM_RETIRED';
+
+/**
+ * GET /api/admin/changes (paged, newest first): one change an Administrator made. `member` is null for a
+ * Team change; the values are readable text, such as "MEMBER, MANAGER" or a Team's name, null where none.
+ */
+export interface AdminChange {
+  id: Id;
+  kind: AdminChangeKind;
+  member: Id | null;
+  memberName: string | null;
+  team: Id | null;
+  teamName: string | null;
+  oldValue: string | null;
+  newValue: string | null;
+  actor: Id | null;
+  actorName: string | null;
+  at: Instant;
+}
