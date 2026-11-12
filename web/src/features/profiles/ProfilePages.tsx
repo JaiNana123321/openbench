@@ -3,10 +3,10 @@ import type { MemberSummary } from '../../api/types';
 import { useCurrentMember } from '../../auth/currentMember';
 import { ErrorPage } from '../../shell/ErrorPage';
 import { EmptyState, Loading, PageHeader, StatusBadge, Table, type Column } from '../../ui';
-import { AvailabilityEditor, ProfileDetails, SkillPicker, SkillTags } from './ProfileParts';
+import { AvailabilityEditor, LoansTable, ProfileDetails, SkillPicker, SkillTags } from './ProfileParts';
 import { useProfile, useRoster } from './queries';
 
-/** /profile: the caller's own profile; they choose their skills and edit their availability. */
+/** /profile: the caller's own profile; they choose their skills, edit their availability, and see their Loans. */
 export function MyProfilePage() {
   const profile = useProfile('me');
   if (profile.isError) return <ErrorPage error={profile.error} />;
@@ -28,6 +28,12 @@ export function MyProfilePage() {
           Availability
         </h2>
         <AvailabilityEditor memberId="me" ranges={profile.data.availability} />
+      </section>
+      <section className="section" aria-labelledby="loans-title">
+        <h2 id="loans-title" className="section-title">
+          Loans
+        </h2>
+        <LoansTable memberId="me" />
       </section>
     </>
   );
@@ -96,6 +102,12 @@ export function TeamMemberPage() {
           Availability
         </h2>
         <AvailabilityEditor key={profile.data.id} memberId={profile.data.id} ranges={profile.data.availability} />
+      </section>
+      <section className="section" aria-labelledby="loans-title">
+        <h2 id="loans-title" className="section-title">
+          Loans
+        </h2>
+        <LoansTable memberId={profile.data.id} />
       </section>
     </>
   );

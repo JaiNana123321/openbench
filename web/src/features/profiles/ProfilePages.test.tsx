@@ -24,6 +24,7 @@ function serve(me = ben, routes: Record<string, MockReply> = {}) {
     'GET /api/me': session(me),
     'GET /api/members/me/profile': json(bensProfile),
     'GET /api/skills': json([java, microscopy, statistics]),
+    'GET /api/members/:id/loans': json([]),
     ...routes,
   });
 }

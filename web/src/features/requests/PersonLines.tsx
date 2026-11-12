@@ -1,6 +1,15 @@
 import { useState } from 'react';
-import type { CandidateApproval, Id, LineDetail, ShortlistEntry } from '../../api/types';
-import { Button, EmptyState, formatInstant, ProblemMessage, StatusBadge, Table, type Column } from '../../ui';
+import type { CandidateApproval, Id, LineDetail, Loan, ShortlistEntry } from '../../api/types';
+import {
+  Button,
+  EmptyState,
+  formatDayRange,
+  formatInstant,
+  ProblemMessage,
+  StatusBadge,
+  Table,
+  type Column,
+} from '../../ui';
 import { personAsk, personCount, whenText } from './personLineText';
 import { useSelectCandidates, useShortlist } from './queries';
 
@@ -100,6 +109,17 @@ function PersonLine({ requestId, detail, number, canSelect }: PersonLineProps) {
         rowKey={(candidate) => candidate.approval}
         empty={<EmptyState title={bySkills ? 'No Candidate is selected yet.' : 'No approval is requested yet.'} />}
       />
+      {(detail.loans ?? []).length > 0 && (
+        <>
+          <h4>Loans</h4>
+          <Table
+            label={`Loans of line ${number ?? line.id}`}
+            columns={loanColumns}
+            rows={detail.loans ?? []}
+            rowKey={(loan) => loan.id}
+          />
+        </>
+      )}
       {bySkills && open && (
         <>
           <h4>Shortlist</h4>
@@ -152,4 +172,12 @@ const candidateColumns: Column<CandidateApproval>[] = [
       candidate.decidedAt ? `${candidate.decidedByName ?? 'System'}, ${formatInstant(candidate.decidedAt)}` : '—',
   },
   { header: 'Reason', cell: (candidate) => candidate.reason || '—' },
+];
+
+/** The Loans a Person line formed once its Request was allocated. */
+const loanColumns: Column<Loan>[] = [
+  { header: 'Person', cell: (loan) => loan.memberName },
+  { header: 'Lent by', cell: (loan) => loan.lendingTeam.name },
+  { header: 'Days', cell: (loan) => formatDayRange(loan.days) },
+  { header: 'Days lent', cell: (loan) => loan.daysLent, numeric: true },
 ];
