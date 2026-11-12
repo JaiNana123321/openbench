@@ -128,8 +128,8 @@ class MatchedCasesTest extends MatchedWorldTest {
     }
 
     @Test
-    @DisplayName("mat-approve-route, steps 1, 2, and 4, and step 3 to the decision: Oscar decides; Alice cannot")
-    @Verifies(value = "mat-approve-route", partial = true)
+    @DisplayName("mat-approve-route: the approval request goes to the Candidate's Manager, who decides")
+    @Verifies("mat-approve-route")
     void theApprovalGoesToTheCandidatesManager() throws Exception {
         LocalDate d = dayD();
         long a1 = createDraft(as(alice));
@@ -155,7 +155,7 @@ class MatchedCasesTest extends MatchedWorldTest {
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.code").value("FORBIDDEN"));
 
-        // 3. Oscar approves: recorded with actor, reason, and time; M1 is Approved (allocation on approval is #6).
+        // 3. Oscar approves: recorded with actor, reason, and time; A1 becomes Allocated (its only line is approved).
         Instant now = clock.instant();
         decide(as(oscar), approval, "APPROVE", "Dave is free that week")
                 .andExpect(status().isOk())
@@ -168,7 +168,9 @@ class MatchedCasesTest extends MatchedWorldTest {
         assertThat(row.get("decided_by")).isEqualTo(world.oscar().id());
         assertThat(((Timestamp) row.get("decided_at")).toInstant()).isBetween(now.minusSeconds(60), now.plusSeconds(60));
         detail(as(alice), a1)
-                .andExpect(jsonPath("$.lines[0].line.state").value("APPROVED"))
+                .andExpect(jsonPath("$.request.state").value("ALLOCATED"))
+                .andExpect(jsonPath("$.lines[0].line.state").value("LOANED"))
+                .andExpect(jsonPath("$.lines[0].candidates[0].state").value("APPROVED"))
                 .andExpect(jsonPath("$.lines[0].candidates[0].decidedByName").value("Oscar Reed"));
 
         // 4. A second decision is refused.
