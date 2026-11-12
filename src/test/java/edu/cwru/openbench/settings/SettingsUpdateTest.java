@@ -175,18 +175,28 @@ class SettingsUpdateTest extends PostgresTest {
         assertThat(value("period_months")).isEqualTo("1");
     }
 
+    /**
+     * The Period length rewrites every Period up to ten years ahead. The installation's real Periods
+     * may hold other tests' Transactions (tests that move the Clock into next month), so this test
+     * runs on a day of 1900 that no other test uses, in a one-day current Period of its own, and
+     * writes and rewrites only Periods of 1900 to 1910.
+     */
     @Test
     @DisplayName("Planner.Settings: a new Period length rewrites only the Periods not yet started, and a planned Grant keeps its start")
     void rewritesTheFuturePeriods() throws Exception {
-        LocalDate first = jdbc.queryForObject("SELECT starts_on FROM period WHERE id = ?", LocalDate.class, nextPeriod);
-        long second = jdbc.queryForObject("SELECT id FROM period WHERE starts_on = ?", Long.class, first.plusMonths(1));
-        LocalDate current = jdbc.queryForObject("SELECT starts_on FROM period WHERE id = ?", LocalDate.class, currentPeriod);
-        testData().grantPlan(team, second, "900.00");
+        LocalDate today = LocalDate.of(1900, 6, 15);
+        movableClock.set(today.atTime(12, 0).atZone(clock.getZone()).toInstant());
+        long current = testData().periodContaining(today);
+        LocalDate first = today.plusDays(1);
         try {
+            set("period_months", "1").andExpect(status().isOk());
+            long second = jdbc.queryForObject("SELECT id FROM period WHERE starts_on = ?", Long.class, first.plusMonths(1));
+            testData().grantPlan(team, second, "900.00");
+
             set("period_months", "3").andExpect(status().isOk()).andExpect(jsonPath("$.periodMonths").value(3));
 
-            assertThat(jdbc.queryForObject("SELECT starts_on FROM period WHERE id = ?", LocalDate.class, currentPeriod))
-                    .as("the current Period is unchanged").isEqualTo(current);
+            assertThat(jdbc.queryForList("SELECT starts_on || ':' || ends_on FROM period WHERE id = ?", String.class, current))
+                    .as("the current Period is unchanged").containsExactly(today + ":" + today);
             List<Map<String, Object>> future = jdbc.queryForList("""
                     SELECT starts_on, ends_on FROM period WHERE starts_on >= ? AND starts_on < ? ORDER BY starts_on""",
                     first, first.plusYears(10));
