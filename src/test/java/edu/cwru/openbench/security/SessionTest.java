@@ -26,7 +26,7 @@ import org.springframework.test.web.servlet.ResultActions;
 
 /** Sign-in, sign-out, and /api/me through MockMvc with a real session and CSRF token. */
 @DisplayName("CO-auth, SE-password: session login with CSRF")
-@Verifies("adm-roles-server")
+@Verifies(value = "adm-roles-server", partial = true)
 class SessionTest extends PostgresTest {
 
     private static final String CSRF_COOKIE = "XSRF-TOKEN";
