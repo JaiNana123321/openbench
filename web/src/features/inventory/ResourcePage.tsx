@@ -8,10 +8,12 @@ import { Button, Field, Loading, PageHeader, StatusBadge, formatEnum } from '../
 import { AttributeFields } from './AttributeFields';
 import { useEditResource, useResource, useResourceType, useRetireResource, useSetUnits } from './queries';
 import { RefusalMessage } from './RefusalMessage';
+import { ResourceTimeline } from './ResourceTimeline';
 
 /**
- * /inventory/resources/:id: one Resource. Its owner renames it and edits its attributes, sets the
- * units of a Metered Resource, and retires it; everyone else only reads.
+ * /inventory/resources/:id: one Resource, and for an Exclusive one its timeline of free, held, and
+ * allocated parts. Its owner renames it and edits its attributes, sets the units of a Metered
+ * Resource, and retires it; everyone else only reads.
  */
 export function ResourcePage() {
   const id = Number(useParams().id);
@@ -54,6 +56,7 @@ export function ResourcePage() {
           ))}
         </dl>
       </section>
+      {type.data.allocationClass === 'EXCLUSIVE' && <ResourceTimeline resourceId={resource.data.id} />}
       {owned && (
         <>
           <EditSection key={`edit-${resource.data.id}`} resource={resource.data} type={type.data} />

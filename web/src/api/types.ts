@@ -685,3 +685,22 @@ export interface LedgerTransaction {
   /** The Loan an Earning pays for; its `reason` is the Loan in words. Null on other Transactions. */
   loan?: Id | null;
 }
+
+// ---------------------------------------------------------------- Inventory: holder timeline and free filter
+
+/** What a part of a Resource's timeline is. */
+export type HoldingState = 'FREE' | 'HELD' | 'ALLOCATED';
+
+/**
+ * GET /api/inventory/resources/{id}/holders?from=&to=: one part of an Exclusive Resource's timeline.
+ * The parts cover the window in order. A free part has no holder; a held or allocated part comes with
+ * its Team, Request, and Priority mark only when the caller may see them (a Capacity Planner, the
+ * Resource's owner, or the holding Team's Manager); otherwise `team` and `request` are null.
+ */
+export interface Holding {
+  window: TimeWindow;
+  state: HoldingState;
+  team: TeamRef | null;
+  request: Id | null;
+  priority: boolean;
+}
