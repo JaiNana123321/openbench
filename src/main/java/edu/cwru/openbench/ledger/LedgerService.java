@@ -46,9 +46,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * Every Team's Account and the append-only Transactions (design Section 4.7). Demo 1 has the
- * Account, held credits, Charges, Grants, and the Statement; Earnings, Refunds, and the rollover
- * come in a later increment.
+ * Every Team's Account and the append-only Transactions (design Section 4.7): the Account, held
+ * credits, Charges, Grants, Earnings, Refunds, the rollover, and the Statement. The Earning
+ * correction after an early Loan end comes with issue #8.
  *
  * <p>Every change locks the Team's {@code account} row first ({@code SELECT ... FOR UPDATE},
  * inserting it if missing) and keeps it until the caller's transaction ends: the writes join the

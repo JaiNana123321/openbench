@@ -3,7 +3,8 @@ import { api } from '../../api/client';
 import type { DayRange, Id, Loan, MemberProfile, MemberSummary, Page, Skill } from '../../api/types';
 
 // Profile calls (design Section 7, "Members and administration"). Keys start with the API group's
-// noun: ['members', id, 'profile'], ['teams', id, 'members'], ['skills', { includeRetired }].
+// noun: ['members', id, 'profile'], ['members', id, 'loans'], ['teams', id, 'members'],
+// ['skills', { includeRetired }].
 // `me` stands for the caller's own id in member paths.
 
 /** The largest roster page the server serves; a Team is smaller than this. */
