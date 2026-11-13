@@ -20,4 +20,7 @@ interface TransactionRepository extends JpaRepository<Transaction, Long> {
             SELECT EXISTS (SELECT 1 FROM transaction
                            WHERE loan_id = :loan AND kind = 'EARNING' AND corrects_id IS NULL)""", nativeQuery = true)
     boolean earningPostedFor(Long loan);
+
+    /** The Loan's Earnings, oldest first: its original Earning, then its corrections. */
+    List<Transaction> findByLoanIdAndKindOrderByIdAsc(Long loanId, TransactionKind kind);
 }

@@ -47,8 +47,8 @@ import org.springframework.transaction.annotation.Transactional;
 
 /**
  * Every Team's Account and the append-only Transactions (design Section 4.7): the Account, held
- * credits, Charges, Grants, Earnings, Refunds, the rollover, and the Statement. The Earning
- * correction after an early Loan end comes with issue #8.
+ * credits, Charges, Grants, Earnings, Refunds, the rollover, the Statement, and the Earning
+ * correction after an early Loan end, the one Transaction that may take a Balance below zero.
  *
  * <p>Every change locks the Team's {@code account} row first ({@code SELECT ... FOR UPDATE},
  * inserting it if missing) and keeps it until the caller's transaction ends: the writes join the
@@ -309,7 +309,8 @@ public class LedgerService {
                 actor == null ? null : new MemberId(actor),
                 actorName,
                 transaction.reason(),
-                transaction.loanId() == null ? null : new LoanId(transaction.loanId()));
+                transaction.loanId() == null ? null : new LoanId(transaction.loanId()),
+                transaction.correctsId() == null ? null : new TransactionId(transaction.correctsId()));
     }
 
     private static Credits total(Map<TransactionKind, BigDecimal> totals, TransactionKind kind) {
@@ -332,8 +333,13 @@ public class LedgerService {
         }
     }
 
+    /**
+     * Refuses a positive sum above the Available Balance. Nothing to pay is never refused, even while
+     * an Earning correction keeps the Balance below zero: a Request of Matched lines only costs
+     * nothing (ADR-0004).
+     */
     private static void requireAvailable(BigDecimal required, BigDecimal available) {
-        if (required.compareTo(available) > 0) {
+        if (required.signum() > 0 && required.compareTo(available) > 0) {
             Credits needed = new Credits(required);
             Credits have = new Credits(available);
             throw new RuleViolation("INSUFFICIENT_BALANCE",
@@ -554,5 +560,56 @@ public class LedgerService {
         log.info("event=transaction kind=EARNING id={} team={} amount={} loan={} line={} actor={}", posted.id(),
                 earning.lendingTeam().value(), amount, earning.loan().value(), earning.line().value(),
                 actorText(actorId));
+    }
+
+    // ---------------------------------------------------------------- Earning corrections
+
+    /**
+     * (Unscoped) The Loan's net Earning: its original Earning plus its corrections, or zero before
+     * its Earning posts.
+     */
+    public Credits netEarning(LoanId loan) {
+        return new Credits(transactions.findByLoanIdAndKindOrderByIdAsc(loan.value(), TransactionKind.EARNING).stream()
+                .map(Transaction::amount)
+                .reduce(BigDecimal.ZERO, BigDecimal::add));
+    }
+
+    /**
+     * (Unscoped) The Earning correction of an early Loan end (SRS Release.Loan.Prorate; design
+     * {@code correctEarning}): an {@code EARNING} Transaction of the negative {@code delta}, all of it
+     * from the lending Team's earned credits, naming the Loan and, in {@code corrects}, its original
+     * Earning, which is never changed; {@code description} says it in words for the Statement. It is
+     * the one Transaction that may take the Balance, and the Available Balance, below zero; the
+     * Loan's net Earning stays at or above zero. The Transaction names the signed-in Member as its
+     * actor. Locks the lending Team's account row and joins the caller's transaction.
+     *
+     * @throws IllegalArgumentException unless {@code delta} is negative
+     * @throws IllegalStateException if the Loan has no Earning, belongs to another lending Team, or
+     *     the correction would exceed its net Earning
+     */
+    @Transactional
+    public void correctEarning(TeamId lendingTeam, LoanId loan, Credits delta, String description) {
+        if (!delta.isNegative()) {
+            throw new IllegalArgumentException("An Earning correction must be negative; it was " + delta + ".");
+        }
+        Account account = lock(lendingTeam);
+        List<Transaction> earnings = transactions.findByLoanIdAndKindOrderByIdAsc(loan.value(), TransactionKind.EARNING);
+        Transaction original = earnings.stream().filter(earning -> earning.correctsId() == null).findFirst()
+                .orElseThrow(() -> new IllegalStateException("Loan " + loan.value() + " has no Earning to correct."));
+        if (!original.teamId().equals(lendingTeam.value())) {
+            throw new IllegalStateException("Loan " + loan.value() + " earned for another Team.");
+        }
+        BigDecimal net = earnings.stream().map(Transaction::amount).reduce(BigDecimal.ZERO, BigDecimal::add);
+        if (net.add(delta.amount()).signum() < 0) {
+            throw new IllegalStateException("A correction of " + delta + " would exceed Loan " + loan.value()
+                    + "'s net Earning of " + new Credits(net) + ".");
+        }
+        account.earn(delta.amount());
+        Long actor = signedInMemberId();
+        Transaction posted = transactions.save(Transaction.earningCorrection(lendingTeam.value(), delta.amount(),
+                settings.currentPeriod().id().value(), original.lineId(), loan.value(), original.id(), description,
+                actor, clock.instant()));
+        log.info("event=transaction kind=EARNING id={} team={} amount={} loan={} corrects={} actor={}", posted.id(),
+                lendingTeam.value(), delta, loan.value(), original.id(), actorText(actor));
     }
 }

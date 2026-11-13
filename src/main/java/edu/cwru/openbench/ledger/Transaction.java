@@ -12,8 +12,9 @@ import java.time.Instant;
 
 /**
  * A row of {@code transaction}, append-only: the application role may insert and read but never
- * update or delete one (V7). Amounts are positive; {@code grantedPart} and {@code earnedPart} say
- * which part of the Account a Grant, Charge, or Refund moved, and sum to {@code amount}.
+ * update or delete one (V7). Amounts are positive, except an Earning correction's;
+ * {@code grantedPart} and {@code earnedPart} say which part of the Account a Grant, Charge, or
+ * Refund moved, and sum to {@code amount}.
  */
 @Entity
 @Table(name = "transaction")
@@ -41,6 +42,9 @@ class Transaction {
 
     /** The Loan an Earning pays for, or null. */
     private Long loanId;
+
+    /** The Transaction an Earning correction corrects, or null on every other Transaction. */
+    private Long correctsId;
 
     /** The mid-Period Grant's reason, an Earning's Loan in words, or null. */
     private String reason;
@@ -93,8 +97,23 @@ class Transaction {
         return earning;
     }
 
+    /**
+     * An Earning correction after an early Loan end: a negative amount, all of it from earned
+     * credits, naming the Loan's original Earning in {@code correctsId}. The one negative Transaction.
+     */
+    static Transaction earningCorrection(Long teamId, BigDecimal delta, Long periodId, Long lineId, Long loanId,
+            Long correctsId, String description, Long actorId, Instant postedAt) {
+        Transaction correction = earning(teamId, delta, periodId, lineId, loanId, description, actorId, postedAt);
+        correction.correctsId = correctsId;
+        return correction;
+    }
+
     Long id() {
         return id;
+    }
+
+    Long correctsId() {
+        return correctsId;
     }
 
     Long loanId() {

@@ -10,8 +10,9 @@ import java.time.Instant;
 /**
  * One Transaction on a Statement. {@code line} is the Request Line it concerns, {@code actor} and
  * {@code actorName} the Member who caused it, {@code reason} a mid-Period Grant's reason or an
- * Earning's Loan in words, and {@code loan} the Loan an Earning pays for; each is null when there is
- * none (a null actor is the system).
+ * Earning's Loan in words, {@code loan} the Loan an Earning pays for, and {@code corrects} the
+ * original Earning an Earning correction corrects; each is null when there is none (a null actor is
+ * the system).
  */
 public record TransactionView(
         TransactionId id,
@@ -24,4 +25,5 @@ public record TransactionView(
         MemberId actor,
         String actorName,
         String reason,
-        LoanId loan) {}
+        LoanId loan,
+        TransactionId corrects) {}
