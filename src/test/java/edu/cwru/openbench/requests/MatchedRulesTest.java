@@ -132,7 +132,9 @@ class MatchedRulesTest extends MatchedWorldTest {
                 .andExpect(jsonPath("$.lines[0].candidates[*].name", contains("Dave Kim", "Rita Gomez")));
         refused(select(as(alice), a1, m1, carolId), 422, "LINE_NOT_ATOMIC");
 
-        // Oscar refuses Dave: one more is to be selected, but not Dave again.
+        // Oscar refuses Dave: one more is to be selected (Carol Davis is left), but not Dave again.
+        testData().holds(carolId, statistics);
+        testData().available(carolId, LocalDate.now(clock), d.plusDays(60));
         decide(as(oscar), jdbc.queryForObject("""
                 SELECT a.id FROM approval a JOIN candidate c ON c.id = a.candidate_id
                 WHERE c.line_id = ? AND c.member_id = ?""", Long.class, m1, world.dave().id()), "REFUSE", "Busy")
@@ -159,7 +161,7 @@ class MatchedRulesTest extends MatchedWorldTest {
     }
 
     @Test
-    @DisplayName("A refusal is recorded with its reason; the line awaits a replacement, and Alice is told")
+    @DisplayName("A refusal is recorded with its reason; the line awaits a replacement, the Request waits, and Alice is told")
     void aRefusalAsksForAReplacement() throws Exception {
         LocalDate d = dayD();
         long a1 = createDraft(as(alice));
@@ -172,8 +174,9 @@ class MatchedRulesTest extends MatchedWorldTest {
                 .andExpect(jsonPath("$.state").value("REFUSED"))
                 .andExpect(jsonPath("$.reason").value("Dave is on another project"));
         detail(as(alice), a1)
-                .andExpect(jsonPath("$.request.state").value("PENDING"))
-                .andExpect(jsonPath("$.lines[0].line.state").value("AWAITING_APPROVAL"))
+                .andExpect(jsonPath("$.request.state").value("WAITING"))
+                .andExpect(jsonPath("$.lines[0].line.state").value("REFUSED"))
+                .andExpect(jsonPath("$.lines[0].reason").value("REPLACEMENT_NEEDED"))
                 .andExpect(jsonPath("$.lines[0].candidates[0].state").value("REFUSED"));
         assertThat(jdbc.queryForList("SELECT text FROM notification WHERE member_id = ? AND kind = 'REQUEST_UPDATE'",
                 String.class, world.alice().id())).anySatisfy(text -> assertThat(text).contains("refused Dave Kim"));
@@ -259,7 +262,7 @@ class MatchedRulesTest extends MatchedWorldTest {
         LocalDate d = dayD();
         long b1 = createDraft(as(bob));
         long roomLine = line(as(bob), b1, room, 1, at(d, 10), at(d, 12), null);
-        id(addNamedPersonLine(as(bob), b1, 1, d, d.plusDays(1), world.dave().id()).andExpect(status().isCreated()));
+        id(addNamedPersonLine(as(bob), b1, 1, d, d.plusDays(1), world.ben().id()).andExpect(status().isCreated()));
         long short2 = personLine(as(bob), b1, 2, d, d.plusDays(1), statistics);
         submit(as(bob), b1).andExpect(jsonPath("$.state").value("WAITING"));
         String windowEnd = jdbc.queryForObject("SELECT window_ends_at::text FROM request WHERE id = ?", String.class, b1);

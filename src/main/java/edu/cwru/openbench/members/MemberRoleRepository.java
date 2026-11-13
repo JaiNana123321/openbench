@@ -1,6 +1,7 @@
 package edu.cwru.openbench.members;
 
 import edu.cwru.openbench.common.Role;
+import java.util.Collection;
 import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -10,6 +11,8 @@ import org.springframework.data.jpa.repository.Query;
 interface MemberRoleRepository extends JpaRepository<MemberRole, MemberRole.Key> {
 
     List<MemberRole> findByMemberId(Long memberId);
+
+    List<MemberRole> findByMemberIdIn(Collection<Long> memberIds);
 
     /** The Member's stored roles; {@link Role#MEMBER} is never among them. */
     default Set<Role> rolesOf(Long memberId) {

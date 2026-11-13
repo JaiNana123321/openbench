@@ -95,6 +95,29 @@ describe('Approvals', () => {
     expect(within(nav).queryByRole('link', { name: 'Approvals' })).not.toBeInTheDocument();
   });
 
+  it('shows an approval the Capacity Planner decided for the Manager, without a decision form (mat-escalate)', async () => {
+    serve({
+      'GET /api/approvals': json([
+        {
+          ...daveForPlatform,
+          state: 'APPROVED',
+          escalated: true,
+          decidedByName: 'Erin Walsh',
+          decidedAt: '2026-11-16T11:00:00-05:00',
+          reason: 'Oscar is away',
+        },
+      ]),
+    });
+    renderApp('/approvals');
+
+    const table = await screen.findByRole('table', { name: 'Approvals' });
+    const row = within(table).getAllByRole('row')[1];
+    expect(within(row).getByText('Approved')).toBeInTheDocument();
+    expect(within(row).getByText(/by Erin Walsh/)).toHaveTextContent('by Erin Walsh, Capacity Planner');
+    expect(within(row).getByText('Oscar is away')).toBeInTheDocument();
+    expect(within(row).queryByRole('button', { name: 'Approve' })).not.toBeInTheDocument();
+  });
+
   it('shows an empty list', async () => {
     serve({ 'GET /api/approvals': json([]) });
     renderApp('/approvals');

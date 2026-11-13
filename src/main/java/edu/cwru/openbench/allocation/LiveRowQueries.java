@@ -139,4 +139,14 @@ class LiveRowQueries implements AllocationQueries {
                                 new RequestId(part.requestId()), part.priority()))
                 .toList();
     }
+
+    @Override
+    public List<Approval> escalatedOutstanding() {
+        return matchedAllocator.escalatedOutstanding();
+    }
+
+    @Override
+    public List<Approval> decidedOnEscalation(MemberId approver) {
+        return matchedAllocator.decidedOnEscalation(approver);
+    }
 }

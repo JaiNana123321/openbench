@@ -10,6 +10,7 @@ import edu.cwru.openbench.common.MemberId;
 import edu.cwru.openbench.common.NotFoundException;
 import edu.cwru.openbench.common.RequestId;
 import edu.cwru.openbench.common.RequestLineId;
+import edu.cwru.openbench.common.Role;
 import edu.cwru.openbench.common.RuleViolation;
 import edu.cwru.openbench.common.SkillId;
 import edu.cwru.openbench.common.TeamId;
@@ -199,17 +200,20 @@ class MatchedAllocator implements Allocator, ApprovalDriven {
         checkClass(line);
         DateRange days = days(line);
         List<ShortlistRanking.Person> ranked = shortlisted(line, days);
+        List<MemberId> ids = ranked.stream().map(ShortlistRanking.Person::id).toList();
+        Map<MemberId, MemberSummary> summaries = members.summaries(ids);
+        Map<MemberId, List<Skill>> skills = members.skillsOf(ids);
         List<Shortlist.Entry> entries = new ArrayList<>();
         for (ShortlistRanking.Person person : ranked) {
-            MemberSummary summary = members.summary(person.id());
+            MemberSummary summary = summaries.get(person.id());
             entries.add(new Shortlist.Entry(entries.size() + 1, person.id(), summary.name(), summary.team(),
-                    members.skillsOf(person.id()).stream().map(Skill::name).toList(), person.personDaysLent()));
+                    skills.get(person.id()).stream().map(Skill::name).toList(), person.personDaysLent()));
         }
         return new Shortlist(line.lineId(), entries);
     }
 
     @Override
-    public void select(LineSnapshot line, List<MemberId> picked) {
+    public void select(LineSnapshot line, List<MemberId> picked, boolean escalated) {
         checkClass(line);
         if (new HashSet<>(picked).size() != picked.size() || picked.isEmpty()) {
             throw new RuleViolation("LINE_NOT_ATOMIC", "Select each Candidate once, and at least one.");
@@ -223,10 +227,12 @@ class MatchedAllocator implements Allocator, ApprovalDriven {
                     + (missing == 1 ? " Candidate." : " Candidates."));
         }
         DateRange days = days(line);
+        Set<Long> elsewhere = selectedOnOverlappingLines(line, days);
         Map<MemberId, Integer> positions = new HashMap<>();
         if (line.namedMember().isPresent()) {
-            if (eligible(line.namedMember().get(), line.teamId(), days)) {
-                positions.put(line.namedMember().get(), 0);
+            MemberId named = line.namedMember().get();
+            if (eligible(named, line.teamId(), days) && !elsewhere.contains(named.value())) {
+                positions.put(named, 0);
             }
         } else {
             List<ShortlistRanking.Person> shortlist = shortlisted(line, days);
@@ -236,8 +242,9 @@ class MatchedAllocator implements Allocator, ApprovalDriven {
         }
         Set<Long> alreadySelected = selected.stream().map(s -> s.candidate().memberId()).collect(Collectors.toSet());
         Map<MemberId, MemberSummary> summaries = new LinkedHashMap<>();
+        Map<MemberId, MemberSummary> found = members.summaries(picked);
         for (MemberId member : picked) {
-            Optional<MemberSummary> summary = members.findSummary(member);
+            Optional<MemberSummary> summary = Optional.ofNullable(found.get(member));
             if (summary.isPresent() && summary.get().team().id().equals(line.teamId())) {
                 throw new RuleViolation("OWN_TEAM", summary.get().name()
                         + " is a Member of the requesting Team and cannot be lent to it.");
@@ -245,24 +252,36 @@ class MatchedAllocator implements Allocator, ApprovalDriven {
             if (summary.isEmpty() || !positions.containsKey(member) || alreadySelected.contains(member.value())) {
                 throw new RuleViolation(NOT_A_CANDIDATE, summary.map(MemberSummary::name).orElse("Member " + member.value())
                         + (alreadySelected.contains(member.value()) ? " was already selected for this line."
-                                : " is not on the line's Shortlist."));
+                                : elsewhere.contains(member.value())
+                                        ? " is already selected on another line of this Request for overlapping days."
+                                        : " is not on the line's Shortlist."));
             }
             summaries.put(member, summary.get());
         }
         String requestingTeam = members.team(line.teamId()).name();
         Credits earning = earning(days);
+        List<MemberId> planners = escalated ? members.withRole(Role.PLANNER) : List.of();
         for (Map.Entry<MemberId, MemberSummary> entry : summaries.entrySet()) {
             MemberSummary candidate = entry.getValue();
             MemberId approver = members.findManagerOf(candidate.team().id()).orElseThrow(() -> new RuleViolation(
                     NOT_A_CANDIDATE, candidate.team().name() + " has no Manager to approve lending " + candidate.name() + "."));
             CandidateRow row = candidates.save(new CandidateRow(line.lineId().value(), line.requestId().value(),
-                    line.teamId().value(), entry.getKey().value(), positions.get(entry.getKey())));
-            approvals.save(new ApprovalRow(row.id(), approver.value()));
-            notifier.notify(approver, NotificationKind.APPROVAL_REQUESTED, requestingTeam + " asks to borrow "
-                    + candidate.name() + " on " + Windows.describe(days) + " (Request " + line.requestId().value()
-                    + "); " + candidate.team().name() + " would earn " + earning + " credits.", "/approvals");
+                    line.teamId().value(), entry.getKey().value(), positions.get(entry.getKey()), days));
+            approvals.save(new ApprovalRow(row.id(), approver.value(), escalated));
+            String asked = requestingTeam + " asks to borrow " + candidate.name() + " on " + Windows.describe(days)
+                    + " (Request " + line.requestId().value() + "); " + candidate.team().name() + " would earn "
+                    + earning + " credits.";
+            if (escalated) {
+                for (MemberId planner : planners) {
+                    notifier.notify(planner, NotificationKind.APPROVAL_REQUESTED, asked
+                            + " The Objection Window has ended, so the Capacity Planner decides.", "/escalations");
+                }
+            } else {
+                notifier.notify(approver, NotificationKind.APPROVAL_REQUESTED, asked, "/approvals");
+            }
             notifier.notify(entry.getKey(), NotificationKind.CANDIDATE_SELECTED, "You were selected as a Candidate for "
-                    + requestingTeam + " on " + Windows.describe(days) + "; your Manager decides.", null);
+                    + requestingTeam + " on " + Windows.describe(days) + "; "
+                    + (escalated ? "the Capacity Planner decides." : "your Manager decides."), null);
         }
         approvals.flush();
     }
@@ -278,22 +297,34 @@ class MatchedAllocator implements Allocator, ApprovalDriven {
             throw new IllegalArgumentException("Approval " + id.value() + " is not for line " + line.lineId().value() + ".");
         }
         MemberId member = new MemberId(candidate.memberId());
-        if (!approval.approverMemberId().equals(actor.memberId().value())) {
+        boolean approver = approval.approverMemberId().equals(actor.memberId().value());
+        boolean planner = actor.has(Role.PLANNER);
+        boolean lapsed = windowLapsed || approval.escalated();
+        if (!approver && !planner) {
             throw new ForbiddenException("Only " + nameOf(new MemberId(approval.approverMemberId()))
-                    + ", the Manager of " + nameOf(member) + "'s Team, decides this approval.");
+                    + ", the Manager of " + nameOf(member) + "'s Team, decides this approval"
+                    + (lapsed ? "; since the Objection Window ended, the Capacity Planner does." : "."));
         }
         if (approval.state() != ApprovalState.OUTSTANDING) {
             throw new RuleViolation("ALREADY_DECIDED", "The approval of " + nameOf(member) + " is already "
                     + approval.state().name().toLowerCase() + ".");
         }
-        if (windowLapsed) {
+        if (lapsed && !planner) {
             throw new RuleViolation("WINDOW_LAPSED", "The Objection Window of Request " + line.requestId().value()
                     + " has ended; the Capacity Planner decides now.");
+        }
+        if (!lapsed && !approver) {
+            throw new ForbiddenException("Only " + nameOf(new MemberId(approval.approverMemberId()))
+                    + ", the Manager of " + nameOf(member) + "'s Team, decides this approval until the Objection"
+                    + " Window ends.");
         }
         DateRange days = days(line);
         if (decision == Decision.APPROVE && !eligible(member, line.teamId(), days)) {
             throw new RuleViolation(NOT_A_CANDIDATE, nameOf(member) + " is no longer available every day of "
                     + Windows.describe(days) + ", or is lent then.");
+        }
+        if (lapsed) {
+            approval.escalate();
         }
         approval.decide(decision, actor.memberId().value(), clock.instant(), reason);
         approvals.flush();
@@ -315,6 +346,21 @@ class MatchedAllocator implements Allocator, ApprovalDriven {
         }
         approvals.flush();
         return refused;
+    }
+
+    @Override
+    public boolean candidatesLeft(LineSnapshot line) {
+        checkClass(line);
+        if (line.namedMember().isPresent()) {
+            return false;
+        }
+        List<Selected> selected = selected(line);
+        long live = selected.stream().filter(s -> LIVE.contains(s.approval().state())).count();
+        Set<Long> selectedBefore = selected.stream().map(s -> s.candidate().memberId()).collect(Collectors.toSet());
+        long left = shortlisted(line, days(line)).stream()
+                .filter(person -> !selectedBefore.contains(person.id().value()))
+                .count();
+        return left >= line.quantity() - live;
     }
 
     @Override
@@ -354,8 +400,26 @@ class MatchedAllocator implements Allocator, ApprovalDriven {
                 .map(approval -> toApproval(approval, candidates.findById(approval.candidateId()).orElseThrow()));
     }
 
+    /** The Outstanding approvals addressed to this Manager that are not escalated, by id. */
     List<Approval> awaiting(MemberId approver) {
-        List<ApprovalRow> rows = approvals.findByApproverMemberIdAndStateOrderById(approver.value(), ApprovalState.OUTSTANDING);
+        return withCandidates(approvals.findByApproverMemberIdAndStateOrderById(approver.value(), ApprovalState.OUTSTANDING)
+                .stream().filter(row -> !row.escalated()).toList());
+    }
+
+    /** Every escalated Outstanding approval, by id: what the Capacity Planners decide. */
+    List<Approval> escalatedOutstanding() {
+        return withCandidates(approvals.findByStateAndEscalatedTrueOrderById(ApprovalState.OUTSTANDING));
+    }
+
+    /** The escalated approvals addressed to this Manager that someone else decided, by id. */
+    List<Approval> decidedOnEscalation(MemberId approver) {
+        return withCandidates(approvals.findByApproverMemberIdAndEscalatedTrueAndStateInOrderById(approver.value(),
+                        EnumSet.of(ApprovalState.APPROVED, ApprovalState.REFUSED)).stream()
+                .filter(row -> row.decidedBy() != null && !row.decidedBy().equals(approver.value()))
+                .toList());
+    }
+
+    private List<Approval> withCandidates(List<ApprovalRow> rows) {
         Map<Long, CandidateRow> byId = candidates.findAllById(rows.stream().map(ApprovalRow::candidateId).toList())
                 .stream().collect(Collectors.toMap(CandidateRow::id, Function.identity()));
         return rows.stream().map(row -> toApproval(row, byId.get(row.candidateId()))).toList();
@@ -394,7 +458,10 @@ class MatchedAllocator implements Allocator, ApprovalDriven {
                     ? List.of(new ShortlistRanking.Person(named, nameOf(named), true, false, 0))
                     : List.of();
         }
-        Set<MemberId> available = members.availableWithSkills(line.skills(), days, line.teamId());
+        Set<MemberId> available = new java.util.LinkedHashSet<>(
+                members.availableWithSkills(line.skills(), days, line.teamId()));
+        Set<Long> elsewhere = selectedOnOverlappingLines(line, days);
+        available.removeIf(member -> elsewhere.contains(member.value()));
         if (available.isEmpty()) {
             return List.of();
         }
@@ -404,12 +471,23 @@ class MatchedAllocator implements Allocator, ApprovalDriven {
         DateRange periodDays = new DateRange(period.startsOn(), period.endsOn());
         Map<Long, List<DateRange>> loansInPeriod = loans.loansDuring(ids, period.startsOn(), period.endsOn()).stream()
                 .collect(Collectors.groupingBy(LoanRow::memberId, Collectors.mapping(LoanRow::days, Collectors.toList())));
+        Map<MemberId, MemberSummary> summaries = members.summaries(available);
         List<ShortlistRanking.Person> people = new ArrayList<>();
         for (MemberId member : available) {
-            people.add(new ShortlistRanking.Person(member, nameOf(member), true, lent.contains(member.value()),
+            people.add(new ShortlistRanking.Person(member, summaries.get(member).name(), true, lent.contains(member.value()),
                     ShortlistRanking.personDaysLent(loansInPeriod.getOrDefault(member.value(), List.of()), periodDays)));
         }
         return ShortlistRanking.rank(people);
+    }
+
+    /**
+     * The Members selected, with an Outstanding or Approved approval, on another line of the line's
+     * Request whose days overlap these (issue #22): no Candidates for this line, since a Person is in
+     * at most one Loan on any day.
+     */
+    private Set<Long> selectedOnOverlappingLines(LineSnapshot line, DateRange days) {
+        return new HashSet<>(candidates.selectedOnOverlappingLines(line.requestId().value(), line.lineId().value(),
+                days.from(), days.to(), LIVE));
     }
 
     /** Active, outside the requesting Team, available every day, and in no Loan overlapping the days. */

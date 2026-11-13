@@ -309,4 +309,22 @@ public final class TestData {
                 VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING id""",
                 Long.class, line, memberId, lendingTeamId, borrowingTeamId, startsOn, endsOn, weekdays);
     }
+
+    // ---------------------------------------------------------------- Members: Candidates in bulk (issue #21)
+
+    /**
+     * {@code count} active Members of the Team with unique usernames, each holding the skill and
+     * available from {@code from} to {@code to}, inclusive: eligible Candidates in bulk for a
+     * Shortlist. Returns their ids.
+     */
+    public java.util.List<Long> lendableMembers(long teamId, int count, long skillId, LocalDate from, LocalDate to) {
+        java.util.List<Long> ids = new java.util.ArrayList<>();
+        for (int i = 0; i < count; i++) {
+            long id = member(teamId, unique("lender"));
+            holds(id, skillId);
+            available(id, from, to);
+            ids.add(id);
+        }
+        return ids;
+    }
 }

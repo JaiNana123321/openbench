@@ -607,6 +607,48 @@ public class MemberService {
                 .map(member -> summaryOf(member, teams.findById(member.teamId()).orElseThrow()));
     }
 
+    /**
+     * (Unscoped) {@link #summary} of each known Member, by id, in three queries whatever their
+     * number (requirement PE-shortlist); unknown ids are left out.
+     */
+    public Map<MemberId, MemberSummary> summaries(Collection<MemberId> ids) {
+        List<Long> raw = ids.stream().map(MemberId::value).distinct().toList();
+        if (raw.isEmpty()) {
+            return Map.of();
+        }
+        List<Member> found = members.findAllById(raw);
+        Map<Long, Team> byId = teams.findAllById(found.stream().map(Member::teamId).distinct().toList()).stream()
+                .collect(Collectors.toMap(Team::id, Function.identity()));
+        Map<Long, Set<Role>> held = roles.findByMemberIdIn(raw).stream().collect(Collectors.groupingBy(
+                MemberRole::memberId, Collectors.mapping(MemberRole::role, Collectors.toSet())));
+        Map<MemberId, MemberSummary> summaries = new java.util.LinkedHashMap<>();
+        for (Member member : found) {
+            summaries.put(new MemberId(member.id()), new MemberSummary(new MemberId(member.id()), member.name(),
+                    member.username(), byId.get(member.teamId()).toSummary(), member.active(),
+                    held.getOrDefault(member.id(), Set.of())));
+        }
+        return summaries;
+    }
+
+    /**
+     * (Unscoped) The skills each Member holds, by name, in two queries whatever their number
+     * (requirement PE-shortlist); a Member holding none maps to an empty list.
+     */
+    public Map<MemberId, List<Skill>> skillsOf(Collection<MemberId> ids) {
+        List<Long> raw = ids.stream().map(MemberId::value).distinct().toList();
+        if (raw.isEmpty()) {
+            return Map.of();
+        }
+        List<MemberSkillRow> rows = memberSkills.findByMemberIdIn(raw);
+        Map<Long, Skill> byId = skills.findAllById(rows.stream().map(MemberSkillRow::skillId).distinct().toList())
+                .stream().map(SkillRow::toSkill).collect(Collectors.toMap(skill -> skill.id().value(), Function.identity()));
+        Map<MemberId, List<Skill>> held = new java.util.LinkedHashMap<>();
+        raw.forEach(id -> held.put(new MemberId(id), new ArrayList<>()));
+        rows.forEach(row -> held.get(new MemberId(row.memberId())).add(byId.get(row.skillId())));
+        held.replaceAll((member, list) -> list.stream().sorted(BY_NAME).toList());
+        return held;
+    }
+
     /** (Unscoped) The skills a Member holds, by name: what a Shortlist row shows. */
     public List<Skill> skillsOf(MemberId id) {
         return skills.findAllById(memberSkills.skillIdsOf(id.value())).stream()

@@ -12,6 +12,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.jayway.jsonpath.JsonPath;
 import edu.cwru.openbench.Verifies;
+import edu.cwru.openbench.common.RequestId;
 import java.math.BigDecimal;
 import java.sql.Date;
 import java.sql.Timestamp;
@@ -21,6 +22,7 @@ import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.test.web.servlet.ResultActions;
 
 /**
@@ -30,6 +32,9 @@ import org.springframework.test.web.servlet.ResultActions;
  * the API, on the Matched data of the test world.
  */
 class LoanCasesTest extends MatchedWorldTest {
+
+    @Autowired
+    private RequestLifecycleService lifecycle;
 
     @Test
     @DisplayName("mat-loan-form: an approved Candidate becomes a Loan and the lending Team earns")
@@ -211,8 +216,8 @@ class LoanCasesTest extends MatchedWorldTest {
     }
 
     @Test
-    @DisplayName("lif-optional-open, steps 1 and 2: an Optional line's approval never holds a Request in Pending")
-    @Verifies(value = "lif-optional-open", partial = true)
+    @DisplayName("lif-optional-open: an Optional line's approval never holds a Request in Pending, nor is lost at the lapse")
+    @Verifies("lif-optional-open")
     void anOptionalApprovalNeverHoldsARequestInPending() throws Exception {
         LocalDate d = dayD();
 
@@ -247,16 +252,44 @@ class LoanCasesTest extends MatchedWorldTest {
                 .andExpect(jsonPath("$.transactions[?(@.kind == 'CHARGE')].amount", contains(30.00)))
                 .andExpect(jsonPath("$.account.held").value(0.00));
 
-        // Beyond step 2 (steps 3 and 4 need the escalation, #7): Alice approves before the lapse, and
-        // Ben's Loan forms on the Allocated Request, which stays Allocated with L1 untouched.
-        decide(as(alice), approvalOf(m6), "APPROVE", "").andExpect(status().isOk());
+        // 3. [clock] The window lapses with Alice silent: M6's approval is escalated and Erin is told; B1 stays
+        // Allocated and L1 keeps its allocation.
+        long erinId = jdbc.queryForObject("SELECT id FROM member WHERE username = ?", Long.class, erin);
+        movableClock.set(ObjectionWindow.endsAt(submittedAt, 2, clock.getZone()).plusSeconds(60));
+        assertThat(lifecycle.lapsedWindows(clock.instant())).contains(new RequestId(b1));
+        lifecycle.onWindowLapse(new RequestId(b1));
         detail(as(bob), b1)
                 .andExpect(jsonPath("$.request.state").value("ALLOCATED"))
                 .andExpect(jsonPath("$.lines[0].line.state").value("ALLOCATED"))
-                .andExpect(jsonPath("$.lines[1].line.state").value("LOANED"));
+                .andExpect(jsonPath("$.lines[1].line.state").value("AWAITING_APPROVAL"))
+                .andExpect(jsonPath("$.lines[1].candidates[0].escalated").value(true));
+        assertThat(jdbc.queryForList("SELECT text FROM notification WHERE member_id = ? AND kind = 'ESCALATED'",
+                String.class, erinId)).anySatisfy(text -> assertThat(text).contains("Request " + b1 + " is escalated"));
+        assertThat(jdbc.queryForObject("""
+                SELECT count(*) FROM exclusive_occurrence WHERE line_id = ? AND state = 'ALLOCATED'""", Integer.class, l1))
+                .isEqualTo(1);
+
+        // 4. Erin approves Ben from Escalations: his Loan to Research forms now; Platform earns 800.00; Ben and
+        // Bob are told.
+        decide(as(erin), approvalOf(m6), "APPROVE", "").andExpect(status().isOk());
+        detail(as(bob), b1)
+                .andExpect(jsonPath("$.request.state").value("ALLOCATED"))
+                .andExpect(jsonPath("$.lines[0].line.state").value("ALLOCATED"))
+                .andExpect(jsonPath("$.lines[1].line.state").value("LOANED"))
+                .andExpect(jsonPath("$.lines[1].loans[0].memberName").value("Ben Ortiz"))
+                .andExpect(jsonPath("$.lines[1].loans[0].borrowingTeam.id").value((int) research))
+                .andExpect(jsonPath("$.lines[1].loans[0].days.from").value(d.toString()))
+                .andExpect(jsonPath("$.lines[1].loans[0].days.to").value(d.plusDays(1).toString()));
         assertThat(earnings(platform)).containsExactly(new BigDecimal("800.00"));
+        assertThat(notificationsOf(world.ben())).containsExactly("CANDIDATE_SELECTED", "LOAN_FORMED");
         assertThat(jdbc.queryForList("SELECT text FROM notification WHERE member_id = ? AND kind = 'REQUEST_UPDATE'",
                 String.class, world.bob().id())).anySatisfy(text -> assertThat(text).contains("has its Loans"));
+
+        // L1 was never held or delayed, and M6 was neither dropped at allocation nor lost at the lapse.
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM request_event WHERE line_id = ? AND to_state = 'HELD'",
+                Integer.class, l1)).isZero();
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM request_event WHERE line_id = ? AND to_state = 'DROPPED'",
+                Integer.class, m6)).isZero();
     }
 
     @Test

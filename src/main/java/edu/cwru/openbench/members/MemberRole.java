@@ -36,6 +36,10 @@ class MemberRole {
         this.createdBy = createdBy;
     }
 
+    Long memberId() {
+        return memberId;
+    }
+
     Role role() {
         return role;
     }

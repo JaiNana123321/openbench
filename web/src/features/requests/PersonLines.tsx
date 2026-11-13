@@ -49,7 +49,7 @@ export function PersonLines({ requestId, lines, number, canSelect }: PersonLines
 }
 
 const LIVE: ReadonlySet<string> = new Set(['OUTSTANDING', 'APPROVED']);
-const OPEN: ReadonlySet<string> = new Set(['AWAITING_APPROVAL', 'WAITING']);
+const OPEN: ReadonlySet<string> = new Set(['AWAITING_APPROVAL', 'WAITING', 'REFUSED']);
 
 interface PersonLineProps {
   requestId: Id;
@@ -102,6 +102,12 @@ function PersonLine({ requestId, detail, number, canSelect }: PersonLineProps) {
   return (
     <div className="panel section" aria-label={title}>
       <h3 className="section-title">{title}</h3>
+      {line.state === 'REFUSED' && (
+        <p className="replacement-needed" role="status">
+          Replacement needed: a Candidate was refused.{' '}
+          {canSelect ? 'Select a replacement from the Shortlist.' : 'The Manager selects a replacement.'}
+        </p>
+      )}
       <Table
         label={`Candidates of line ${number ?? line.id}`}
         columns={candidateColumns}

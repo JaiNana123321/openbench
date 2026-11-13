@@ -28,6 +28,10 @@ class MemberSkillRow {
         this.createdBy = createdBy;
     }
 
+    Long memberId() {
+        return memberId;
+    }
+
     Long skillId() {
         return skillId;
     }

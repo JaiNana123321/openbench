@@ -57,7 +57,10 @@ public interface AllocationQueries {
      */
     List<AllocatedPart> allocatedParts(RequestLineId line);
 
-    /** The Outstanding approvals addressed to this Manager, by id (escalated ones for a Planner come with #7). */
+    /**
+     * The Outstanding approvals addressed to this Manager that are not escalated, by id: those the
+     * Manager still decides. Escalated ones are in {@link #escalatedOutstanding()}.
+     */
     List<Approval> approvalsAwaiting(MemberId approver);
 
     /** One approval, in any state; empty when it does not exist. */
@@ -85,4 +88,13 @@ public interface AllocationQueries {
      * one. Unscoped: callers decide which holders the caller may see.
      */
     List<Holding> holders(ResourceId resource, TimeWindow window);
+
+    /** Every escalated Outstanding approval, by id: what the Capacity Planners decide (SRS Matched.Escalate). */
+    List<Approval> escalatedOutstanding();
+
+    /**
+     * The escalated approvals addressed to this lending Manager that someone else, a Capacity
+     * Planner, decided, by id: what the Manager's Approvals screen shows as decided for them.
+     */
+    List<Approval> decidedOnEscalation(MemberId approver);
 }

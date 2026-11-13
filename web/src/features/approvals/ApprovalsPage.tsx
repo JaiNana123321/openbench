@@ -10,15 +10,18 @@ import {
   Loading,
   PageHeader,
   ProblemMessage,
+  StatusBadge,
   Table,
   type Column,
 } from '../../ui';
 import { useApprovals, useDecide } from './queries';
 
 /**
- * Approvals (Matched.Approve.Route): the requests to lend the Manager's own Members, each with the
- * requesting Team, the days, the Earning, and the time left in the Objection Window. The Manager
- * approves or refuses each with a reason; a decided one leaves the list.
+ * Approvals (Matched.Approve.Route, Matched.Escalate): the requests to lend the Manager's own
+ * Members, each with the requesting Team, the days, the Earning, and the time left in the Objection
+ * Window. The Manager approves or refuses each with a reason; a decided one leaves the list. Once
+ * the window lapses an approval goes to the Capacity Planner, and when the Planner decides it, it is
+ * listed here as decided by the Capacity Planner.
  */
 export function ApprovalsPage() {
   const approvals = useApprovals();
@@ -32,7 +35,11 @@ export function ApprovalsPage() {
     { header: 'Days', cell: (approval) => formatDayRange(approval.days) },
     { header: 'Earning', cell: (approval) => formatCredits(approval.earning), numeric: true },
     { header: 'Time left', cell: (approval) => timeLeft(approval.windowEndsAt) },
-    { header: 'Decision', cell: (approval) => <DecisionForm approval={approval} /> },
+    {
+      header: 'Decision',
+      cell: (approval) =>
+        approval.state === 'OUTSTANDING' ? <DecisionForm approval={approval} /> : <Decided approval={approval} />,
+    },
   ];
   return (
     <>
@@ -44,6 +51,18 @@ export function ApprovalsPage() {
         rowKey={(approval) => approval.id}
         empty={<EmptyState title="No approval awaits your decision." />}
       />
+    </>
+  );
+}
+
+/** An approval the Capacity Planner decided for the Manager after the Objection Window lapsed. */
+function Decided({ approval }: { approval: ApprovalView }) {
+  return (
+    <>
+      <StatusBadge status={approval.state} />{' '}
+      {approval.decidedByName && `by ${approval.decidedByName}`}
+      {approval.escalated && ', Capacity Planner'}
+      {approval.reason && <span className="timeline__note">{approval.reason}</span>}
     </>
   );
 }

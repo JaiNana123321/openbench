@@ -1,5 +1,6 @@
 package edu.cwru.openbench.members;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -10,6 +11,8 @@ import org.springframework.data.jpa.repository.Query;
 interface MemberSkillRepository extends JpaRepository<MemberSkillRow, MemberSkillRow.Key> {
 
     List<MemberSkillRow> findByMemberId(Long memberId);
+
+    List<MemberSkillRow> findByMemberIdIn(Collection<Long> memberIds);
 
     /** The ids of the skills the Member holds. */
     default Set<Long> skillIdsOf(Long memberId) {

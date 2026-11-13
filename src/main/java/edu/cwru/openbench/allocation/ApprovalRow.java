@@ -37,9 +37,18 @@ class ApprovalRow {
 
     /** A new Outstanding approval. */
     ApprovalRow(Long candidateId, Long approverMemberId) {
+        this(candidateId, approverMemberId, false);
+    }
+
+    /**
+     * A new Outstanding approval, {@code escalated} when it is created after its Request's Objection
+     * Window lapsed: the Capacity Planner decides it, not {@code approverMemberId}.
+     */
+    ApprovalRow(Long candidateId, Long approverMemberId, boolean escalated) {
         this.candidateId = candidateId;
         this.approverMemberId = approverMemberId;
         this.state = ApprovalState.OUTSTANDING;
+        this.escalated = escalated;
     }
 
     Long id() {
