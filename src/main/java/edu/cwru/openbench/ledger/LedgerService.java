@@ -2,6 +2,7 @@ package edu.cwru.openbench.ledger;
 
 import edu.cwru.openbench.common.Actor;
 import edu.cwru.openbench.common.Credits;
+import edu.cwru.openbench.common.LoanId;
 import edu.cwru.openbench.common.MemberId;
 import edu.cwru.openbench.common.NotFoundException;
 import edu.cwru.openbench.common.PeriodId;
@@ -45,9 +46,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * Every Team's Account and the append-only Transactions (design Section 4.7). Demo 1 has the
- * Account, held credits, Charges, Grants, and the Statement; Earnings, Refunds, and the rollover
- * come in a later increment.
+ * Every Team's Account and the append-only Transactions (design Section 4.7): the Account, held
+ * credits, Charges, Grants, Earnings, Refunds, the rollover, and the Statement. The Earning
+ * correction after an early Loan end comes with issue #8.
  *
  * <p>Every change locks the Team's {@code account} row first ({@code SELECT ... FOR UPDATE},
  * inserting it if missing) and keeps it until the caller's transaction ends: the writes join the
@@ -307,7 +308,8 @@ public class LedgerService {
                 transaction.lineId() == null ? null : new RequestLineId(transaction.lineId()),
                 actor == null ? null : new MemberId(actor),
                 actorName,
-                transaction.reason());
+                transaction.reason(),
+                transaction.loanId() == null ? null : new LoanId(transaction.loanId()));
     }
 
     private static Credits total(Map<TransactionKind, BigDecimal> totals, TransactionKind kind) {
@@ -524,5 +526,33 @@ public class LedgerService {
     @Transactional
     public void commitChargesBySystem(RequestId request, List<ChargeSpec> charges) {
         postCharges(request, charges, null);
+    }
+
+    // ---------------------------------------------------------------- Earnings
+
+    /**
+     * (Unscoped) Posts the Earning of a Loan as it forms (SRS Ledger.Earning.Post; design
+     * {@code postEarning}): an {@code EARNING} Transaction naming the Loan and the line, all of it
+     * into the lending Team's earned credits, into the current Period. One per Loan. {@code actor} is
+     * the Member whose call formed the Loan, or null for the system. Locks the lending Team's account
+     * row and joins the caller's transaction, so a failure rolls back the whole allocation.
+     *
+     * @throws IllegalStateException if the Loan's Earning has already posted
+     */
+    @Transactional
+    public void postEarning(EarningSpec earning, Actor actor) {
+        Account account = lock(earning.lendingTeam());
+        if (transactions.earningPostedFor(earning.loan().value())) {
+            throw new IllegalStateException("Loan " + earning.loan().value() + " already has its Earning.");
+        }
+        BigDecimal amount = earning.amount().amount();
+        account.earn(amount);
+        Long actorId = actor == null ? null : actor.memberId().value();
+        Transaction posted = transactions.save(Transaction.earning(earning.lendingTeam().value(), amount,
+                settings.currentPeriod().id().value(), earning.line().value(), earning.loan().value(),
+                earning.description(), actorId, clock.instant()));
+        log.info("event=transaction kind=EARNING id={} team={} amount={} loan={} line={} actor={}", posted.id(),
+                earning.lendingTeam().value(), amount, earning.loan().value(), earning.line().value(),
+                actorText(actorId));
     }
 }

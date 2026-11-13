@@ -2,6 +2,7 @@ package edu.cwru.openbench.requests;
 
 import edu.cwru.openbench.allocation.AllocatedPart;
 import edu.cwru.openbench.allocation.ApprovalState;
+import edu.cwru.openbench.allocation.Loan;
 import edu.cwru.openbench.common.ApprovalId;
 import edu.cwru.openbench.common.MemberId;
 import edu.cwru.openbench.common.ResourceId;
@@ -18,7 +19,8 @@ import java.util.List;
  * type's waitlist and is null otherwise. {@code allocatedParts} is what an Exclusive or Metered line
  * holds now, one part per occurrence, after any partial Release; empty when nothing is allocated.
  * {@code candidates} are a Person line's selected Candidates with their approvals, in the order
- * selected; empty on other lines.
+ * selected; empty on other lines. {@code loans} are the Loans a Person line formed when it was
+ * allocated; empty until then, and on other lines.
  */
 public record LineDetail(
         RequestLine line,
@@ -27,12 +29,14 @@ public record LineDetail(
         String reasonMessage,
         Integer waitlistPosition,
         List<AllocatedPart> allocatedParts,
-        List<CandidateApproval> candidates) {
+        List<CandidateApproval> candidates,
+        List<Loan> loans) {
 
     public LineDetail {
         assignedResources = List.copyOf(assignedResources);
         allocatedParts = List.copyOf(allocatedParts);
         candidates = List.copyOf(candidates);
+        loans = List.copyOf(loans);
     }
 
     /** A Resource a line is allocated on. JSON: {@code {"id": 21, "name": "Room A"}}. */

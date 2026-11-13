@@ -171,13 +171,14 @@ class ProfilesTest extends PostgresTest {
     }
 
     @Test
-    @Verifies(value = "prf-visibility", partial = true)
+    @Verifies("prf-visibility")
     @DisplayName("prf-visibility: profiles are seen by the Member and their own Manager only")
     void profilesAreSeenByTheMemberAndTheirOwnManagerOnly() throws Exception {
         Login alice = world.alice();
         Login ben = world.ben();
+        long loan = testData().loan(ben.id(), world.platform(), world.research(), d, d.plusDays(1));
 
-        // Step 1: the Team view and Ben's profile, with no other personal data (Loans wait for #6).
+        // Step 1: the Team view and Ben's profile, with no other personal data, and his Loans.
         mvc.perform(get("/api/teams/{id}/members", world.platform()).with(signedInAs(alice.username())))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.content[*].name", contains("Alice Chen", "Ben Ortiz")));
@@ -190,6 +191,12 @@ class ProfilesTest extends PostgresTest {
                 .andExpect(jsonPath("$.team.id").value((int) world.platform()))
                 .andExpect(jsonPath("$.skills[*].name", contains("Java")))
                 .andExpect(jsonPath("$.availability", hasSize(1)));
+        mvc.perform(get("/api/members/{id}/loans", ben.id()).with(signedInAs(alice.username())))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[*].id", contains((int) loan)))
+                .andExpect(jsonPath("$[0].borrowingTeam.id").value((int) world.research()))
+                .andExpect(jsonPath("$[0].days.from").value(d.toString()))
+                .andExpect(jsonPath("$[0].days.to").value(d.plusDays(1).toString()));
 
         // Step 2: Alice adds D+70 to D+80 on Ben's behalf; Ben sees it.
         putAvailability(alice, ben.id(), ranges(today, d.plusDays(60), d.plusDays(70), d.plusDays(80)))
@@ -203,11 +210,15 @@ class ProfilesTest extends PostgresTest {
         mvc.perform(get("/api/members/{id}/profile", world.rita().id()).with(signedInAs(alice.username())))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.code").value("NOT_FOUND"));
+        mvc.perform(get("/api/members/{id}/loans", world.rita().id()).with(signedInAs(alice.username())))
+                .andExpect(status().isNotFound());
 
         // Step 4: a Member sees only their own profile.
         mvc.perform(get("/api/members/{id}/profile", world.dave().id()).with(signedInAs(ben.username())))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.code").value("NOT_FOUND"));
+        mvc.perform(get("/api/members/{id}/loans", world.dave().id()).with(signedInAs(ben.username())))
+                .andExpect(status().isNotFound());
 
         // Step 5: another Team's Manager cannot edit Ben's availability, and learns nothing.
         putAvailability(world.bob(), ben.id(), ranges(d, d))

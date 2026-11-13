@@ -3,6 +3,7 @@ package edu.cwru.openbench.ledger;
 import java.util.Collection;
 import java.util.List;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
 
 interface TransactionRepository extends JpaRepository<Transaction, Long> {
 
@@ -13,4 +14,10 @@ interface TransactionRepository extends JpaRepository<Transaction, Long> {
 
     /** The line's Transactions of one kind, oldest first: its Charge, or its Refunds. */
     List<Transaction> findByLineIdAndKindOrderByIdAsc(Long lineId, TransactionKind kind);
+
+    /** Whether the Loan's Earning has posted: an EARNING naming the Loan and correcting nothing. */
+    @Query(value = """
+            SELECT EXISTS (SELECT 1 FROM transaction
+                           WHERE loan_id = :loan AND kind = 'EARNING' AND corrects_id IS NULL)""", nativeQuery = true)
+    boolean earningPostedFor(Long loan);
 }

@@ -5,6 +5,7 @@ import edu.cwru.openbench.common.ApprovalId;
 import edu.cwru.openbench.common.Credits;
 import edu.cwru.openbench.common.DateRange;
 import edu.cwru.openbench.common.ForbiddenException;
+import edu.cwru.openbench.common.LoanId;
 import edu.cwru.openbench.common.MemberId;
 import edu.cwru.openbench.common.NotFoundException;
 import edu.cwru.openbench.common.RequestId;
@@ -16,6 +17,7 @@ import edu.cwru.openbench.inventory.AllocationClass;
 import edu.cwru.openbench.members.MemberService;
 import edu.cwru.openbench.members.MemberSummary;
 import edu.cwru.openbench.members.Skill;
+import edu.cwru.openbench.members.TeamSummary;
 import edu.cwru.openbench.notifications.NotificationKind;
 import edu.cwru.openbench.notifications.Notifier;
 import edu.cwru.openbench.settings.Period;
@@ -51,8 +53,10 @@ import org.springframework.transaction.annotation.Transactional;
  * eligible; UNSATISFIABLE with {@code SHORTLIST_TOO_SHORT} when fewer eligible Members exist than the
  * quantity, or {@code NOT_A_CANDIDATE} when an Approved or named Person is no longer eligible.
  *
- * <p>Loans are formed by {@link #commit} in a later increment (#6); this one reads them, so the
- * Shortlist leaves out Members lent during the window and ranks by person-days lent.
+ * <p>{@link #commit} forms one Loan per Approved Candidate once the Request is allocated, after
+ * checking each Candidate's eligibility again as a guard ({@code ALLOCATION_CONFLICT}). The Shortlist
+ * leaves out Members lent during the window and ranks by person-days lent. A line's own Loans never
+ * make its Candidates ineligible for it.
  */
 @Component
 @Transactional(propagation = Propagation.MANDATORY)
@@ -60,6 +64,7 @@ class MatchedAllocator implements Allocator, ApprovalDriven {
 
     static final String SHORTLIST_TOO_SHORT = "SHORTLIST_TOO_SHORT";
     static final String NOT_A_CANDIDATE = "NOT_A_CANDIDATE";
+    static final String ALLOCATION_CONFLICT = "ALLOCATION_CONFLICT";
 
     private static final Set<ApprovalState> LIVE = EnumSet.of(ApprovalState.OUTSTANDING, ApprovalState.APPROVED);
 
@@ -100,7 +105,7 @@ class MatchedAllocator implements Allocator, ApprovalDriven {
                 .toList();
         for (Selected selected : approved) {
             MemberId member = new MemberId(selected.candidate().memberId());
-            if (!eligible(member, line.teamId(), days)) {
+            if (!eligible(member, line.teamId(), days, line.lineId())) {
                 return Evaluation.unsatisfiable(NOT_A_CANDIDATE, nameOf(member)
                         + " is no longer available every day of " + Windows.describe(days) + ".");
             }
@@ -131,17 +136,48 @@ class MatchedAllocator implements Allocator, ApprovalDriven {
         checkClass(line);
     }
 
+    /**
+     * Forms the line's Loans (SRS Matched.Loan.Form): one {@code loan} per Approved Candidate, lent
+     * by the Candidate's Team to the requesting Team for the line's days, with {@code days_lent}
+     * their Monday-to-Friday days. Requests re-evaluates the line under the type lock first; the
+     * eligibility check here is only a guard, so a failure means a path skipped that step. The
+     * {@code loan_one_at_a_time} constraint is the last guard, checked at once by a flush.
+     *
+     * @throws RuleViolation {@code ALLOCATION_CONFLICT} if an Approved Candidate is no longer eligible
+     * @throws IllegalStateException if the line already has Loans, or fewer Approved Candidates than
+     *     its quantity
+     */
     @Override
     public void commit(LineSnapshot line) {
         checkClass(line);
-        throw new UnsupportedOperationException("Forming Loans for line " + line.lineId().value()
-                + " comes with Loans and Earnings (issue #6).");
+        if (loans.existsByLineId(line.lineId().value())) {
+            throw new IllegalStateException("Line " + line.lineId().value() + " already has its Loans.");
+        }
+        List<Selected> approved = selected(line).stream()
+                .filter(selected -> selected.approval().state() == ApprovalState.APPROVED)
+                .toList();
+        if (approved.size() < line.quantity()) {
+            throw new IllegalStateException("Line " + line.lineId().value() + " has " + approved.size()
+                    + " Approved Candidates; it asks for " + line.quantity() + ".");
+        }
+        DateRange days = days(line);
+        for (Selected selected : approved) {
+            MemberId member = new MemberId(selected.candidate().memberId());
+            if (!eligible(member, line.teamId(), days, line.lineId())) {
+                throw new RuleViolation(ALLOCATION_CONFLICT, nameOf(member) + " is no longer available every day of "
+                        + Windows.describe(days) + ", or is lent then; Request " + line.requestId().value()
+                        + " was not allocated.");
+            }
+            loans.save(new LoanRow(line.lineId().value(), member.value(),
+                    members.summary(member).team().id().value(), line.teamId().value(), days));
+            loans.flush();
+        }
     }
 
     @Override
     public Released release(LineSnapshot line, ReleasePart part) {
         checkClass(line);
-        throw new UnsupportedOperationException("Ending a Loan early comes with Loans and Earnings (issue #6).");
+        throw new UnsupportedOperationException("Ending a Loan early comes with issue #8.");
     }
 
     /** Cancels every Outstanding or Approved approval of the line; Refused ones stay. Idempotent. */
@@ -265,6 +301,23 @@ class MatchedAllocator implements Allocator, ApprovalDriven {
     }
 
     @Override
+    public List<Approval> refuseIneligible(LineSnapshot line, String reason) {
+        checkClass(line);
+        DateRange days = days(line);
+        List<Approval> refused = new ArrayList<>();
+        for (Selected selected : selected(line)) {
+            MemberId member = new MemberId(selected.candidate().memberId());
+            if (selected.approval().state() == ApprovalState.APPROVED
+                    && !eligible(member, line.teamId(), days, line.lineId())) {
+                selected.approval().refuseBySystem(clock.instant(), reason);
+                refused.add(toApproval(selected.approval(), selected.candidate()));
+            }
+        }
+        approvals.flush();
+        return refused;
+    }
+
+    @Override
     public List<Approval> outstanding(RequestId request) {
         return ofRequest(request).stream().filter(approval -> approval.state() == ApprovalState.OUTSTANDING).toList();
     }
@@ -308,6 +361,24 @@ class MatchedAllocator implements Allocator, ApprovalDriven {
         return rows.stream().map(row -> toApproval(row, byId.get(row.candidateId()))).toList();
     }
 
+    /** The Loans the line's commit formed, by id. */
+    List<Loan> loansFor(RequestLineId line) {
+        return toLoans(loans.findByLineIdOrderById(line.value()));
+    }
+
+    /** The Member's Loans, by first day. */
+    List<Loan> loansOf(MemberId member) {
+        return toLoans(loans.findByMemberIdOrderByStartsOnAscIdAsc(member.value()));
+    }
+
+    private List<Loan> toLoans(List<LoanRow> rows) {
+        Map<Long, TeamSummary> teams = new HashMap<>();
+        Function<Long, TeamSummary> team = id -> teams.computeIfAbsent(id, key -> members.team(new TeamId(key)));
+        return rows.stream().map(row -> new Loan(new LoanId(row.id()), new RequestLineId(row.lineId()),
+                new MemberId(row.memberId()), nameOf(new MemberId(row.memberId())), team.apply(row.lendingTeamId()),
+                team.apply(row.borrowingTeamId()), row.days(), row.daysLent(), row.endedEarly())).toList();
+    }
+
     Set<RequestId> requestsWithUnescalatedOutstanding() {
         return approvals.requestsWithUnescalatedOutstanding().stream().map(RequestId::new)
                 .collect(Collectors.toCollection(java.util.LinkedHashSet::new));
@@ -343,12 +414,20 @@ class MatchedAllocator implements Allocator, ApprovalDriven {
 
     /** Active, outside the requesting Team, available every day, and in no Loan overlapping the days. */
     private boolean eligible(MemberId member, TeamId requestingTeam, DateRange days) {
+        return eligible(member, requestingTeam, days, null);
+    }
+
+    /** {@link #eligible(MemberId, TeamId, DateRange)}, leaving out the Loans of {@code ownLine} when given. */
+    private boolean eligible(MemberId member, TeamId requestingTeam, DateRange days, RequestLineId ownLine) {
         Optional<MemberSummary> summary = members.findSummary(member);
+        List<Long> lent = ownLine == null
+                ? loans.membersLentDuring(List.of(member.value()), days.from(), days.to())
+                : loans.membersLentDuringExcept(List.of(member.value()), days.from(), days.to(), ownLine.value());
         return summary.isPresent()
                 && summary.get().active()
                 && !summary.get().team().id().equals(requestingTeam)
                 && members.isAvailable(member, days)
-                && loans.membersLentDuring(List.of(member.value()), days.from(), days.to()).isEmpty();
+                && lent.isEmpty();
     }
 
     /** The Earning a Loan over these days would post: the Day Rate per Monday-to-Friday day. */

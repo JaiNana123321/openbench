@@ -46,6 +46,15 @@ public interface ApprovalDriven {
     Approval decide(LineSnapshot line, ApprovalId id, Decision decision, String reason, Actor actor,
             boolean windowLapsed);
 
+    /**
+     * The system refuses, with the reason, every Approved approval of the line whose Candidate is no
+     * longer eligible (unavailable on a day of the line, or lent then on another line), so that the
+     * requesting Manager can select a replacement; returns those refused. What allocation does when
+     * {@link Allocator#evaluate} answers {@code UNSATISFIABLE(NOT_A_CANDIDATE)} (design
+     * {@code allocate}, step a).
+     */
+    List<Approval> refuseIneligible(LineSnapshot line, String reason);
+
     /** The Request's Outstanding approvals, by id. */
     List<Approval> outstanding(RequestId request);
 

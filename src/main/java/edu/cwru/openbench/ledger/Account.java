@@ -39,6 +39,11 @@ class Account {
         granted = granted.add(amount);
     }
 
+    /** An Earning: earned credits grow by the amount. */
+    void earn(BigDecimal amount) {
+        earned = earned.add(amount);
+    }
+
     /** Takes a Charge from granted credits first, then earned; returns the part taken from granted. */
     BigDecimal draw(BigDecimal amount) {
         BigDecimal fromGranted = granted.min(amount).max(BigDecimal.ZERO);

@@ -1,9 +1,10 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../../api/client';
-import type { DayRange, Id, MemberProfile, MemberSummary, Page, Skill } from '../../api/types';
+import type { DayRange, Id, Loan, MemberProfile, MemberSummary, Page, Skill } from '../../api/types';
 
 // Profile calls (design Section 7, "Members and administration"). Keys start with the API group's
-// noun: ['members', id, 'profile'], ['teams', id, 'members'], ['skills', { includeRetired }].
+// noun: ['members', id, 'profile'], ['members', id, 'loans'], ['teams', id, 'members'],
+// ['skills', { includeRetired }].
 // `me` stands for the caller's own id in member paths.
 
 /** The largest roster page the server serves; a Team is smaller than this. */
@@ -12,6 +13,7 @@ const ROSTER_SIZE = 200;
 export const profileKeys = {
   all: ['members'] as const,
   profile: (id: Id | 'me') => ['members', id, 'profile'] as const,
+  loans: (id: Id | 'me') => ['members', id, 'loans'] as const,
   roster: (teamId: Id) => ['teams', teamId, 'members'] as const,
   skills: (includeRetired: boolean) => ['skills', { includeRetired }] as const,
 };
@@ -20,6 +22,14 @@ export function useProfile(id: Id | 'me') {
   return useQuery({
     queryKey: profileKeys.profile(id),
     queryFn: () => api.get<MemberProfile>(`/api/members/${id}/profile`),
+  });
+}
+
+/** A Member's Loans, by first day: GET /api/members/{id}/loans, served by Allocation. */
+export function useLoans(id: Id | 'me') {
+  return useQuery({
+    queryKey: profileKeys.loans(id),
+    queryFn: () => api.get<Loan[]>(`/api/members/${id}/loans`),
   });
 }
 

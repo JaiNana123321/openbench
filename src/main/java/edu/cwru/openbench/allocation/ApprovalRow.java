@@ -82,6 +82,14 @@ class ApprovalRow {
         this.reason = reason;
     }
 
+    /** The system refuses an Approved approval whose Candidate is no longer eligible; no Member decided it. */
+    void refuseBySystem(Instant at, String reason) {
+        this.state = ApprovalState.REFUSED;
+        this.decidedBy = null;
+        this.decidedAt = at;
+        this.reason = reason;
+    }
+
     void cancel() {
         this.state = ApprovalState.CANCELED;
     }

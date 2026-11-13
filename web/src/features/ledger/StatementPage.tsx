@@ -161,9 +161,12 @@ function transactionColumns(requestOf: ReadonlyMap<Id, RequestLine>): Column<Led
 function requestLineCell(row: LedgerTransaction, requestOf: ReadonlyMap<Id, RequestLine>) {
   if (row.line === null) return '—';
   const line = requestOf.get(row.line);
-  if (!line) return `Line ${row.line}`;
+  // An Earning's line is the borrowing Team's, which the lending Manager may not open: name the Loan.
+  const loan = row.loan ? `Loan #${row.loan}, ` : '';
+  if (!line) return `${loan}Line ${row.line}`;
   return (
     <>
+      {loan}
       <Link to={`/requests/${line.requestId}`}>Request #{line.requestId}</Link>, {line.typeName}
     </>
   );

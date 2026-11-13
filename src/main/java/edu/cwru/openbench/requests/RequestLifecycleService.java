@@ -10,6 +10,7 @@ import edu.cwru.openbench.allocation.ApprovalState;
 import edu.cwru.openbench.allocation.Decision;
 import edu.cwru.openbench.allocation.Evaluation;
 import edu.cwru.openbench.allocation.LineSnapshot;
+import edu.cwru.openbench.allocation.Loan;
 import edu.cwru.openbench.allocation.ReleasePart;
 import edu.cwru.openbench.allocation.Released;
 import edu.cwru.openbench.allocation.Shortlist;
@@ -32,6 +33,7 @@ import edu.cwru.openbench.common.TimeWindow;
 import edu.cwru.openbench.inventory.AllocationClass;
 import edu.cwru.openbench.inventory.InventoryQueries;
 import edu.cwru.openbench.ledger.ChargeSpec;
+import edu.cwru.openbench.ledger.EarningSpec;
 import edu.cwru.openbench.ledger.LedgerService;
 import edu.cwru.openbench.members.MemberService;
 import edu.cwru.openbench.members.MemberSummary;
@@ -43,12 +45,14 @@ import jakarta.persistence.EntityManager;
 import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.Instant;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
@@ -70,13 +74,15 @@ import org.springframework.transaction.support.TransactionTemplate;
  * Allocated, Pending, or Waiting, withdrawal, the Request detail, and the Matched steps: the
  * Shortlist, the Manager's selection, the lending Managers' decisions, and the Objection Window's
  * lapse. A Request whose Required Person lines need approval is Pending: its Exclusive and Metered
- * lines are Held with their credits until the window ends. Forming Loans, and so allocating a
- * Request with Person lines, comes with issue #6.
+ * lines are Held with their credits until the window ends. The last Required approval allocates it
+ * ({@code allocateApproved}): the Holds commit, the Charges post, each Approved Candidate becomes a
+ * Loan, and each Loan posts its Earning, in one transaction.
  *
  * <p>One transaction per transition, and always this lock order: (0) the Request row, before its
  * lines' type ids are read, so no Draft edit adds a line of a type left unlocked; (1) the lines'
- * Resource Types, ascending ({@link AllocationLock}); (2) the Team's account row, inside
- * {@link LedgerService#holdCredits} and {@link LedgerService#commitCharges}. The early
+ * Resource Types, ascending ({@link AllocationLock}), the Person type included; (2) the account
+ * rows, inside {@link LedgerService#holdCredits} and {@link LedgerService#commitCharges}, or, when
+ * Loans form, the requesting and lending Teams' accounts in ascending Team id first. The early
  * {@link LedgerService#requireAffordable} takes no lock. A deadlock or lock timeout rolls the whole
  * transition back; the controller retries it once ({@code ConcurrencyRetry}).
  *
@@ -429,8 +435,9 @@ public class RequestLifecycleService {
         Integer position = line.state() == RequestLineState.WAITING
                 ? allocation.waitlistPosition(line.id()).orElse(null)
                 : null;
+        boolean matched = line.allocationClass() == AllocationClass.MATCHED;
         return new LineDetail(line, assigned, reason, message, position, allocation.allocatedParts(line.id()),
-                line.allocationClass() == AllocationClass.MATCHED ? candidatesOf(line.id()) : List.of());
+                matched ? candidatesOf(line.id()) : List.of(), matched ? allocation.loansFor(line.id()) : List.of());
     }
 
     // ---------------------------------------------------------------- steps
@@ -697,10 +704,19 @@ public class RequestLifecycleService {
      */
     private void fillFromWaitlist(Long requestId, Instant now) {
         RequestRow request = access.lockForSystem(new RequestId(requestId));
+        List<RequestLineRow> all = lines.findByRequestIdOrderById(request.id());
+        boolean hasPersonLines = all.stream().anyMatch(row -> row.allocationClass() == AllocationClass.MATCHED
+                && row.state() != RequestLineState.CANCELED && row.state() != RequestLineState.DROPPED);
+        if (hasPersonLines && requiredPersonLinesApproved(all)
+                && EnumSet.of(RequestState.PENDING, RequestState.WAITING).contains(request.state())) {
+            typeLock.lockTypes(new TreeSet<>(all.stream().map(row -> new ResourceTypeId(row.typeId())).toList()));
+            allocateApproved(request, all, null, now);
+            return;
+        }
         if (request.state() != RequestState.WAITING) {
             return;
         }
-        List<RequestLineRow> open = lines.findByRequestIdOrderById(request.id()).stream()
+        List<RequestLineRow> open = all.stream()
                 .filter(row -> row.state() == RequestLineState.WAITING || row.state() == RequestLineState.EVALUATED)
                 .toList();
         typeLock.lockTypes(new TreeSet<>(open.stream().map(row -> new ResourceTypeId(row.typeId())).toList()));
@@ -711,12 +727,11 @@ public class RequestLifecycleService {
         if (!evaluated.stream().filter(Evaluated::required).allMatch(Evaluated::fits)) {
             return;
         }
-        List<RequestLineRow> all = lines.findByRequestIdOrderById(request.id());
         boolean hasRequiredPersonLines = all.stream().anyMatch(row -> row.required()
                 && row.allocationClass() == AllocationClass.MATCHED && row.state() != RequestLineState.CANCELED);
         if (hasRequiredPersonLines) {
-            // #6 allocates here once every Required Person line is approved and Loans can form. Until
-            // then a Request with Required Person lines goes back to Pending while its window runs.
+            // Approvals are missing (when all are in, allocateApproved ran above): back to Pending while
+            // the window runs.
             if (request.windowRunsAt(now) && personLinesOpen(all)) {
                 backToPending(request, evaluated, null, now);
             }
@@ -1061,14 +1076,14 @@ public class RequestLifecycleService {
                     .filter(each -> each.state() == ApprovalState.APPROVED).count();
             changeLine(request, line, approved >= line.amount() ? RequestLineState.APPROVED : line.state(), actor, now,
                     candidate + " approved by " + by + because);
-            boolean everyRequiredPersonLineApproved = rows.stream()
-                    .filter(row -> row.required() && row.allocationClass() == AllocationClass.MATCHED)
-                    .allMatch(row -> row.state() == RequestLineState.APPROVED);
-            if (everyRequiredPersonLineApproved) {
-                // Seam for #6: allocate(request, ...) runs here. It re-evaluates every line under the locks,
-                // commits the Holds, posts the Charges, forms the Loans, and posts the Earnings. Until Loans
-                // can form, the Request stays as it is, with its Holds.
+            if (request.state() == RequestState.ALLOCATED) {
+                if (line.state() == RequestLineState.APPROVED) {
+                    allocateOpenLine(request, line, actor, now);
+                }
+            } else if (EnumSet.of(RequestState.PENDING, RequestState.WAITING).contains(request.state())
+                    && requiredPersonLinesApproved(rows)) {
                 log.info("event=request_approved request={} next=allocate", request.id());
+                allocateApproved(request, rows, actor, now);
             }
         } else {
             changeLine(request, line, line.state(), actor, now, candidate + " refused by " + by + because
@@ -1150,7 +1165,7 @@ public class RequestLifecycleService {
         typeLock.lockTypes(new TreeSet<>(rows.stream().map(row -> new ResourceTypeId(row.typeId())).toList()));
         List<RequestLineRow> freed = List.of();
         if (request.state() == RequestState.PENDING) {
-            freed = releaseHolds(request, rows, now, "Hold released: the Objection Window ended.");
+            freed = releaseHolds(request, rows, null, now, "Hold released: the Objection Window ended.");
             request.moveTo(RequestState.WAITING);
             record(request, null, RequestState.PENDING.name(), RequestState.WAITING.name(), null, now,
                     "The Objection Window ended with approvals outstanding; every Hold was released.");
@@ -1172,14 +1187,308 @@ public class RequestLifecycleService {
      * Cancels the Holds of the Request's Held lines and releases their credits; each line fits and
      * waits for its Request again. Returns the lines whose capacity was freed.
      */
-    private List<RequestLineRow> releaseHolds(RequestRow request, List<RequestLineRow> rows, Instant now, String note) {
+    private List<RequestLineRow> releaseHolds(RequestRow request, List<RequestLineRow> rows, Actor actor, Instant now,
+            String note) {
         TeamId team = new TeamId(request.teamId());
         List<RequestLineRow> held = rows.stream().filter(row -> row.state() == RequestLineState.HELD).toList();
         for (RequestLineRow row : held) {
             allocatorOf(row).cancel(snapshot(request, row));
             ledger.releaseCredits(team, new RequestLineId(row.id()));
-            changeLine(request, row, RequestLineState.EVALUATED, null, now, note);
+            changeLine(request, row, RequestLineState.EVALUATED, actor, now, note);
         }
         return held;
+    }
+
+    // ---------------------------------------------------------------- allocation with Person lines
+
+    /** The states of an Exclusive or Metered line that allocation may still commit. */
+    private static final Set<RequestLineState> OPEN_CAPACITY = EnumSet.of(RequestLineState.HELD,
+            RequestLineState.EVALUATED, RequestLineState.WAITING);
+
+    private static final DateTimeFormatter DAY = DateTimeFormatter.ofPattern("EEE d MMM uuuu", Locale.US);
+
+    /**
+     * Allocates a Pending or Waiting Request whose Required Person lines are all Approved (design
+     * {@code allocate}, Scenario S2), in the caller's transaction, which has locked the Request and its
+     * lines' types; the system is the actor when {@code actor} is null (a waitlist fill). Always in
+     * this order:
+     * <ol>
+     * <li>(a) Each Approved Person line, Required first, is evaluated again: a Candidate no longer
+     *     eligible is refused by the system; a Required line then waits for a replacement and the
+     *     Request goes to Waiting, its Holds released, before anything commits; an Optional one is
+     *     Dropped. A Required Exclusive or Metered line without a Hold that does not fit now leaves
+     *     the Request as it is (Pending until the line is filled, S6). The accounts are locked,
+     *     ascending; if the Available Balance, with the Request's own held credits, no longer covers
+     *     the Required Charges, the Request goes to Waiting with {@code INSUFFICIENT_BALANCE} and its
+     *     approvals are kept.
+     * <li>(b) Optional Exclusive and Metered lines that no longer fit or are unaffordable are Dropped;
+     *     an Optional Person line awaiting selection or approval stays open.
+     * <li>(c) The Exclusive and Metered lines commit, a line without a Hold held first so that the
+     *     Request's own lines see each other; (d) their Charges post at the locked Quotes.
+     * <li>(e) Each Approved Person line forms its Loans; (f) each Loan posts its Earning.
+     * <li>(g) The Request is Allocated, and the Manager and each Person are told.
+     * </ol>
+     * Returns whether the Request is Allocated.
+     */
+    private boolean allocateApproved(RequestRow request, List<RequestLineRow> rows, Actor actor, Instant now) {
+        TeamId team = new TeamId(request.teamId());
+        RequestState from = request.state();
+
+        // (a) The Person lines.
+        List<RequestLineRow> approvedPersonLines = new ArrayList<>();
+        for (RequestLineRow row : requiredRowsFirst(rows)) {
+            if (row.allocationClass() != AllocationClass.MATCHED || row.state() != RequestLineState.APPROVED) {
+                continue;
+            }
+            LineSnapshot snapshot = snapshot(request, row);
+            Evaluation fit = allocatorOf(row).evaluate(snapshot);
+            if (fit.fits()) {
+                approvedPersonLines.add(row);
+                continue;
+            }
+            approvalDriven().refuseIneligible(snapshot, fit.message());
+            if (row.required()) {
+                String why = fit.reason() + ": " + fit.message() + " Select a replacement.";
+                changeLine(request, row, RequestLineState.WAITING, actor, now, why);
+                toWaitingAtAllocation(request, rows, actor, now, why);
+                return false;
+            }
+            drop(request, row, fit.reason(), fit.message(), actor, now);
+        }
+
+        // (a) The Exclusive and Metered lines, and the Balance.
+        List<RequestLineRow> capacity = rows.stream()
+                .filter(row -> row.allocationClass() != AllocationClass.MATCHED && OPEN_CAPACITY.contains(row.state()))
+                .toList();
+        for (RequestLineRow row : capacity) {
+            if (row.required() && row.state() != RequestLineState.HELD
+                    && !allocatorOf(row).evaluate(snapshot(request, row)).fits()) {
+                log.info("event=allocation_waits_for_capacity request={} line={}", request.id(), row.id());
+                return false;
+            }
+        }
+        BigDecimal available = lockAccounts(team, lendingTeams(approvedPersonLines));
+        BigDecimal held = sumOfQuotes(capacity.stream().filter(row -> row.state() == RequestLineState.HELD));
+        BigDecimal required = sumOfQuotes(capacity.stream().filter(RequestLineRow::required));
+        BigDecimal budget = available.add(held).subtract(required);
+        if (budget.signum() < 0) {
+            toWaitingAtAllocation(request, rows, actor, now, "INSUFFICIENT_BALANCE: The Required Charges of "
+                    + new Credits(required) + " credits no longer fit the Available Balance; the approvals are kept.");
+            return false;
+        }
+
+        // (b) and (c): hold what has no Hold, Required first, dropping unfit or unaffordable Optional lines.
+        List<Evaluated> toCommit = new ArrayList<>();
+        List<Evaluated> newlyHeld = new ArrayList<>();
+        for (RequestLineRow row : requiredRowsFirst(capacity)) {
+            LineSnapshot snapshot = snapshot(request, row);
+            boolean heldAlready = row.state() == RequestLineState.HELD;
+            if (!heldAlready) {
+                Evaluation fit = allocatorOf(row).evaluate(snapshot);
+                if (!fit.fits() && row.required()) {
+                    // Only this Request's own new Holds can be in the way: undo them, and nothing changes.
+                    for (Evaluated hold : newlyHeld) {
+                        allocatorOf(hold.row()).cancel(hold.snapshot());
+                        if (hold.row().state() == RequestLineState.WAITING) {
+                            waitlistOf(hold.row()).join(hold.snapshot());
+                        }
+                    }
+                    return false;
+                }
+                if (!fit.fits()) {
+                    drop(request, row, fit.reason(), fit.message(), actor, now);
+                    continue;
+                }
+            }
+            BigDecimal quote = row.lockedQuote() == null ? BigDecimal.ZERO : row.lockedQuote();
+            if (!row.required()) {
+                if (quote.compareTo(budget) > 0) {
+                    if (heldAlready) {
+                        allocatorOf(row).cancel(snapshot);
+                        ledger.releaseCredits(team, snapshot.lineId());
+                    }
+                    drop(request, row, "INSUFFICIENT_BALANCE", "The Optional line's Quote of " + new Credits(quote)
+                            + " credits no longer fits the Available Balance.", actor, now);
+                    continue;
+                }
+                budget = budget.subtract(quote);
+            }
+            Evaluated line = new Evaluated(row, snapshot, Evaluation.satisfiable());
+            if (!heldAlready) {
+                allocatorOf(row).hold(snapshot);
+                newlyHeld.add(line);
+            }
+            toCommit.add(line);
+        }
+
+        // (c) and (d): commit and charge.
+        List<ChargeSpec> charges = new ArrayList<>();
+        for (Evaluated line : toCommit) {
+            allocatorOf(line.row()).commit(line.snapshot());
+            if (line.row().state() == RequestLineState.WAITING) {
+                waitlistOf(line.row()).leave(line.snapshot());
+            }
+            if (line.row().lockedQuote() != null) {
+                charges.add(new ChargeSpec(team, line.snapshot().lineId(), new Credits(line.row().lockedQuote())));
+            }
+        }
+        if (actor == null) {
+            ledger.commitChargesBySystem(new RequestId(request.id()), charges);
+        } else {
+            ledger.commitCharges(new RequestId(request.id()), charges);
+        }
+
+        // (e) and (f): the Loans and their Earnings.
+        List<String> loans = new ArrayList<>();
+        for (RequestLineRow row : approvedPersonLines) {
+            loans.addAll(formLoans(request, row, actor, now));
+        }
+
+        // (g)
+        for (Evaluated line : toCommit) {
+            BigDecimal quote = line.row().lockedQuote();
+            changeLine(request, line.row(), RequestLineState.ALLOCATED, actor, now,
+                    quote == null ? "No Charge: the type has no pricing settings." : "Charged " + new Credits(quote)
+                            + " credits.");
+        }
+        request.moveTo(RequestState.ALLOCATED);
+        Credits charged = charges.stream().map(ChargeSpec::amount).reduce(Credits.ZERO, Credits::plus);
+        String summary = "its Charges total " + charged + " credits"
+                + (loans.isEmpty() ? "." : "; Loans formed: " + String.join("; ", loans) + ".");
+        record(request, null, from.name(), RequestState.ALLOCATED.name(), actor, now,
+                "Every Required line is approved and fits: " + summary);
+        if (actor == null) {
+            members.findManagerOf(team).ifPresent(manager -> notifier.notify(manager, NotificationKind.WAITLIST_FILLED,
+                    "Request " + request.id() + " is Allocated from the waitlist: " + summary, "/requests/" + request.id()));
+        } else {
+            notifyManager(request, "Request " + request.id() + " is Allocated: " + summary);
+        }
+        log.info("event=request_allocated request={} team={} from={} lines={} loans={} actor={}", request.id(),
+                team.value(), from, toCommit.size(), loans.size(), actor == null ? "system" : actor.memberId().value());
+        return true;
+    }
+
+    /**
+     * The last approval of an open Optional Person line of an Allocated Request (SRS
+     * Matched.Loan.Optional; design {@code allocate}, steps e and f for that line alone): the line is
+     * evaluated again, then its Loans form and post their Earnings, in this transaction. A Candidate
+     * no longer eligible is refused by the system instead, and the line awaits a replacement.
+     */
+    private void allocateOpenLine(RequestRow request, RequestLineRow line, Actor actor, Instant now) {
+        LineSnapshot snapshot = snapshot(request, line);
+        Evaluation fit = allocatorOf(line).evaluate(snapshot);
+        if (!fit.fits()) {
+            approvalDriven().refuseIneligible(snapshot, fit.message());
+            changeLine(request, line, RequestLineState.AWAITING_APPROVAL, actor, now, fit.reason() + ": "
+                    + fit.message() + " Select a replacement.");
+            notifyManager(request, "Line " + line.id() + " of Request " + request.id() + " needs a replacement: "
+                    + fit.message());
+            return;
+        }
+        lockAccounts(null, lendingTeams(List.of(line)));
+        List<String> loans = formLoans(request, line, actor, now);
+        notifyManager(request, "Line " + line.id() + " of Request " + request.id() + " has its Loans: "
+                + String.join("; ", loans) + ".");
+    }
+
+    /**
+     * Steps (e) and (f) for one Approved Person line: {@link Allocator#commit} forms its Loans, each
+     * posts its Earning of the Day Rate times its person-days, each Person is told
+     * ({@code LOAN_FORMED}), and the line is Loaned. Returns each Loan in words.
+     */
+    private List<String> formLoans(RequestRow request, RequestLineRow row, Actor actor, Instant now) {
+        LineSnapshot snapshot = snapshot(request, row);
+        allocatorOf(row).commit(snapshot);
+        BigDecimal dayRate = settings.current().dayRate().amount();
+        String borrowing = members.team(new TeamId(request.teamId())).name();
+        List<String> described = new ArrayList<>();
+        for (Loan loan : allocation.loansFor(snapshot.lineId())) {
+            Credits earning = new Credits(dayRate.multiply(BigDecimal.valueOf(loan.daysLent())));
+            String days = describe(loan.days()) + ", " + loan.daysLent()
+                    + (loan.daysLent() == 1 ? " person-day" : " person-days");
+            ledger.postEarning(new EarningSpec(loan.lendingTeam().id(), loan.id(), snapshot.lineId(), earning,
+                    loan.memberName() + " to " + borrowing + ", " + days), actor);
+            notifier.notify(loan.member(), NotificationKind.LOAN_FORMED, "You are lent to " + borrowing + " on "
+                    + days + " (Request " + request.id() + ").", "/profile");
+            described.add(loan.memberName() + " (" + loan.lendingTeam().name() + ") on " + days + ", earning "
+                    + loan.lendingTeam().name() + " " + earning + " credits");
+        }
+        changeLine(request, row, RequestLineState.LOANED, actor, now, "Loans formed: " + String.join("; ", described)
+                + ".");
+        return described;
+    }
+
+    /**
+     * Pending or Waiting to Waiting when allocation finds a Required line unsatisfied or the Balance
+     * short (design {@code toWaiting}): every Hold is released with its credits, the approvals stay,
+     * the Manager is told why, and the freed capacity is offered to the waitlist.
+     */
+    private void toWaitingAtAllocation(RequestRow request, List<RequestLineRow> rows, Actor actor, Instant now,
+            String why) {
+        List<RequestLineRow> freed = releaseHolds(request, rows, actor, now, "Hold released: " + why);
+        RequestState from = request.state();
+        if (from != RequestState.WAITING) {
+            request.moveTo(RequestState.WAITING);
+        }
+        record(request, null, from.name(), RequestState.WAITING.name(), actor, now, why);
+        notifyManager(request, "Request " + request.id() + " is Waiting: " + why);
+        log.info("event=allocation_refused request={} team={} from={} why=\"{}\"", request.id(), request.teamId(),
+                from, why);
+        for (RequestLineRow row : freed) {
+            onCapacityFreed(row.allocationClass(), new ResourceTypeId(row.typeId()), RequestViews.window(row), now);
+        }
+    }
+
+    /** Whether every Required Person line of the Request, Canceled ones aside, is Approved. */
+    private static boolean requiredPersonLinesApproved(List<RequestLineRow> rows) {
+        return rows.stream()
+                .filter(row -> row.required() && row.allocationClass() == AllocationClass.MATCHED)
+                .filter(row -> row.state() != RequestLineState.CANCELED)
+                .allMatch(row -> row.state() == RequestLineState.APPROVED);
+    }
+
+    /** The Teams lending the Approved Candidates of these Person lines. */
+    private Set<TeamId> lendingTeams(List<RequestLineRow> personLines) {
+        Set<TeamId> teams = new HashSet<>();
+        for (RequestLineRow row : personLines) {
+            allocation.approvalsOf(new RequestLineId(row.id())).stream()
+                    .filter(approval -> approval.state() == ApprovalState.APPROVED)
+                    .forEach(approval -> teams.add(members.summary(approval.candidate()).team().id()));
+        }
+        return teams;
+    }
+
+    /**
+     * Locks the accounts of the requesting Team (when given) and the lending Teams in ascending Team
+     * id, before any Charge or Earning posts, so two allocations never take them in opposite orders.
+     * Returns the requesting Team's Available Balance, or zero without one.
+     */
+    private BigDecimal lockAccounts(TeamId requesting, Set<TeamId> lending) {
+        TreeSet<Long> ids = new TreeSet<>();
+        lending.forEach(team -> ids.add(team.value()));
+        if (requesting != null) {
+            ids.add(requesting.value());
+        }
+        BigDecimal available = BigDecimal.ZERO;
+        for (Long id : ids) {
+            Credits locked = ledger.lockedAvailable(new TeamId(id));
+            if (requesting != null && id.equals(requesting.value())) {
+                available = locked.amount();
+            }
+        }
+        return available;
+    }
+
+    private static BigDecimal sumOfQuotes(java.util.stream.Stream<RequestLineRow> rows) {
+        return rows.map(RequestLineRow::lockedQuote).filter(Objects::nonNull).reduce(BigDecimal.ZERO, BigDecimal::add);
+    }
+
+    private static List<RequestLineRow> requiredRowsFirst(List<RequestLineRow> rows) {
+        return rows.stream().sorted(Comparator.comparing(row -> !row.required())).toList();
+    }
+
+    /** Days for a message, such as "Wed 25 Nov 2026 to Thu 26 Nov 2026". */
+    private static String describe(DateRange days) {
+        return DAY.format(days.from()) + (days.from().equals(days.to()) ? "" : " to " + DAY.format(days.to()));
     }
 }

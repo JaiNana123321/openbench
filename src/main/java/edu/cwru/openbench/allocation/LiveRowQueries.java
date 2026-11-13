@@ -106,4 +106,14 @@ class LiveRowQueries implements AllocationQueries {
     public Set<RequestId> requestsWithUnescalatedOutstanding() {
         return matchedAllocator.requestsWithUnescalatedOutstanding();
     }
+
+    @Override
+    public List<Loan> loansFor(RequestLineId line) {
+        return matchedAllocator.loansFor(line);
+    }
+
+    @Override
+    public List<Loan> loansOf(MemberId member) {
+        return matchedAllocator.loansOf(member);
+    }
 }

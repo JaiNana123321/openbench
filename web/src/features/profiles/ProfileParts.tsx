@@ -1,7 +1,32 @@
 import { useState, type FormEvent } from 'react';
-import type { DayRange, Id, MemberProfile, Skill } from '../../api/types';
-import { Button, Field, Loading, ProblemMessage } from '../../ui';
-import { useSkills, useUpdateAvailability, useUpdateSkills } from './queries';
+import type { DayRange, Id, Loan, MemberProfile, Skill } from '../../api/types';
+import { Button, EmptyState, Field, formatDayRange, Loading, ProblemMessage, Table, type Column } from '../../ui';
+import { useLoans, useSkills, useUpdateAvailability, useUpdateSkills } from './queries';
+
+const loanColumns: Column<Loan>[] = [
+  { header: 'Lent to', cell: (loan) => loan.borrowingTeam.name },
+  { header: 'Days', cell: (loan) => formatDayRange(loan.days) },
+  { header: 'Days lent', cell: (loan) => loan.daysLent, numeric: true },
+];
+
+/**
+ * A Member's Loans: the Team each lent them to, the days, and the Monday-to-Friday days lent. A Loan
+ * forms when its Request is allocated; there is nothing to accept or decline.
+ */
+export function LoansTable({ memberId }: { memberId: Id | 'me' }) {
+  const loans = useLoans(memberId);
+  if (loans.isError) return <ProblemMessage error={loans.error} />;
+  if (loans.isPending) return <Loading />;
+  return (
+    <Table
+      label="Loans"
+      columns={loanColumns}
+      rows={loans.data}
+      rowKey={(loan) => loan.id}
+      empty={<EmptyState title="No Loans." />}
+    />
+  );
+}
 
 /** Name, email, and Team. The Team is read-only: only an Administrator moves a Member. */
 export function ProfileDetails({ profile }: { profile: MemberProfile }) {

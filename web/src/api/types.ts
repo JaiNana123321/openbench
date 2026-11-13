@@ -656,3 +656,32 @@ export interface AdminChange {
   actorName: string | null;
   at: Instant;
 }
+
+// ---------------------------------------------------------------- Matched: Loans and Earnings
+
+/**
+ * GET /api/members/{id}/loans, and a Person line's `loans` once allocated: a Person lent by their
+ * Team to another for whole days, inclusive. `daysLent` counts the Monday-to-Friday days, which the
+ * lending Team earns the Day Rate for. A Loan is never accepted or declined.
+ */
+export interface Loan {
+  id: Id;
+  line: Id;
+  member: Id;
+  memberName: string;
+  lendingTeam: TeamRef;
+  borrowingTeam: TeamRef;
+  days: DayRange;
+  daysLent: number;
+  endedEarly: boolean;
+}
+
+export interface LineDetail {
+  /** The Loans a Person line formed when it was allocated; empty until then, and on other lines. */
+  loans?: Loan[];
+}
+
+export interface LedgerTransaction {
+  /** The Loan an Earning pays for; its `reason` is the Loan in words. Null on other Transactions. */
+  loan?: Id | null;
+}
