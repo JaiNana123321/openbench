@@ -685,3 +685,36 @@ export interface LedgerTransaction {
   /** The Loan an Earning pays for; its `reason` is the Loan in words. Null on other Transactions. */
   loan?: Id | null;
 }
+
+// ---------------------------------------------------------------- Matched: refusals and escalation
+
+/**
+ * One escalated approval of an EscalatedRequest: the Person line and whether it is Required, the
+ * Candidate and the Team lending them, the silent Manager it was addressed to, the days, and the
+ * Earning the lending Team would get.
+ */
+export interface EscalatedApproval {
+  id: Id;
+  lineId: Id;
+  required: boolean;
+  candidate: Id;
+  candidateName: string;
+  lendingTeam: TeamRef;
+  silentManager: Id;
+  silentManagerName: string;
+  days: DayRange;
+  earning: Credits;
+}
+
+/**
+ * GET /api/escalations (Capacity Planner): a Request whose Objection Window lapsed at `lapsedAt`
+ * with these approvals outstanding, the longest lapsed first. Each is decided with
+ * POST /api/approvals/{id}/decision.
+ */
+export interface EscalatedRequest {
+  id: Id;
+  team: TeamRef;
+  state: RequestState;
+  lapsedAt: Instant | null;
+  approvals: EscalatedApproval[];
+}

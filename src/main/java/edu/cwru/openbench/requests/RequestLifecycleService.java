@@ -422,7 +422,7 @@ public class RequestLifecycleService {
         String reason = null;
         String message = null;
         boolean explained = line.state() == RequestLineState.WAITING || line.state() == RequestLineState.DROPPED
-                || line.state() == RequestLineState.REFUSED;
+                || line.state() == RequestLineState.REFUSED || line.state() == RequestLineState.CANCELED;
         if (explained && lastNote != null) {
             Matcher matcher = REASON_NOTE.matcher(lastNote);
             if (matcher.matches()) {

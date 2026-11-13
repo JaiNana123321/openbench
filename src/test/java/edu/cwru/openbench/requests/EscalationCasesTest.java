@@ -108,7 +108,9 @@ class EscalationCasesTest extends EscalationWorldTest {
         detail(as(bob), b1)
                 .andExpect(jsonPath("$.request.state").value("REFUSED"))
                 .andExpect(jsonPath("$.lines[0].line.state").value("CANCELED"))
+                .andExpect(jsonPath("$.lines[0].reason").value("APPROVAL_REFUSED"))
                 .andExpect(jsonPath("$.lines[1].line.state").value("CANCELED"))
+                .andExpect(jsonPath("$.lines[1].reason").doesNotExist())
                 .andExpect(jsonPath("$.history[-1].toState").value("REFUSED"));
         assertThat(liveRowsOf(b1)).isZero();
         assertThat(account(research)).containsEntry("held", new BigDecimal("0.00"));
