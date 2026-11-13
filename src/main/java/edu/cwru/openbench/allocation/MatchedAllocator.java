@@ -224,10 +224,12 @@ class MatchedAllocator implements Allocator, ApprovalDriven {
                     + (missing == 1 ? " Candidate." : " Candidates."));
         }
         DateRange days = days(line);
+        Set<Long> elsewhere = selectedOnOverlappingLines(line, days);
         Map<MemberId, Integer> positions = new HashMap<>();
         if (line.namedMember().isPresent()) {
-            if (eligible(line.namedMember().get(), line.teamId(), days)) {
-                positions.put(line.namedMember().get(), 0);
+            MemberId named = line.namedMember().get();
+            if (eligible(named, line.teamId(), days) && !elsewhere.contains(named.value())) {
+                positions.put(named, 0);
             }
         } else {
             List<ShortlistRanking.Person> shortlist = shortlisted(line, days);
@@ -246,7 +248,9 @@ class MatchedAllocator implements Allocator, ApprovalDriven {
             if (summary.isEmpty() || !positions.containsKey(member) || alreadySelected.contains(member.value())) {
                 throw new RuleViolation(NOT_A_CANDIDATE, summary.map(MemberSummary::name).orElse("Member " + member.value())
                         + (alreadySelected.contains(member.value()) ? " was already selected for this line."
-                                : " is not on the line's Shortlist."));
+                                : elsewhere.contains(member.value())
+                                        ? " is already selected on another line of this Request for overlapping days."
+                                        : " is not on the line's Shortlist."));
             }
             summaries.put(member, summary.get());
         }
@@ -258,7 +262,7 @@ class MatchedAllocator implements Allocator, ApprovalDriven {
             MemberId approver = members.findManagerOf(candidate.team().id()).orElseThrow(() -> new RuleViolation(
                     NOT_A_CANDIDATE, candidate.team().name() + " has no Manager to approve lending " + candidate.name() + "."));
             CandidateRow row = candidates.save(new CandidateRow(line.lineId().value(), line.requestId().value(),
-                    line.teamId().value(), entry.getKey().value(), positions.get(entry.getKey())));
+                    line.teamId().value(), entry.getKey().value(), positions.get(entry.getKey()), days));
             approvals.save(new ApprovalRow(row.id(), approver.value(), escalated));
             String asked = requestingTeam + " asks to borrow " + candidate.name() + " on " + Windows.describe(days)
                     + " (Request " + line.requestId().value() + "); " + candidate.team().name() + " would earn "
@@ -450,7 +454,10 @@ class MatchedAllocator implements Allocator, ApprovalDriven {
                     ? List.of(new ShortlistRanking.Person(named, nameOf(named), true, false, 0))
                     : List.of();
         }
-        Set<MemberId> available = members.availableWithSkills(line.skills(), days, line.teamId());
+        Set<MemberId> available = new java.util.LinkedHashSet<>(
+                members.availableWithSkills(line.skills(), days, line.teamId()));
+        Set<Long> elsewhere = selectedOnOverlappingLines(line, days);
+        available.removeIf(member -> elsewhere.contains(member.value()));
         if (available.isEmpty()) {
             return List.of();
         }
@@ -466,6 +473,16 @@ class MatchedAllocator implements Allocator, ApprovalDriven {
                     ShortlistRanking.personDaysLent(loansInPeriod.getOrDefault(member.value(), List.of()), periodDays)));
         }
         return ShortlistRanking.rank(people);
+    }
+
+    /**
+     * The Members selected, with an Outstanding or Approved approval, on another line of the line's
+     * Request whose days overlap these (issue #22): no Candidates for this line, since a Person is in
+     * at most one Loan on any day.
+     */
+    private Set<Long> selectedOnOverlappingLines(LineSnapshot line, DateRange days) {
+        return new HashSet<>(candidates.selectedOnOverlappingLines(line.requestId().value(), line.lineId().value(),
+                days.from(), days.to(), LIVE));
     }
 
     /** Active, outside the requesting Team, available every day, and in no Loan overlapping the days. */

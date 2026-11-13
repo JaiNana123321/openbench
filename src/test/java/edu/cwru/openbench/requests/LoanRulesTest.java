@@ -111,12 +111,20 @@ class LoanRulesTest extends MatchedWorldTest {
         LocalDate d = dayD();
         // Dave on two Required lines of one Request with the same days: each line's re-evaluation sees him
         // free, so only the commit guard finds the second Loan, after the Holds committed and the Charge posted.
+        // Selection refuses Dave for M2 (issue #22), so his Candidate row is written directly: a path that
+        // skipped the selection rule, which the guard exists for.
         long b = createDraft(as(bob));
         long m1 = id(addNamedPersonLine(as(bob), b, 1, d, d.plusDays(1), world.dave().id()));
         long m2 = personLine(as(bob), b, 1, d, d.plusDays(1), statistics);
         long l = line(as(bob), b, microscope, 1, at(d, 9), at(d, 17), null);
         submit(as(bob), b).andExpect(jsonPath("$.state").value("PENDING"));
-        select(as(bob), b, m2, world.dave().id()).andExpect(status().isOk());
+        refused(select(as(bob), b, m2, world.dave().id()), "NOT_A_CANDIDATE");
+        long candidate = jdbc.queryForObject("""
+                INSERT INTO candidate (line_id, request_id, team_id, member_id, position, starts_on, ends_on)
+                VALUES (?, ?, ?, ?, 1, ?, ?) RETURNING id""", Long.class, m2, b, research, world.dave().id(), d,
+                d.plusDays(1));
+        jdbc.update("INSERT INTO approval (candidate_id, approver_member_id) VALUES (?, ?)", candidate,
+                world.oscar().id());
         decide(as(oscar), approvalOf(m1), "APPROVE", "").andExpect(status().isOk());
         Map<String, Object> before = account(research);
 
@@ -231,7 +239,43 @@ class LoanRulesTest extends MatchedWorldTest {
         mvc.perform(get("/api/members/me/loans")).andExpect(status().isUnauthorized());
     }
 
+    @Test
+    @DisplayName("Issue #22: a Person selected on another line of the Request for overlapping days is no Candidate")
+    void aPersonSelectedOnAnOverlappingLineIsNoCandidate() throws Exception {
+        LocalDate d = dayD();
+        // Alice's A: M1 and M2 ask for Statistics on the same days, M3 on later days.
+        long a = createDraft(as(alice));
+        long m1 = personLine(as(alice), a, 1, d, d.plusDays(1), statistics);
+        long m2 = personLine(as(alice), a, 1, d.plusDays(1), d.plusDays(2), statistics);
+        long m3 = personLine(as(alice), a, 1, d.plusDays(7), d.plusDays(8), statistics);
+        submit(as(alice), a).andExpect(jsonPath("$.state").value("PENDING"));
+        select(as(alice), a, m1, world.dave().id()).andExpect(status().isOk());
+
+        // Dave is off M2's Shortlist and refused on M2; M3's days do not overlap, so he is a Candidate there.
+        shortlist(as(alice), a, m2).andExpect(jsonPath("$.candidates[*].name", contains("Rita Gomez")));
+        refused(select(as(alice), a, m2, world.dave().id()), "NOT_A_CANDIDATE");
+        shortlist(as(alice), a, m3).andExpect(jsonPath("$.candidates[*].name",
+                org.hamcrest.Matchers.containsInAnyOrder("Dave Kim", "Rita Gomez")));
+        select(as(alice), a, m3, world.dave().id()).andExpect(status().isOk());
+
+        // Still refused while his approval on M1 is open; once Oscar refuses it, he is a Candidate for M2 again.
+        testData().holds(carolId, statistics);
+        testData().available(carolId, LocalDate.now(clock), d.plusDays(60));
+        select(as(alice), a, m2, world.rita().id()).andExpect(status().isOk());
+        decide(as(bob), approvalOf(m2), "REFUSE", "").andExpect(status().isOk());
+        refused(select(as(alice), a, m2, world.dave().id()), "NOT_A_CANDIDATE");
+        decide(as(oscar), jdbc.queryForObject("""
+                SELECT a.id FROM approval a JOIN candidate c ON c.id = a.candidate_id
+                WHERE c.line_id = ? AND c.member_id = ?""", Long.class, m1, world.dave().id()), "REFUSE", "")
+                .andExpect(status().isOk());
+        shortlist(as(alice), a, m2).andExpect(jsonPath("$.candidates[*].name", org.hamcrest.Matchers.hasItem("Dave Kim")));
+    }
+
     // ---------------------------------------------------------------- helpers
+
+    private void refused(ResultActions result, String code) throws Exception {
+        result.andExpect(status().isUnprocessableEntity()).andExpect(jsonPath("$.code").value(code));
+    }
 
     private ResultActions loansOf(String caller, Object member) throws Exception {
         return mvc.perform(get("/api/members/{id}/loans", member).with(as(caller)));

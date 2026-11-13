@@ -262,7 +262,7 @@ class MatchedRulesTest extends MatchedWorldTest {
         LocalDate d = dayD();
         long b1 = createDraft(as(bob));
         long roomLine = line(as(bob), b1, room, 1, at(d, 10), at(d, 12), null);
-        id(addNamedPersonLine(as(bob), b1, 1, d, d.plusDays(1), world.dave().id()).andExpect(status().isCreated()));
+        id(addNamedPersonLine(as(bob), b1, 1, d, d.plusDays(1), world.ben().id()).andExpect(status().isCreated()));
         long short2 = personLine(as(bob), b1, 2, d, d.plusDays(1), statistics);
         submit(as(bob), b1).andExpect(jsonPath("$.state").value("WAITING"));
         String windowEnd = jdbc.queryForObject("SELECT window_ends_at::text FROM request WHERE id = ?", String.class, b1);
