@@ -103,8 +103,8 @@ class PendingCasesTest extends MatchedWorldTest {
     }
 
     @Test
-    @DisplayName("lif-window-start, step 1: submitted on Thursday at t, the Objection Window ends on Monday at t")
-    @Verifies(value = "lif-window-start", partial = true)
+    @DisplayName("lif-window-start: submitted on Thursday at t, the Objection Window ends on Monday at t, and never restarts")
+    @Verifies("lif-window-start")
     void theObjectionWindowStartsAtSubmissionAndLastsTwoWorkingDays() throws Exception {
         LocalDate thursday = LocalDate.now(clock).with(TemporalAdjusters.next(DayOfWeek.THURSDAY));
         Instant t = thursday.atTime(LocalTime.of(10, 37, 12)).atZone(clock.getZone()).toInstant();
@@ -120,6 +120,17 @@ class PendingCasesTest extends MatchedWorldTest {
         assertThat(Instant.parse(JsonPath.read(body, "$.windowEndsAt"))).isEqualTo(monday);
         String shown = detail(as(alice), a1.id()).andReturn().getResponse().getContentAsString();
         assertThat(Instant.parse(JsonPath.read(shown, "$.request.windowEndsAt"))).isEqualTo(monday);
+
+        // 2. Dave Kim selected, Oscar refuses, Rita Gomez selected (mat-refuse-replace): Pending again, still Monday at t.
+        select(as(alice), a1.id(), a1.m1(), world.dave().id()).andExpect(status().isOk());
+        decide(as(oscar), approvalOf(a1.m1()), "REFUSE", "Dave is on another project").andExpect(status().isOk());
+        detail(as(alice), a1.id()).andExpect(jsonPath("$.request.state").value("WAITING"));
+        select(as(alice), a1.id(), a1.m1(), world.rita().id()).andExpect(status().isOk());
+        String again = detail(as(alice), a1.id())
+                .andExpect(jsonPath("$.request.state").value("PENDING"))
+                .andReturn().getResponse().getContentAsString();
+        assertThat(Instant.parse(JsonPath.read(again, "$.request.windowEndsAt"))).isEqualTo(monday);
+        assertThat(windowEndOf(a1.id())).isEqualTo(monday);
     }
 
     @Test

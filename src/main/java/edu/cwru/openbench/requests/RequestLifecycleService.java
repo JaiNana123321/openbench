@@ -20,12 +20,14 @@ import edu.cwru.openbench.common.Actor;
 import edu.cwru.openbench.common.ApprovalId;
 import edu.cwru.openbench.common.Credits;
 import edu.cwru.openbench.common.DateRange;
+import edu.cwru.openbench.common.ForbiddenException;
 import edu.cwru.openbench.common.MemberId;
 import edu.cwru.openbench.common.NotFoundException;
 import edu.cwru.openbench.common.RequestId;
 import edu.cwru.openbench.common.RequestLineId;
 import edu.cwru.openbench.common.ResourceId;
 import edu.cwru.openbench.common.ResourceTypeId;
+import edu.cwru.openbench.common.Role;
 import edu.cwru.openbench.common.SkillId;
 import edu.cwru.openbench.common.RuleViolation;
 import edu.cwru.openbench.common.TeamId;
@@ -419,7 +421,8 @@ public class RequestLifecycleService {
     private LineDetail lineDetail(RequestLine line, String lastNote) {
         String reason = null;
         String message = null;
-        boolean explained = line.state() == RequestLineState.WAITING || line.state() == RequestLineState.DROPPED;
+        boolean explained = line.state() == RequestLineState.WAITING || line.state() == RequestLineState.DROPPED
+                || line.state() == RequestLineState.REFUSED;
         if (explained && lastNote != null) {
             Matcher matcher = REASON_NOTE.matcher(lastNote);
             if (matcher.matches()) {
@@ -988,7 +991,8 @@ public class RequestLifecycleService {
     public RequestDetail selectCandidates(Actor actor, RequestId id, RequestLineId lineId, List<MemberId> picked) {
         RequestRow request = access.lockForChange(actor, id);
         RequestLineRow line = personLine(request, lineId);
-        boolean open = line.state() == RequestLineState.AWAITING_APPROVAL || line.state() == RequestLineState.WAITING;
+        boolean open = line.state() == RequestLineState.AWAITING_APPROVAL || line.state() == RequestLineState.WAITING
+                || line.state() == RequestLineState.REFUSED;
         if (!open || !EnumSet.of(RequestState.PENDING, RequestState.WAITING, RequestState.ALLOCATED)
                 .contains(request.state())) {
             throw new RuleViolation("WRONG_STATE", "Line " + line.id() + " is "
@@ -998,10 +1002,11 @@ public class RequestLifecycleService {
         Instant now = clock.instant();
         List<RequestLineRow> rows = lines.findByRequestIdOrderById(request.id());
         typeLock.lockTypes(new TreeSet<>(rows.stream().map(row -> new ResourceTypeId(row.typeId())).toList()));
-        approvalDriven().select(snapshot(request, line), picked);
+        boolean lapsed = request.windowEndsAt() != null && !request.windowRunsAt(now);
+        approvalDriven().select(snapshot(request, line), picked, lapsed);
         String names = picked.stream().map(member -> members.summary(member).name()).collect(Collectors.joining(", "));
-        changeLine(request, line, RequestLineState.AWAITING_APPROVAL, actor, now,
-                "Selected " + names + "; approval requested.");
+        changeLine(request, line, RequestLineState.AWAITING_APPROVAL, actor, now, "Selected " + names
+                + (lapsed ? "; the Objection Window has ended, so the Capacity Planner decides." : "; approval requested."));
         if (request.state() == RequestState.WAITING && request.windowRunsAt(now) && personLinesOpen(rows)) {
             List<Evaluated> capacity = rows.stream()
                     .filter(row -> row.allocationClass() != AllocationClass.MATCHED)
@@ -1036,12 +1041,53 @@ public class RequestLifecycleService {
     // ---------------------------------------------------------------- approvals
 
     /**
-     * GET /api/approvals: the Outstanding approvals addressed to the caller, oldest first, each with
-     * the requesting Team, the days, the Earning, and the end of the Objection Window.
+     * GET /api/approvals: the approvals the caller decides, oldest first, each with the requesting
+     * Team, the days, the Earning, and the end of the Objection Window. For a lending Manager, the
+     * Outstanding approvals addressed to them that are not escalated, and those a Capacity Planner
+     * decided for them after escalation (state and decider shown); for a Capacity Planner, every
+     * escalated Outstanding approval as well (SRS Matched.Escalate).
      */
     @PreAuthorize("hasAnyAuthority('MANAGER', 'PLANNER')")
     public List<ApprovalView> approvals(Actor actor) {
-        return allocation.approvalsAwaiting(actor.memberId()).stream().map(this::view).toList();
+        List<Approval> shown = new ArrayList<>(allocation.approvalsAwaiting(actor.memberId()));
+        shown.addAll(allocation.decidedOnEscalation(actor.memberId()));
+        if (actor.has(Role.PLANNER)) {
+            shown.addAll(allocation.escalatedOutstanding());
+        }
+        Map<Long, Approval> byId = new java.util.TreeMap<>();
+        shown.forEach(approval -> byId.putIfAbsent(approval.id().value(), approval));
+        return byId.values().stream().map(this::view).toList();
+    }
+
+    /**
+     * GET /api/escalations (SRS Matched.Escalate, Planner.Settings; design {@code escalations()}): the
+     * Requests with escalated Outstanding approvals, the longest lapsed first, each with its
+     * Candidates, the silent lending Managers, and when the Objection Window lapsed. The Capacity
+     * Planner decides each through {@link #decideApproval}.
+     */
+    @PreAuthorize("hasAuthority('PLANNER')")
+    public List<EscalatedRequest> escalations(Actor actor) {
+        Map<RequestId, List<Approval>> byRequest = allocation.escalatedOutstanding().stream()
+                .collect(Collectors.groupingBy(Approval::requestId, java.util.LinkedHashMap::new, Collectors.toList()));
+        BigDecimal dayRate = settings.current().dayRate().amount();
+        List<EscalatedRequest> escalated = new ArrayList<>();
+        for (Map.Entry<RequestId, List<Approval>> entry : byRequest.entrySet()) {
+            RequestRow request = requests.findById(entry.getKey().value()).orElseThrow();
+            List<EscalatedRequest.EscalatedApproval> approvals = entry.getValue().stream().map(approval -> {
+                RequestLineRow line = lines.findById(approval.lineId().value()).orElseThrow();
+                MemberSummary candidate = members.summary(approval.candidate());
+                DateRange days = views.days(line);
+                return new EscalatedRequest.EscalatedApproval(approval.id(), approval.lineId(), line.required(),
+                        approval.candidate(), candidate.name(), candidate.team(), approval.approver(),
+                        members.summary(approval.approver()).name(), days,
+                        new Credits(dayRate.multiply(BigDecimal.valueOf(days.weekdays()))));
+            }).toList();
+            escalated.add(new EscalatedRequest(entry.getKey(), members.team(new TeamId(request.teamId())),
+                    request.state(), request.windowEndsAt(), approvals));
+        }
+        escalated.sort(Comparator.comparing(EscalatedRequest::lapsedAt, Comparator.nullsLast(Comparator.naturalOrder()))
+                .thenComparing(each -> each.id().value()));
+        return escalated;
     }
 
     /**
@@ -1064,12 +1110,15 @@ public class RequestLifecycleService {
         RequestLineRow line = rows.stream().filter(row -> row.id().equals(approval.lineId().value())).findFirst()
                 .orElseThrow();
         typeLock.lockTypes(new TreeSet<>(rows.stream().map(row -> new ResourceTypeId(row.typeId())).toList()));
+        requireOpen(request, approval, actor);
         Instant now = clock.instant();
         boolean lapsed = request.windowEndsAt() != null && !now.isBefore(request.windowEndsAt());
         Approval decided = approvalDriven().decide(snapshot(request, line), approvalId, decision, reason, actor, lapsed);
 
         String candidate = members.summary(decided.candidate()).name();
-        String by = members.summary(actor.memberId()).name();
+        boolean onBehalf = !decided.approver().equals(actor.memberId());
+        String by = members.summary(actor.memberId()).name() + (onBehalf ? " (Capacity Planner, for "
+                + members.summary(decided.approver()).name() + ")" : "");
         String because = reason == null || reason.isBlank() ? "" : ": " + reason;
         if (decision == Decision.APPROVE) {
             long approved = allocation.approvalsOf(approval.lineId()).stream()
@@ -1086,10 +1135,14 @@ public class RequestLifecycleService {
                 allocateApproved(request, rows, actor, now);
             }
         } else {
-            changeLine(request, line, line.state(), actor, now, candidate + " refused by " + by + because
-                    + ". Select a replacement.");
-            notifyManager(request, by + " refused " + candidate + " for Request " + request.id() + because
-                    + ". Select a replacement from the Shortlist.");
+            afterRefusal(request, rows, line, candidate + " refused by " + by + because + ".",
+                    by + " refused " + candidate + " for Request " + request.id() + because, actor, now);
+        }
+        if (onBehalf) {
+            notifier.notify(decided.approver(), NotificationKind.ESCALATED, members.summary(actor.memberId()).name()
+                    + ", the Capacity Planner, " + (decision == Decision.APPROVE ? "approved" : "refused") + " lending "
+                    + candidate + " for Request " + request.id() + " on your behalf" + because + ". Request "
+                    + request.id() + " is " + request.state().name().toLowerCase() + ".", "/approvals");
         }
         log.info("event=approval_decided request={} line={} approval={} decision={} actor={}", request.id(), line.id(),
                 approvalId.value(), decision, actor.memberId().value());
@@ -1106,6 +1159,91 @@ public class RequestLifecycleService {
                 request.windowEndsAt(), approval.state(), approval.escalated(),
                 approval.decidedBy() == null ? null : members.summary(approval.decidedBy()).name(),
                 approval.decidedAt(), approval.reason());
+    }
+
+    /**
+     * A decision on a Refused or Withdrawn Request is refused with {@code WRONG_STATE}, for those who
+     * may decide its approval (the approver or a Capacity Planner); anyone else is FORBIDDEN.
+     */
+    private static void requireOpen(RequestRow request, Approval approval, Actor actor) {
+        if (request.state() != RequestState.REFUSED && request.state() != RequestState.WITHDRAWN) {
+            return;
+        }
+        if (!approval.approver().equals(actor.memberId()) && !actor.has(Role.PLANNER)) {
+            throw new ForbiddenException("Only the Manager of the Candidate's Team decides this approval.");
+        }
+        throw new RuleViolation("WRONG_STATE", "Request " + request.id() + " is "
+                + request.state().name().toLowerCase() + "; its approvals take no decision.");
+    }
+
+    /**
+     * What a refusal does to its line and Request (SRS Matched.Refuse.Replace; design Scenario S3).
+     * If a replacement can still satisfy the line, the line is Refused, awaiting a replacement, and
+     * the requesting Manager is asked for one; a Required line of a Pending Request then sends it to
+     * Waiting, its Holds and held credits released and the freed capacity offered to the waitlist,
+     * while an Optional line leaves the Request as it is. If the line named a Person, or no
+     * Candidate is left, a Required line refuses the Request and an Optional one is Dropped.
+     */
+    private void afterRefusal(RequestRow request, List<RequestLineRow> rows, RequestLineRow line, String refused,
+            String notice, Actor actor, Instant now) {
+        boolean replaceable = approvalDriven().candidatesLeft(snapshot(request, line));
+        String why = refused + (line.namedMemberId() != null ? " The line named that Person, so no replacement is possible."
+                : " No other Candidate is left on the Shortlist.");
+        if (!replaceable && line.required()) {
+            refuseRequest(request, rows, line, why, actor, now);
+            return;
+        }
+        if (!replaceable) {
+            drop(request, line, "APPROVAL_REFUSED", why, actor, now);
+            return;
+        }
+        changeLine(request, line, RequestLineState.REFUSED, actor, now, "REPLACEMENT_NEEDED: " + refused
+                + " Select a replacement from the Shortlist.");
+        notifyManager(request, notice + ". Select a replacement from the Shortlist.");
+        if (line.required() && request.state() == RequestState.PENDING) {
+            List<RequestLineRow> freed = releaseHolds(request, rows, actor, now,
+                    "Hold released: a Required Person line needs a replacement.");
+            request.moveTo(RequestState.WAITING);
+            record(request, null, RequestState.PENDING.name(), RequestState.WAITING.name(), actor, now,
+                    "A Required Person line needs a replacement; every Hold was released. The Objection Window still"
+                            + " ends at " + refunds.describe(request.windowEndsAt()) + ".");
+            notifyManager(request, "Request " + request.id() + " is Waiting until a replacement is selected; its Holds"
+                    + " were released.");
+            for (RequestLineRow row : freed) {
+                onCapacityFreed(row.allocationClass(), new ResourceTypeId(row.typeId()), RequestViews.window(row), now);
+            }
+        }
+    }
+
+    /**
+     * A Required line was refused with no replacement possible: the Request is Refused, a final state
+     * (design Table "Request transitions"). Every line is canceled ({@link Allocator#cancel}), which
+     * expires its Holds, takes it off its waitlist, and cancels its open approvals; held credits are
+     * released and nothing is charged; the freed capacity is offered to the waitlist.
+     */
+    private void refuseRequest(RequestRow request, List<RequestLineRow> rows, RequestLineRow refusedLine, String why,
+            Actor actor, Instant now) {
+        TeamId team = new TeamId(request.teamId());
+        String from = request.state().name();
+        List<RequestLineRow> held = rows.stream().filter(row -> row.state() == RequestLineState.HELD).toList();
+        for (RequestLineRow row : rows) {
+            allocatorOf(row).cancel(snapshot(request, row));
+            ledger.releaseCredits(team, new RequestLineId(row.id()));
+        }
+        for (RequestLineRow row : rows) {
+            if (row.state() != RequestLineState.DROPPED) {
+                changeLine(request, row, RequestLineState.CANCELED, actor, now,
+                        row == refusedLine ? "APPROVAL_REFUSED: " + why : "Canceled: the Request was Refused.");
+            }
+        }
+        request.moveTo(RequestState.REFUSED);
+        record(request, null, from, RequestState.REFUSED.name(), actor, now, why);
+        notifyManager(request, "Request " + request.id() + " is Refused: " + why + " Nothing was charged.");
+        log.info("event=request_refused request={} team={} from={} actor={}", request.id(), request.teamId(), from,
+                actor.memberId().value());
+        for (RequestLineRow row : held) {
+            onCapacityFreed(row.allocationClass(), new ResourceTypeId(row.typeId()), RequestViews.window(row), now);
+        }
     }
 
     /** The Candidates of a Person line with their approvals, for the Request detail. */
@@ -1148,8 +1286,8 @@ public class RequestLifecycleService {
      * Pending Request goes to Waiting, releasing every Hold and its credits and offering the freed
      * capacity to the waitlist; then every Outstanding approval is escalated. A Waiting or Allocated
      * Request is escalated only. Idempotent: a Request whose window runs, or with no unescalated
-     * Outstanding approval, is skipped. One transaction; the system is the actor. Escalation notices
-     * and the Capacity Planner's list come with issue #7.
+     * Outstanding approval, is skipped. One transaction; the system is the actor. Every Capacity
+     * Planner and the requesting Manager are told ({@code ESCALATED}), once per lapse.
      */
     @Transactional
     public void onWindowLapse(RequestId id) {
@@ -1173,9 +1311,16 @@ public class RequestLifecycleService {
                     + " outstanding, so its Holds were released.");
         }
         List<Approval> escalated = approvalDriven().escalate(id);
+        String outstanding = escalated.size() == 1 ? "1 approval is" : escalated.size() + " approvals are";
         record(request, null, request.state().name(), request.state().name(), null, now, "ESCALATED: "
-                + (escalated.size() == 1 ? "1 approval" : escalated.size() + " approvals")
-                + " outstanding when the Objection Window ended went to the Capacity Planner.");
+                + outstanding + " outstanding past the Objection Window; the Capacity Planner decides.");
+        String text = "Request " + request.id() + " is escalated: " + outstanding
+                + " outstanding past the Objection Window.";
+        for (MemberId planner : members.withRole(Role.PLANNER)) {
+            notifier.notify(planner, NotificationKind.ESCALATED, text, "/escalations");
+        }
+        members.findManagerOf(new TeamId(request.teamId())).ifPresent(manager ->
+                notifier.notify(manager, NotificationKind.ESCALATED, text, "/requests/" + request.id()));
         log.info("event=window_lapsed request={} team={} state={} escalated={} actor=system", request.id(),
                 request.teamId(), request.state(), escalated.size());
         for (RequestLineRow row : freed) {
@@ -1261,8 +1406,17 @@ public class RequestLifecycleService {
                 .filter(row -> row.allocationClass() != AllocationClass.MATCHED && OPEN_CAPACITY.contains(row.state()))
                 .toList();
         for (RequestLineRow row : capacity) {
-            if (row.required() && row.state() != RequestLineState.HELD
-                    && !allocatorOf(row).evaluate(snapshot(request, row)).fits()) {
+            if (!row.required() || row.state() == RequestLineState.HELD) {
+                continue;
+            }
+            LineSnapshot snapshot = snapshot(request, row);
+            Evaluation fit = allocatorOf(row).evaluate(snapshot);
+            if (!fit.fits()) {
+                if (row.state() == RequestLineState.EVALUATED) {
+                    // Released at a lapse or refusal, and taken meanwhile: it waits for capacity now.
+                    waitlistOf(row).join(snapshot);
+                    changeLine(request, row, RequestLineState.WAITING, actor, now, fit.reason() + ": " + fit.message());
+                }
                 log.info("event=allocation_waits_for_capacity request={} line={}", request.id(), row.id());
                 return false;
             }

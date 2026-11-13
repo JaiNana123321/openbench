@@ -11,6 +11,13 @@ interface ApprovalRepository extends JpaRepository<ApprovalRow, Long> {
 
     List<ApprovalRow> findByApproverMemberIdAndStateOrderById(Long approver, ApprovalState state);
 
+    /** The approvals in this state with {@code escalated} set, by id. */
+    List<ApprovalRow> findByStateAndEscalatedTrueOrderById(ApprovalState state);
+
+    /** The approvals addressed to this Manager, escalated, in one of these states, by id. */
+    List<ApprovalRow> findByApproverMemberIdAndEscalatedTrueAndStateInOrderById(Long approver,
+            Collection<ApprovalState> states);
+
     /** The Requests with an Outstanding approval that is not escalated, by id. */
     @Query("""
             select distinct c.requestId from ApprovalRow a, CandidateRow c

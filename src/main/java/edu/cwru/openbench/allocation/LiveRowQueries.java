@@ -116,4 +116,14 @@ class LiveRowQueries implements AllocationQueries {
     public List<Loan> loansOf(MemberId member) {
         return matchedAllocator.loansOf(member);
     }
+
+    @Override
+    public List<Approval> escalatedOutstanding() {
+        return matchedAllocator.escalatedOutstanding();
+    }
+
+    @Override
+    public List<Approval> decidedOnEscalation(MemberId approver) {
+        return matchedAllocator.decidedOnEscalation(approver);
+    }
 }
