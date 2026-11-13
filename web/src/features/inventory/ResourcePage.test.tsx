@@ -11,6 +11,7 @@ function serve(me = dave, routes: Record<string, MockReply> = {}) {
     'GET /api/me': session(me),
     'GET /api/inventory/resources/:id': (request) => json(request.params.id === '24' ? gpuNodeA : roomA),
     'GET /api/inventory/types/:id': (request) => json(request.params.id === '4' ? gpu : meetingRoom),
+    'GET /api/inventory/resources/:id/holders': json([]),
     ...routes,
   });
 }

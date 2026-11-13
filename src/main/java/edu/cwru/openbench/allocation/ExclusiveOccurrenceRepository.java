@@ -30,4 +30,13 @@ interface ExclusiveOccurrenceRepository extends JpaRepository<ExclusiveOccurrenc
             where o.resourceId in :resourceIds and o.state = edu.cwru.openbench.allocation.RowState.ALLOCATED
               and o.startsAt < :endsAt and o.endsAt > :startsAt""")
     List<OccurrenceSpan> allocatedAmong(Collection<Long> resourceIds, Instant startsAt, Instant endsAt);
+
+    /** The rows in these states on one instance that overlap the half-open window, by start. */
+    @Query("""
+            select o from ExclusiveOccurrenceRow o
+            where o.resourceId = :resourceId and o.state in :states
+              and o.startsAt < :endsAt and o.endsAt > :startsAt
+            order by o.startsAt, o.id""")
+    List<ExclusiveOccurrenceRow> onResource(Long resourceId, Collection<RowState> states, Instant startsAt,
+            Instant endsAt);
 }

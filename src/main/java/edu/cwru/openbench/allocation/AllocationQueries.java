@@ -6,6 +6,7 @@ import edu.cwru.openbench.common.RequestId;
 import edu.cwru.openbench.common.RequestLineId;
 import edu.cwru.openbench.common.ResourceId;
 import edu.cwru.openbench.common.ResourceTypeId;
+import edu.cwru.openbench.common.TimeWindow;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
@@ -76,4 +77,12 @@ public interface AllocationQueries {
 
     /** Every Loan of the Member, past and future, by first day. Unscoped: callers check who may see them. */
     List<Loan> loansOf(MemberId member);
+
+    /**
+     * An Exclusive Resource's timeline over the half-open window (SRS Inventory.View.Holder): ordered
+     * parts that cover it exactly, each free, HELD, or ALLOCATED, the latter two with the holding Team
+     * and Request and the Priority mark. Only live rows count; touching parts of the same holder are
+     * one. Unscoped: callers decide which holders the caller may see.
+     */
+    List<Holding> holders(ResourceId resource, TimeWindow window);
 }

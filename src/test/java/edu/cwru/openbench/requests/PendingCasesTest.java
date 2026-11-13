@@ -71,6 +71,14 @@ class PendingCasesTest extends MatchedWorldTest {
                     assertThat(((Timestamp) row.get("starts_at")).toInstant()).isEqualTo(at(d, 10));
                     assertThat(((Timestamp) row.get("ends_at")).toInstant()).isEqualTo(at(d, 12));
                 });
+        // The same through Room A's timeline (issue #11), as Alice, whose Team holds it.
+        mvc.perform(get("/api/inventory/resources/{id}/holders", roomA).with(as(alice))
+                        .param("from", at(d, 10).toString()).param("to", at(d, 12).toString()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(1))
+                .andExpect(jsonPath("$[0].state").value("HELD"))
+                .andExpect(jsonPath("$[0].team.id").value((int) platform))
+                .andExpect(jsonPath("$[0].request").value((int) a1.id()));
     }
 
     @Test

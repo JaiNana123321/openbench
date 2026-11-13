@@ -898,3 +898,62 @@ textarea:focus {
   display: grid;
   gap: var(--space-2);
 }
+
+/* ------------------------------------------------------------------ Resource timeline and free filter (Inventory) */
+
+.window-form,
+.filter-form {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 0 var(--space-3);
+  align-items: end;
+  max-width: 900px;
+  margin-bottom: var(--space-3);
+}
+
+.window-form .button {
+  margin-bottom: var(--space-4);
+  justify-self: start;
+}
+
+.filter-form__actions {
+  display: flex;
+  grid-column: 1 / -1;
+  gap: var(--space-2);
+  margin-bottom: var(--space-4);
+}
+
+.timeline-bar {
+  display: flex;
+  height: 14px;
+  margin-bottom: var(--space-3);
+  overflow: hidden;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  background: var(--neutral-bg);
+}
+
+.timeline-bar__part {
+  flex: 1 1 0;
+}
+
+.timeline-bar__part + .timeline-bar__part {
+  border-left: 1px solid var(--surface);
+}
+
+.timeline-bar__part--neutral {
+  background: var(--neutral-bg);
+}
+
+.timeline-bar__part--info {
+  background: var(--info-line);
+}
+
+.timeline-bar__part--success {
+  background: var(--success-line);
+}
+
+.timeline-hidden {
+  color: var(--ink-muted);
+  font-style: italic;
+}

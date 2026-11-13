@@ -158,7 +158,8 @@ class ExclusiveAllocator implements Allocator, Waitlistable {
         occurrences.saveAllAndFlush(chosen.stream()
                 .flatMap(resource -> line.occurrences().stream()
                         .map(window -> new ExclusiveOccurrenceRow(line.lineId().value(), line.teamId().value(),
-                                line.requestId().value(), resource, window.start(), window.end(), state)))
+                                line.requestId().value(), resource, window.start(), window.end(), state,
+                                line.priority())))
                 .toList());
     }
 

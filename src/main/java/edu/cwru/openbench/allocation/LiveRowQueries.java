@@ -6,9 +6,13 @@ import edu.cwru.openbench.common.RequestId;
 import edu.cwru.openbench.common.RequestLineId;
 import edu.cwru.openbench.common.ResourceId;
 import edu.cwru.openbench.common.ResourceTypeId;
+import edu.cwru.openbench.common.TeamId;
 import edu.cwru.openbench.common.TimeWindow;
+import edu.cwru.openbench.members.MemberService;
+import edu.cwru.openbench.members.TeamSummary;
 import java.time.Instant;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -29,10 +33,12 @@ class LiveRowQueries implements AllocationQueries {
     private final ExclusiveAllocator exclusiveAllocator;
     private final MeteredAllocator meteredAllocator;
     private final MatchedAllocator matchedAllocator;
+    private final MemberService members;
 
     LiveRowQueries(WaitlistEntryRepository waitlist, ExclusiveOccurrenceRepository occurrences, HourlySums sums,
             MeteredAllocationRepository metered, ExclusiveAllocator exclusiveAllocator,
-            MeteredAllocator meteredAllocator, MatchedAllocator matchedAllocator) {
+            MeteredAllocator meteredAllocator, MatchedAllocator matchedAllocator, MemberService members) {
+        this.members = members;
         this.matchedAllocator = matchedAllocator;
         this.waitlist = waitlist;
         this.occurrences = occurrences;
@@ -115,5 +121,22 @@ class LiveRowQueries implements AllocationQueries {
     @Override
     public List<Loan> loansOf(MemberId member) {
         return matchedAllocator.loansOf(member);
+    }
+
+    @Override
+    public List<Holding> holders(ResourceId resource, TimeWindow window) {
+        List<HolderTimeline.Piece> live = occurrences
+                .onResource(resource.value(), RowState.LIVE, window.start(), window.end()).stream()
+                .map(row -> new HolderTimeline.Piece(row.window(), row.state(), row.teamId(), row.requestId(),
+                        row.priority()))
+                .toList();
+        Map<Long, TeamSummary> teams = new HashMap<>();
+        return HolderTimeline.of(window, live).stream()
+                .map(part -> part.state() == HoldingState.FREE
+                        ? Holding.free(part.window())
+                        : new Holding(part.window(), part.state(),
+                                teams.computeIfAbsent(part.teamId(), id -> members.team(new TeamId(id))),
+                                new RequestId(part.requestId()), part.priority()))
+                .toList();
     }
 }

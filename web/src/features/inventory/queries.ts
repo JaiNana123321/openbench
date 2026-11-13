@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../../api/client';
-import type { Id, NewResource, Page, Resource, ResourceEdit, ResourceType } from '../../api/types';
+import type { QueryParams } from '../../api/client';
+import type { Holding, Id, Instant, NewResource, Page, Resource, ResourceEdit, ResourceType } from '../../api/types';
 
 // The Inventory API (design Section 7, "Inventory"). Every key starts with 'inventory', so a write
 // refreshes the types (Pool Capacity) and the Resources together.
@@ -11,11 +12,16 @@ export const inventoryKeys = {
   type: (id: Id) => ['inventory', 'types', id] as const,
   resources: (filter: ResourceListFilter) => ['inventory', 'resources', filter] as const,
   resource: (id: Id) => ['inventory', 'resources', id] as const,
+  holders: (id: Id, from: Instant, to: Instant) => ['inventory', 'resources', id, 'holders', { from, to }] as const,
 };
 
 export interface ResourceListFilter {
   type?: Id;
   page: number;
+  /** Attribute values by attribute name; every one must match. */
+  attributes?: Record<string, string>;
+  /** Only the Resources of `type` free for this whole window (an Exclusive type only). */
+  free?: { from: Instant; to: Instant };
 }
 
 export const RESOURCE_PAGE_SIZE = 50;
@@ -36,15 +42,27 @@ export function useResourceType(id: Id | undefined) {
   });
 }
 
+/**
+ * One page of the Resources by name: GET /api/inventory/resources, or, with a `free` window,
+ * GET /api/inventory/resources/free, which Allocation answers.
+ */
 export function useResources(filter: ResourceListFilter) {
   return useQuery({
     queryKey: inventoryKeys.resources(filter),
-    queryFn: () =>
-      api.get<Page<Resource>>('/api/inventory/resources', {
-        type: filter.type,
-        page: filter.page,
-        size: RESOURCE_PAGE_SIZE,
-      }),
+    queryFn: () => {
+      const query: QueryParams = { type: filter.type, page: filter.page, size: RESOURCE_PAGE_SIZE };
+      for (const [name, value] of Object.entries(filter.attributes ?? {})) query[`attr.${name}`] = value;
+      if (!filter.free) return api.get<Page<Resource>>('/api/inventory/resources', query);
+      return api.get<Page<Resource>>('/api/inventory/resources/free', { ...query, ...filter.free });
+    },
+  });
+}
+
+/** An Exclusive Resource's timeline over a window: its free, held, and allocated parts in order. */
+export function useHolders(id: Id, from: Instant, to: Instant) {
+  return useQuery({
+    queryKey: inventoryKeys.holders(id, from, to),
+    queryFn: () => api.get<Holding[]>(`/api/inventory/resources/${id}/holders`, { from, to }),
   });
 }
 

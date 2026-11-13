@@ -37,10 +37,13 @@ class ExclusiveOccurrenceRow {
     @Enumerated(EnumType.STRING)
     private RowState state;
 
+    /** The line's Priority mark, copied when the row is written, for the holder timeline. */
+    private boolean priority;
+
     protected ExclusiveOccurrenceRow() {}
 
     ExclusiveOccurrenceRow(Long lineId, Long teamId, Long requestId, Long resourceId, Instant startsAt, Instant endsAt,
-            RowState state) {
+            RowState state, boolean priority) {
         this.lineId = lineId;
         this.teamId = teamId;
         this.requestId = requestId;
@@ -48,6 +51,7 @@ class ExclusiveOccurrenceRow {
         this.startsAt = startsAt;
         this.endsAt = endsAt;
         this.state = state;
+        this.priority = priority;
     }
 
     Long id() {
@@ -72,11 +76,24 @@ class ExclusiveOccurrenceRow {
 
     /** A RELEASED row on the same instance for the hours from {@code newEnd} to this row's end. */
     ExclusiveOccurrenceRow tailFrom(Instant newEnd) {
-        return new ExclusiveOccurrenceRow(lineId, teamId, requestId, resourceId, newEnd, endsAt, RowState.RELEASED);
+        return new ExclusiveOccurrenceRow(lineId, teamId, requestId, resourceId, newEnd, endsAt, RowState.RELEASED,
+                priority);
     }
 
     /** Shortens the row to end at {@code newEnd}; its start, the occurrence's, stays. */
     void endAt(Instant newEnd) {
         this.endsAt = newEnd;
+    }
+
+    Long teamId() {
+        return teamId;
+    }
+
+    Long requestId() {
+        return requestId;
+    }
+
+    boolean priority() {
+        return priority;
     }
 }
