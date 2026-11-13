@@ -200,11 +200,14 @@ class MatchedAllocator implements Allocator, ApprovalDriven {
         checkClass(line);
         DateRange days = days(line);
         List<ShortlistRanking.Person> ranked = shortlisted(line, days);
+        List<MemberId> ids = ranked.stream().map(ShortlistRanking.Person::id).toList();
+        Map<MemberId, MemberSummary> summaries = members.summaries(ids);
+        Map<MemberId, List<Skill>> skills = members.skillsOf(ids);
         List<Shortlist.Entry> entries = new ArrayList<>();
         for (ShortlistRanking.Person person : ranked) {
-            MemberSummary summary = members.summary(person.id());
+            MemberSummary summary = summaries.get(person.id());
             entries.add(new Shortlist.Entry(entries.size() + 1, person.id(), summary.name(), summary.team(),
-                    members.skillsOf(person.id()).stream().map(Skill::name).toList(), person.personDaysLent()));
+                    skills.get(person.id()).stream().map(Skill::name).toList(), person.personDaysLent()));
         }
         return new Shortlist(line.lineId(), entries);
     }
@@ -239,8 +242,9 @@ class MatchedAllocator implements Allocator, ApprovalDriven {
         }
         Set<Long> alreadySelected = selected.stream().map(s -> s.candidate().memberId()).collect(Collectors.toSet());
         Map<MemberId, MemberSummary> summaries = new LinkedHashMap<>();
+        Map<MemberId, MemberSummary> found = members.summaries(picked);
         for (MemberId member : picked) {
-            Optional<MemberSummary> summary = members.findSummary(member);
+            Optional<MemberSummary> summary = Optional.ofNullable(found.get(member));
             if (summary.isPresent() && summary.get().team().id().equals(line.teamId())) {
                 throw new RuleViolation("OWN_TEAM", summary.get().name()
                         + " is a Member of the requesting Team and cannot be lent to it.");
@@ -467,9 +471,10 @@ class MatchedAllocator implements Allocator, ApprovalDriven {
         DateRange periodDays = new DateRange(period.startsOn(), period.endsOn());
         Map<Long, List<DateRange>> loansInPeriod = loans.loansDuring(ids, period.startsOn(), period.endsOn()).stream()
                 .collect(Collectors.groupingBy(LoanRow::memberId, Collectors.mapping(LoanRow::days, Collectors.toList())));
+        Map<MemberId, MemberSummary> summaries = members.summaries(available);
         List<ShortlistRanking.Person> people = new ArrayList<>();
         for (MemberId member : available) {
-            people.add(new ShortlistRanking.Person(member, nameOf(member), true, lent.contains(member.value()),
+            people.add(new ShortlistRanking.Person(member, summaries.get(member).name(), true, lent.contains(member.value()),
                     ShortlistRanking.personDaysLent(loansInPeriod.getOrDefault(member.value(), List.of()), periodDays)));
         }
         return ShortlistRanking.rank(people);
