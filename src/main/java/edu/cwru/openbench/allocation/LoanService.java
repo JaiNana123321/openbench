@@ -1,14 +1,18 @@
 package edu.cwru.openbench.allocation;
 
 import edu.cwru.openbench.common.Actor;
+import edu.cwru.openbench.common.LoanId;
 import edu.cwru.openbench.common.MemberId;
 import edu.cwru.openbench.common.NotFoundException;
 import edu.cwru.openbench.common.Role;
 import edu.cwru.openbench.members.MemberService;
 import edu.cwru.openbench.members.MemberSummary;
+import java.time.LocalDate;
 import java.util.List;
+import java.util.Optional;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
@@ -24,10 +28,12 @@ public class LoanService {
 
     private final AllocationQueries queries;
     private final MemberService members;
+    private final MatchedAllocator matched;
 
-    LoanService(AllocationQueries queries, MemberService members) {
+    LoanService(AllocationQueries queries, MemberService members, MatchedAllocator matched) {
         this.queries = queries;
         this.members = members;
+        this.matched = matched;
     }
 
     /**
@@ -58,5 +64,28 @@ public class LoanService {
 
     private static NotFoundException notFound(MemberId member) {
         return new NotFoundException("Member " + member.value() + " does not exist.");
+    }
+
+    // ---------------------------------------------------------------- an early Loan end (issue #8)
+
+    /** (Unscoped) One Loan, or empty when it does not exist; callers check who may see or end it. */
+    public Optional<Loan> loan(LoanId id) {
+        return matched.loan(id);
+    }
+
+    /**
+     * (Unscoped, for {@code RequestLifecycleService.endLoanEarly}) Ends a Loan early (SRS
+     * Release.Loan.Prorate): its last day becomes {@code newEnd}, its person-days are counted again,
+     * and it is marked ended early. The Person is free again from the day after. The Loan keeps its
+     * place in {@code loan_one_at_a_time} for the days it lent. Joins the caller's transaction, which
+     * holds the Person type's lock; the caller checks who may end it and posts the Earning
+     * correction. Returns the Loan as it is now.
+     *
+     * @throws IllegalArgumentException for an unknown Loan, or a new end before its first day or not
+     *     before its last
+     */
+    @Transactional(propagation = Propagation.MANDATORY)
+    public Loan endEarly(LoanId id, LocalDate newEnd) {
+        return matched.endLoanEarly(id, newEnd);
     }
 }
