@@ -11,16 +11,12 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import edu.cwru.openbench.Verifies;
-import edu.cwru.openbench.common.TeamId;
 import java.math.BigDecimal;
 import java.sql.Date;
 import java.time.LocalDate;
-import java.util.List;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.MediaType;
-import org.springframework.test.web.servlet.ResultActions;
-import org.springframework.test.web.servlet.request.RequestPostProcessor;
 
 /**
  * The test cases of issue #8 (docs/test-cases: Release, Profiles): the borrowing Manager ends a Loan
@@ -30,7 +26,7 @@ import org.springframework.test.web.servlet.request.RequestPostProcessor;
  * from the day after the new last day. Step by step through the API, on the Matched data of the test
  * world.
  */
-class LoanEndCasesTest extends MatchedWorldTest {
+class LoanEndCasesTest extends LoanEndWorldTest {
 
     @Test
     @DisplayName("rel-loan-prorate: ending a Loan early corrects the lending Team's Earning")
@@ -232,49 +228,5 @@ class LoanEndCasesTest extends MatchedWorldTest {
         assertThat(balance(operations)).isEqualByComparingTo("-40.00");
         assertThat(earnings(platform)).containsExactly(new BigDecimal("800.00"));
         assertThat(account(operations)).isEqualTo(foldOfTransactions(operations));
-    }
-
-    // ---------------------------------------------------------------- helpers
-
-    /** A Request of Bob's, Allocated, with one Person line on which Dave Kim is lent to Research for the days. */
-    protected record Formed(long request, long line, long loan) {}
-
-    protected Formed loanOfDave(LocalDate from, LocalDate to) throws Exception {
-        long request = createDraft(as(bob));
-        long line = personLine(as(bob), request, 1, from, to, statistics);
-        submit(as(bob), request).andExpect(status().isOk());
-        select(as(bob), request, line, world.dave().id()).andExpect(status().isOk());
-        decide(as(oscar), approvalOf(line), "APPROVE", "").andExpect(status().isOk());
-        detail(as(bob), request).andExpect(jsonPath("$.request.state").value("ALLOCATED"));
-        long loan = jdbc.queryForObject("SELECT id FROM loan WHERE line_id = ?", Long.class, line);
-        return new Formed(request, line, loan);
-    }
-
-    protected ResultActions endLoan(RequestPostProcessor caller, long loan, LocalDate newEnd) throws Exception {
-        return mvc.perform(post("/api/loans/{id}/end", loan).with(caller)
-                .contentType(MediaType.APPLICATION_JSON).content("{\"newEnd\": \"" + newEnd + "\"}"));
-    }
-
-    protected ResultActions statement(String manager, long team) throws Exception {
-        return mvc.perform(get("/api/ledger/statements/{team}/{period}", team, period).with(as(manager)));
-    }
-
-    protected ResultActions myProfile(String member) throws Exception {
-        return mvc.perform(get("/api/members/me/profile").with(as(member)));
-    }
-
-    protected long originalEarning(long loan) {
-        return jdbc.queryForObject("SELECT id FROM transaction WHERE loan_id = ? AND corrects_id IS NULL", Long.class,
-                loan);
-    }
-
-    /** The Team's Earnings, corrections included, oldest first. */
-    protected List<BigDecimal> earnings(long team) {
-        return jdbc.queryForList("SELECT amount FROM transaction WHERE team_id = ? AND kind = 'EARNING' ORDER BY id",
-                BigDecimal.class, team);
-    }
-
-    protected BigDecimal balance(long team) {
-        return ledger.account(new TeamId(team)).balance().amount();
     }
 }
