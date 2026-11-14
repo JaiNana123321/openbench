@@ -57,6 +57,23 @@ describe('Loans on a profile (prf-visibility, mat-loan-form)', () => {
     expect(server.callsTo('GET /api/members/:id/loans')[0].path).toBe(`/api/members/${dave.id}/loans`);
   });
 
+  it('shows a Loan ended early with its new last day (prf-loan-overlap)', async () => {
+    mockApi({
+      'GET /api/me': session(dave),
+      'GET /api/members/me/profile': json(davesProfile),
+      'GET /api/skills': json([]),
+      'GET /api/members/:id/loans': json([
+        { ...loanToResearch, days: { from: '2026-11-25', to: '2026-11-25' }, daysLent: 1, endedEarly: true },
+      ]),
+    });
+    renderApp('/profile');
+
+    const loans = await screen.findByRole('table', { name: 'Loans' });
+    const row = within(loans).getByRole('row', { name: /Research/ });
+    expect(row).toHaveTextContent('Nov 25, 2026 to Nov 25, 2026 (ended early)');
+    expect(row).toHaveTextContent('1');
+  });
+
   it('says so when there are no Loans', async () => {
     mockApi({
       'GET /api/me': session(dave),

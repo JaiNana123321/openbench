@@ -11,6 +11,7 @@ import edu.cwru.openbench.allocation.Decision;
 import edu.cwru.openbench.allocation.Evaluation;
 import edu.cwru.openbench.allocation.LineSnapshot;
 import edu.cwru.openbench.allocation.Loan;
+import edu.cwru.openbench.allocation.LoanService;
 import edu.cwru.openbench.allocation.ReleasePart;
 import edu.cwru.openbench.allocation.Released;
 import edu.cwru.openbench.allocation.Shortlist;
@@ -21,6 +22,7 @@ import edu.cwru.openbench.common.ApprovalId;
 import edu.cwru.openbench.common.Credits;
 import edu.cwru.openbench.common.DateRange;
 import edu.cwru.openbench.common.ForbiddenException;
+import edu.cwru.openbench.common.LoanId;
 import edu.cwru.openbench.common.MemberId;
 import edu.cwru.openbench.common.NotFoundException;
 import edu.cwru.openbench.common.RequestId;
@@ -45,8 +47,10 @@ import edu.cwru.openbench.settings.PlannerSettings;
 import edu.cwru.openbench.settings.SettingsService;
 import jakarta.persistence.EntityManager;
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.Clock;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -120,12 +124,14 @@ public class RequestLifecycleService {
     private final Refunds refunds;
     private final PersonLineRules personRules;
     private final RequestRepository requests;
+    private final LoanService loans;
 
     RequestLifecycleService(RequestLineRepository lines, RequestEventRepository events, RequestAccess access,
             LineRules rules, RequestViews views, AllocationLock typeLock, AllocatorRegistry allocators,
             AllocationQueries allocation, LedgerService ledger, SettingsService settings, InventoryQueries inventory,
             MemberService members, EntityManager entityManager, Clock clock, Notifier notifier,
-            TransactionTemplate transactions, Refunds refunds, PersonLineRules personRules, RequestRepository requests) {
+            TransactionTemplate transactions, Refunds refunds, PersonLineRules personRules, RequestRepository requests,
+            LoanService loans) {
         this.personRules = personRules;
         this.requests = requests;
         this.notifier = notifier;
@@ -145,6 +151,7 @@ public class RequestLifecycleService {
         this.entityManager = entityManager;
         this.clock = clock;
         this.refunds = refunds;
+        this.loans = loans;
     }
 
     // ---------------------------------------------------------------- submit
@@ -1425,7 +1432,8 @@ public class RequestLifecycleService {
         BigDecimal held = sumOfQuotes(capacity.stream().filter(row -> row.state() == RequestLineState.HELD));
         BigDecimal required = sumOfQuotes(capacity.stream().filter(RequestLineRow::required));
         BigDecimal budget = available.add(held).subtract(required);
-        if (budget.signum() < 0) {
+        // No Required Charge (Person lines only) is never short, even with the Balance below zero.
+        if (required.signum() > 0 && budget.signum() < 0) {
             toWaitingAtAllocation(request, rows, actor, now, "INSUFFICIENT_BALANCE: The Required Charges of "
                     + new Credits(required) + " credits no longer fit the Available Balance; the approvals are kept.");
             return false;
@@ -1644,5 +1652,94 @@ public class RequestLifecycleService {
     /** Days for a message, such as "Wed 25 Nov 2026 to Thu 26 Nov 2026". */
     private static String describe(DateRange days) {
         return DAY.format(days.from()) + (days.from().equals(days.to()) ? "" : " to " + DAY.format(days.to()));
+    }
+
+    // ---------------------------------------------------------------- an early Loan end (issue #8)
+
+    /**
+     * POST /api/loans/{id}/end (SRS Release.Loan.Prorate; design {@code endLoanEarly}): the borrowing
+     * Manager ends a Loan early, so its last day is {@code newEnd} and the Person is free from the day
+     * after. In one transaction, in the lock order of every transition: the borrowing Request, then
+     * the Person type, then, inside {@link LedgerService#correctEarning}, only the lending Team's
+     * account. The Loan is shortened ({@link LoanService#endEarly}); the lending Team gets an Earning
+     * correction for the person-days no longer lent at the Loan's own daily rate, its net Earning
+     * divided by its person-days before this end (the original Earning's amount divided by its
+     * person-days, untouched by a later Day Rate change), so its net Earning is that rate times the
+     * days actually lent. The borrowing Team gets no Refund and no Charge, and no Refund Schedule
+     * applies. The line's history records the end; the Person and the lending Manager are told
+     * ({@code LOAN_ENDED}); the Request stays Allocated, and the freed days are offered as any freed
+     * capacity is ({@link #onCapacityFreed}), which for a Person type is nothing: Matched lines never
+     * wait on a waitlist. A Loan already ended early can be ended earlier still. Returns the Loan as it
+     * is now.
+     *
+     * @throws NotFoundException for an unknown Loan
+     * @throws ForbiddenException unless the caller is the borrowing Team's Manager (the lending
+     *     Manager included)
+     * @throws RuleViolation {@code LOAN_END_INVALID} unless {@code newEnd} is on or after the Loan's
+     *     first day, before its current last day, and not before today; {@code NOT_ALLOCATED} unless
+     *     the Loan's Request is Allocated
+     */
+    @PreAuthorize("hasAuthority('MANAGER')")
+    @Transactional
+    public Loan endLoanEarly(Actor actor, LoanId loanId, LocalDate newEnd) {
+        Loan seen = loans.loan(loanId)
+                .orElseThrow(() -> new NotFoundException("Loan " + loanId.value() + " does not exist."));
+        if (!actor.has(Role.MANAGER) || !seen.borrowingTeam().id().equals(actor.teamId())) {
+            throw new ForbiddenException("Only the Manager of " + seen.borrowingTeam().name()
+                    + ", the borrowing Team, may end Loan " + loanId.value() + " early.");
+        }
+        Long requestId = lines.findRequestIdById(seen.line().value()).orElseThrow();
+        // Forget every entity read without a lock: what follows reads them again after the locks.
+        entityManager.clear();
+
+        RequestRow request = access.lockForChange(actor, new RequestId(requestId));
+        RequestLineRow line = lines.findById(seen.line().value()).orElseThrow();
+        typeLock.lockTypes(new TreeSet<>(List.of(new ResourceTypeId(line.typeId()))));
+        Loan before = loans.loan(loanId).orElseThrow();
+        if (request.state() != RequestState.ALLOCATED) {
+            throw new RuleViolation("NOT_ALLOCATED", "Request " + request.id() + " is "
+                    + request.state().name().toLowerCase() + "; only a Loan of an Allocated Request can end early.");
+        }
+        LocalDate today = LocalDate.now(clock);
+        if (newEnd.isBefore(before.days().from()) || !newEnd.isBefore(before.days().to()) || newEnd.isBefore(today)) {
+            throw new RuleViolation("LOAN_END_INVALID", "Loan " + loanId.value() + " runs from "
+                    + DAY.format(before.days().from()) + " to " + DAY.format(before.days().to())
+                    + "; its new last day must be on or after its first day, before its last day, and not before today.",
+                    Map.of("startsOn", before.days().from().toString(), "endsOn", before.days().to().toString(),
+                            "today", today.toString()));
+        }
+
+        Instant now = clock.instant();
+        Loan after = loans.endEarly(loanId, newEnd);
+        int lost = before.daysLent() - after.daysLent();
+        Credits correction = lost <= 0 ? Credits.ZERO : new Credits(ledger.netEarning(loanId).amount()
+                .divide(BigDecimal.valueOf(before.daysLent()), 10, RoundingMode.HALF_UP)
+                .multiply(BigDecimal.valueOf(lost)).negate());
+        String borrowing = after.borrowingTeam().name();
+        String lostDays = lost + (lost == 1 ? " person-day" : " person-days") + " no longer lent";
+        if (correction.isNegative()) {
+            ledger.correctEarning(after.lendingTeam().id(), loanId, correction, "Correction: " + after.memberName()
+                    + " to " + borrowing + " ended early on " + DAY.format(newEnd) + ", " + lostDays);
+        }
+        Credits net = ledger.netEarning(loanId);
+        String outcome = "Loan of " + after.memberName() + " (" + after.lendingTeam().name() + ") ended early: now "
+                + describe(after.days()) + ", " + lostDays + "; Earning correction " + correction + " credits, net "
+                + net + " credits.";
+        record(request, line.id(), line.state().name(), line.state().name(), actor, now, outcome);
+        notifier.notify(after.member(), NotificationKind.LOAN_ENDED, "Your Loan to " + borrowing
+                + " now ends on " + DAY.format(newEnd) + "; you are free from " + DAY.format(newEnd.plusDays(1))
+                + " (Request " + request.id() + ").", "/profile");
+        members.findManagerOf(after.lendingTeam().id()).ifPresent(manager -> notifier.notify(manager,
+                NotificationKind.LOAN_ENDED, borrowing + " ended the Loan of " + after.memberName() + " early: it now"
+                        + " covers " + describe(after.days()) + ". An Earning correction of " + correction
+                        + " credits leaves " + after.lendingTeam().name() + " " + net + " credits for it.", "/statement"));
+        log.info("event=loan_ended_early loan={} request={} line={} new_end={} days_lent={} correction={} actor={}",
+                loanId.value(), request.id(), line.id(), newEnd, after.daysLent(), correction,
+                actor.memberId().value());
+
+        onCapacityFreed(line.allocationClass(), new ResourceTypeId(line.typeId()), new TimeWindow(
+                newEnd.plusDays(1).atStartOfDay(clock.getZone()).toInstant(),
+                before.days().to().plusDays(1).atStartOfDay(clock.getZone()).toInstant()), now);
+        return after;
     }
 }

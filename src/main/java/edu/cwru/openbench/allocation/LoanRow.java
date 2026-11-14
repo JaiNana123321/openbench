@@ -80,4 +80,23 @@ class LoanRow {
     boolean endedEarly() {
         return endedEarly;
     }
+
+    /**
+     * Ends the Loan early (SRS Release.Loan.Prorate): {@code newEnd} becomes its last day, the
+     * person-days are counted again, and {@code endedEarly} is set. The row stays in
+     * {@code loan_one_at_a_time} for the days it lent.
+     *
+     * @throws IllegalArgumentException unless {@code newEnd} lies on or after the first day and
+     *     before the current last day
+     */
+    void endEarly(LocalDate newEnd) {
+        if (newEnd.isBefore(startsOn) || !newEnd.isBefore(endsOn)) {
+            throw new IllegalArgumentException("Loan " + id + " runs from " + startsOn + " to " + endsOn
+                    + "; it cannot end early on " + newEnd + ".");
+        }
+        DateRange shortened = new DateRange(startsOn, newEnd);
+        this.endsOn = newEnd;
+        this.daysLent = shortened.weekdays();
+        this.endedEarly = true;
+    }
 }

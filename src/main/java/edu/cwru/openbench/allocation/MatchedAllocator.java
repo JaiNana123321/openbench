@@ -26,6 +26,7 @@ import edu.cwru.openbench.settings.SettingsService;
 import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.EnumSet;
@@ -178,7 +179,8 @@ class MatchedAllocator implements Allocator, ApprovalDriven {
     @Override
     public Released release(LineSnapshot line, ReleasePart part) {
         checkClass(line);
-        throw new UnsupportedOperationException("Ending a Loan early comes with issue #8.");
+        throw new UnsupportedOperationException(
+                "A Matched line gives back no part; a Loan ends early through LoanService.endEarly.");
     }
 
     /** Cancels every Outstanding or Approved approval of the line; Refused ones stay. Idempotent. */
@@ -553,4 +555,25 @@ class MatchedAllocator implements Allocator, ApprovalDriven {
 
     /** A Candidate of the line and its approval. */
     private record Selected(CandidateRow candidate, ApprovalRow approval) {}
+
+    // ---------------------------------------------------------------- an early Loan end (issue #8)
+
+    /** One Loan, or empty when it does not exist. */
+    Optional<Loan> loan(LoanId id) {
+        return loans.findById(id.value()).map(row -> toLoans(List.of(row)).getFirst());
+    }
+
+    /**
+     * Shortens a Loan to end on {@code newEnd} ({@link LoanRow#endEarly}) and flushes, so the
+     * {@code loan_one_at_a_time} constraint sees the freed days at once. Returns the Loan as it is now.
+     *
+     * @throws IllegalArgumentException for an unknown Loan, or a new end outside its days
+     */
+    Loan endLoanEarly(LoanId id, LocalDate newEnd) {
+        LoanRow row = loans.findById(id.value())
+                .orElseThrow(() -> new IllegalArgumentException("Loan " + id.value() + " does not exist."));
+        row.endEarly(newEnd);
+        loans.flush();
+        return toLoans(List.of(row)).getFirst();
+    }
 }

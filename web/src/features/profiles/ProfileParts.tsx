@@ -5,7 +5,10 @@ import { useLoans, useSkills, useUpdateAvailability, useUpdateSkills } from './q
 
 const loanColumns: Column<Loan>[] = [
   { header: 'Lent to', cell: (loan) => loan.borrowingTeam.name },
-  { header: 'Days', cell: (loan) => formatDayRange(loan.days) },
+  {
+    header: 'Days',
+    cell: (loan) => (loan.endedEarly ? `${formatDayRange(loan.days)} (ended early)` : formatDayRange(loan.days)),
+  },
   { header: 'Days lent', cell: (loan) => loan.daysLent, numeric: true },
 ];
 

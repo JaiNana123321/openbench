@@ -22,5 +22,7 @@ public enum NotificationKind {
     /** A Suggestion was made, accepted, or declined. */
     SUGGESTION,
     /** A Period ended: the Team's granted credits expired and the new Period's Grant posted (S7). */
-    PERIOD_ROLLOVER
+    PERIOD_ROLLOVER,
+    /** The borrowing Manager ended a Loan early: told to the Person and the lending Manager (issue #8). */
+    LOAN_ENDED
 }

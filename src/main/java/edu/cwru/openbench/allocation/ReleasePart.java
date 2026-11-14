@@ -6,8 +6,8 @@ import java.util.Objects;
 
 /**
  * What {@link Allocator#release} gives back (design Section 4.5): the whole line, some occurrences,
- * an earlier end, or fewer units. The rest of the line keeps its instances and its prices. A Loan's
- * new last day comes with Matched Release in a later increment.
+ * an earlier end, or fewer units. The rest of the line keeps its instances and its prices. A Loan
+ * is not a part of a line: it ends early through {@code LoanService.endEarly}.
  *
  * <p>A part already started, or one that does not lie inside the line's live allocation, is
  * refused with {@code NOT_ALLOCATED}; a part already started returns no credits, so only what has not

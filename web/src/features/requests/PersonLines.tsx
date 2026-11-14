@@ -10,6 +10,7 @@ import {
   Table,
   type Column,
 } from '../../ui';
+import { canEndEarly, EndLoanForm } from './EndLoanForm';
 import { personAsk, personCount, whenText } from './personLineText';
 import { useSelectCandidates, useShortlist } from './queries';
 
@@ -68,6 +69,7 @@ function PersonLine({ requestId, detail, number, canSelect }: PersonLineProps) {
   const shortlist = useShortlist(requestId, line.id, bySkills && open);
   const select = useSelectCandidates(requestId);
   const [picked, setPicked] = useState<Id[]>([]);
+  const [ending, setEnding] = useState<Loan | undefined>();
   const selectedBefore = new Set(candidates.map((candidate) => candidate.member));
 
   function toggle(member: Id) {
@@ -120,10 +122,11 @@ function PersonLine({ requestId, detail, number, canSelect }: PersonLineProps) {
           <h4>Loans</h4>
           <Table
             label={`Loans of line ${number ?? line.id}`}
-            columns={loanColumns}
+            columns={loanColumns(canSelect ? setEnding : undefined)}
             rows={detail.loans ?? []}
             rowKey={(loan) => loan.id}
           />
+          {ending && <EndLoanForm key={ending.id} loan={ending} onClose={() => setEnding(undefined)} />}
         </>
       )}
       {bySkills && open && (
@@ -180,10 +183,38 @@ const candidateColumns: Column<CandidateApproval>[] = [
   { header: 'Reason', cell: (candidate) => candidate.reason || '—' },
 ];
 
-/** The Loans a Person line formed once its Request was allocated. */
-const loanColumns: Column<Loan>[] = [
-  { header: 'Person', cell: (loan) => loan.memberName },
-  { header: 'Lent by', cell: (loan) => loan.lendingTeam.name },
-  { header: 'Days', cell: (loan) => formatDayRange(loan.days) },
-  { header: 'Days lent', cell: (loan) => loan.daysLent, numeric: true },
-];
+/**
+ * The Loans a Person line formed once its Request was allocated. The borrowing Manager (given
+ * `onEnd`) may end one early while a day before its last day remains.
+ */
+function loanColumns(onEnd: ((loan: Loan) => void) | undefined): Column<Loan>[] {
+  return [
+    { header: 'Person', cell: (loan) => loan.memberName },
+    { header: 'Lent by', cell: (loan) => loan.lendingTeam.name },
+    {
+      header: 'Days',
+      cell: (loan) => (
+        <>
+          {formatDayRange(loan.days)}
+          {loan.endedEarly && <span className="timeline__note">Ended early</span>}
+        </>
+      ),
+    },
+    { header: 'Days lent', cell: (loan) => loan.daysLent, numeric: true },
+    ...(onEnd
+      ? [
+          {
+            header: 'Action',
+            cell: (loan: Loan) =>
+              canEndEarly(loan) ? (
+                <Button variant="secondary" onClick={() => onEnd(loan)}>
+                  End Loan early…
+                </Button>
+              ) : (
+                '—'
+              ),
+          },
+        ]
+      : []),
+  ];
+}
