@@ -134,7 +134,7 @@ function StatementBody({ statement }: { statement: Statement }) {
         </h2>
         <Table
           label="Transactions"
-          columns={transactionColumns(requestOf)}
+          columns={transactionColumns(requestOf, statement.transactions)}
           rows={statement.transactions}
           rowKey={(transaction) => transaction.id}
           empty={<EmptyState title="No Transactions in this Period." />}
@@ -145,7 +145,10 @@ function StatementBody({ statement }: { statement: Statement }) {
 }
 
 /** The columns; a Transaction of a Request Line links to its Request once the line is looked up. */
-function transactionColumns(requestOf: ReadonlyMap<Id, RequestLine>): Column<LedgerTransaction>[] {
+function transactionColumns(
+  requestOf: ReadonlyMap<Id, RequestLine>,
+  transactions: readonly LedgerTransaction[],
+): Column<LedgerTransaction>[] {
   return [
     { header: 'Time', cell: (row) => formatInstant(row.postedAt) },
     { header: 'Kind', cell: (row) => formatEnum(row.kind) },
@@ -154,8 +157,16 @@ function transactionColumns(requestOf: ReadonlyMap<Id, RequestLine>): Column<Led
     { header: 'Earned part', cell: (row) => formatCredits(row.earnedPart), numeric: true },
     { header: 'Request line', cell: (row) => requestLineCell(row, requestOf) },
     { header: 'By', cell: (row) => row.actorName ?? 'System' },
-    { header: 'Reason', cell: (row) => row.reason ?? '' },
+    { header: 'Reason', cell: (row) => reasonText(row, transactions) },
   ];
+}
+
+/** The reason; an Earning correction also names the original Earning it corrects (Release.Loan.Prorate). */
+function reasonText(row: LedgerTransaction, transactions: readonly LedgerTransaction[]): string {
+  if (row.corrects == null) return row.reason ?? '';
+  const original = transactions.find((other) => other.id === row.corrects);
+  const which = original ? `the Earning of ${formatInstant(original.postedAt)}` : `Earning #${row.corrects}`;
+  return `${row.reason ?? 'Earning correction'} (corrects ${which})`;
 }
 
 function requestLineCell(row: LedgerTransaction, requestOf: ReadonlyMap<Id, RequestLine>) {

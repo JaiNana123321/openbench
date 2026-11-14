@@ -2,8 +2,10 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../../api/client';
 import type {
   DraftView,
+  EndLoanBody,
   Id,
   LineEdit,
+  Loan,
   MemberSummary,
   NewLine,
   Page,
@@ -231,5 +233,23 @@ export function useSetPriority(requestId: Id) {
     mutationFn: ({ lineId, priority }: { lineId: Id; priority: boolean }) =>
       api.put<RequestLine>(`/api/requests/${requestId}/lines/${lineId}/priority`, { priority }),
     onSuccess: invalidate,
+  });
+}
+
+/**
+ * Ends a Loan early: the Request detail, the lending Team's Statement (the Earning correction), and
+ * the Person's Loans change.
+ */
+export function useEndLoan() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ loanId, body }: { loanId: Id; body: EndLoanBody }) =>
+      api.post<Loan>(`/api/loans/${loanId}/end`, body),
+    onSuccess: () =>
+      Promise.all([
+        queryClient.invalidateQueries({ queryKey: requestKeys.all }),
+        queryClient.invalidateQueries({ queryKey: ['ledger'] }),
+        queryClient.invalidateQueries({ queryKey: ['members'] }),
+      ]),
   });
 }

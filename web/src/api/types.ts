@@ -384,7 +384,8 @@ export type NotificationKind =
   | 'WAITLIST_FILLED'
   | 'ESCALATED'
   | 'SUGGESTION'
-  | 'PERIOD_ROLLOVER';
+  | 'PERIOD_ROLLOVER'
+  | 'LOAN_ENDED';
 
 /**
  * GET /api/notifications (paged: the caller's unread notices, newest first) and
@@ -736,4 +737,16 @@ export interface EscalatedRequest {
   state: RequestState;
   lapsedAt: Instant | null;
   approvals: EscalatedApproval[];
+}
+
+// ---------------------------------------------------------------- Requests: an early Loan end
+
+/** POST /api/loans/{id}/end: the Loan's new last day. The answer is the Loan as shortened. */
+export interface EndLoanBody {
+  newEnd: LocalDate;
+}
+
+export interface LedgerTransaction {
+  /** The original Earning that an Earning correction (after an early Loan end) corrects; null otherwise. */
+  corrects?: Id | null;
 }
