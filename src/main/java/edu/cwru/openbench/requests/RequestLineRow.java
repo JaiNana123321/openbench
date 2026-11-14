@@ -218,4 +218,18 @@ class RequestLineRow {
     Set<Long> skills() {
         return skills == null ? Set.of() : Set.of(skills);
     }
+
+    // ---------------------------------------------------------------- Bumps
+
+    /** Whether a Priority line Bumped this line, which puts it at the head of its waitlist. */
+    private boolean bumped;
+
+    boolean bumped() {
+        return bumped;
+    }
+
+    /** Marks the line Bumped by a Priority line; the mark stays. */
+    void markBumped() {
+        this.bumped = true;
+    }
 }
