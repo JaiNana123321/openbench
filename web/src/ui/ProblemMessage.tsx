@@ -1,9 +1,10 @@
 import { isApiError } from '../api/client';
+import { problemMessages } from './problemMessages';
 
 interface ProblemMessageProps {
   /** Any error, usually a query's or mutation's `error`. Renders nothing when there is none. */
   error: unknown;
-  /** Replaces the problem's own title, such as "Sign-in failed". */
+  /** Replaces the code's title, such as "Sign-in failed". */
   title?: string;
 }
 
@@ -11,7 +12,10 @@ interface ProblemMessageProps {
 export function ProblemMessage({ error, title }: ProblemMessageProps) {
   if (!error) return null;
   const problem = isApiError(error)
-    ? { title: error.title, detail: error.detail }
+    ? {
+        title: Object.hasOwn(problemMessages, error.code) ? problemMessages[error.code] : 'Not done',
+        detail: error.detail,
+      }
     : { title: 'Something went wrong', detail: 'An unexpected error occurred. Reload the page and try again.' };
   return (
     <div className="problem" role="alert">
