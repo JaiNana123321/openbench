@@ -39,4 +39,13 @@ interface ExclusiveOccurrenceRepository extends JpaRepository<ExclusiveOccurrenc
             order by o.startsAt, o.id""")
     List<ExclusiveOccurrenceRow> onResource(Long resourceId, Collection<RowState> states, Instant startsAt,
             Instant endsAt);
+
+    /** The rows in these states on these instances that overlap the half-open window, by instance and start. */
+    @Query("""
+            select o from ExclusiveOccurrenceRow o
+            where o.resourceId in :resourceIds and o.state in :states
+              and o.startsAt < :endsAt and o.endsAt > :startsAt
+            order by o.resourceId, o.startsAt, o.id""")
+    List<ExclusiveOccurrenceRow> liveAmong(Collection<Long> resourceIds, Collection<RowState> states, Instant startsAt,
+            Instant endsAt);
 }

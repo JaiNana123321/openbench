@@ -1,5 +1,7 @@
 package edu.cwru.openbench.requests;
 
+import edu.cwru.openbench.allocation.AllocatorRegistry;
+import edu.cwru.openbench.allocation.Bumpable;
 import edu.cwru.openbench.common.NotFoundException;
 import edu.cwru.openbench.common.ResourceId;
 import edu.cwru.openbench.common.ResourceTypeId;
@@ -38,10 +40,12 @@ class LineRules {
 
     private final InventoryQueries inventory;
     private final Clock clock;
+    private final AllocatorRegistry allocators;
 
-    LineRules(InventoryQueries inventory, Clock clock) {
+    LineRules(InventoryQueries inventory, Clock clock, AllocatorRegistry allocators) {
         this.inventory = inventory;
         this.clock = clock;
+        this.allocators = allocators;
     }
 
     /** Checks a line and returns its Resource Type. */
@@ -137,15 +141,15 @@ class LineRules {
     }
 
     /**
-     * Checks a line's Priority mark: offered only for a class whose allocator is {@code Bumpable}
-     * (design Section 4.5). Until Bumps (#9) add that capability, that is the Exclusive class.
+     * Checks a line's Priority mark: offered only for a class whose allocator is {@link Bumpable}
+     * (design Section 4.5), which is the Exclusive class.
      */
     void checkPriority(ResourceTypeId typeId, boolean priority) {
         if (!priority) {
             return;
         }
         ResourceType type = typeOf(typeId);
-        if (type.allocationClass() != AllocationClass.EXCLUSIVE) {
+        if (allocators.capability(type.allocationClass(), Bumpable.class).isEmpty()) {
             throw new RuleViolation("PRIORITY_NOT_OFFERED",
                     "A " + type.name() + " line cannot be marked Priority; Priority is offered for Exclusive lines only.");
         }

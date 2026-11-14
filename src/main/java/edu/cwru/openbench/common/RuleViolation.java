@@ -22,7 +22,8 @@ public final class RuleViolation extends RuntimeException {
             "SUGGESTION_CLOSED",
             "NOT_ALLOCATED",
             "PERIOD_STARTED",
-            "ALLOCATION_CONFLICT");
+            "ALLOCATION_CONFLICT",
+            "INSIDE_BUMP_CUTOFF");
 
     private final String code;
     private final transient Map<String, Object> properties;

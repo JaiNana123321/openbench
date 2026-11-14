@@ -133,7 +133,18 @@ function lineColumns(number: Map<Id, number>): Column<LineDetail>[] {
     },
     { header: 'Window', cell: ({ line }) => whenText(line) },
     { header: 'Required', cell: ({ line }) => (line.required ? 'Required' : 'Optional') },
-    { header: 'State', cell: ({ line }) => <StatusBadge status={line.state} /> },
+    {
+      header: 'State',
+      cell: ({ line, reason }) =>
+        line.state === 'WAITING' && reason === 'BUMPED' ? (
+          <>
+            <StatusBadge status={line.state} />
+            <span className="timeline__note">Bumped by a Priority line</span>
+          </>
+        ) : (
+          <StatusBadge status={line.state} />
+        ),
+    },
     {
       header: 'Assigned',
       cell: ({ line, assignedResources }) =>

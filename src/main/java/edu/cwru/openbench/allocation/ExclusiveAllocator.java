@@ -1,20 +1,27 @@
 package edu.cwru.openbench.allocation;
 
+import edu.cwru.openbench.common.RequestId;
+import edu.cwru.openbench.common.RequestLineId;
 import edu.cwru.openbench.common.ResourceId;
 import edu.cwru.openbench.common.ResourceTypeId;
 import edu.cwru.openbench.common.RuleViolation;
+import edu.cwru.openbench.common.TeamId;
 import edu.cwru.openbench.common.TimeWindow;
 import edu.cwru.openbench.inventory.AllocationClass;
 import edu.cwru.openbench.inventory.InventoryQueries;
 import edu.cwru.openbench.inventory.Resource;
 import edu.cwru.openbench.settings.Period;
 import edu.cwru.openbench.settings.SettingsService;
+import edu.cwru.openbench.settings.TypePricing;
 import java.time.Clock;
 import java.time.Duration;
+import java.time.Instant;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -33,12 +40,19 @@ import org.springframework.transaction.annotation.Transactional;
  *
  * <p>Instances are chosen under the type lock, so {@code exclusive_occurrence_no_overlap} never
  * fires in normal operation; it stops a double allocation by a path that skipped the lock.
+ *
+ * <p>A Priority line that does not fit may Bump standard lines ({@link Bumpable}; SRS
+ * Exclusive.Priority.Bump): the plan is chosen by {@link BumpSearch}, and the Bumped rows are
+ * flushed as BUMPED before the Priority line's rows are written (design Section 5, "Bump flush
+ * order").
  */
 @Component
 @Transactional(propagation = Propagation.MANDATORY)
-class ExclusiveAllocator implements Allocator, Waitlistable {
+class ExclusiveAllocator implements Allocator, Waitlistable, Bumpable {
 
     static final String NO_FREE_INSTANCE = "NO_FREE_INSTANCE";
+
+    static final String INSIDE_BUMP_CUTOFF = "INSIDE_BUMP_CUTOFF";
 
     private final ExclusiveOccurrenceRepository occurrences;
     private final Waitlist waitlist;
@@ -155,11 +169,16 @@ class ExclusiveAllocator implements Allocator, Waitlistable {
     private void insert(LineSnapshot line, RowState state) {
         List<Long> chosen = pick(line)
                 .orElseThrow(() -> new RuleViolation(NO_FREE_INSTANCE, noFreeInstance(line)));
-        occurrences.saveAllAndFlush(chosen.stream()
+        insertOn(line, chosen, state);
+    }
+
+    /** One row per occurrence on each of these instances, flushed at once. */
+    private void insertOn(LineSnapshot line, List<Long> instances, RowState state) {
+        occurrences.saveAllAndFlush(instances.stream()
                 .flatMap(resource -> line.occurrences().stream()
                         .map(window -> new ExclusiveOccurrenceRow(line.lineId().value(), line.teamId().value(),
                                 line.requestId().value(), resource, window.start(), window.end(), state,
-                                line.priority())))
+                                line.priority(), line.submittedAt())))
                 .toList());
     }
 
@@ -169,11 +188,7 @@ class ExclusiveAllocator implements Allocator, Waitlistable {
      * instance is free when no live row on it overlaps any of the line's occurrences.
      */
     private Optional<List<Long>> pick(LineSnapshot line) {
-        List<Long> candidates = inventory.instancesOf(line.typeId()).stream()
-                .map(Resource::id)
-                .filter(id -> line.namedResource().map(id::equals).orElse(true))
-                .map(ResourceId::value)
-                .toList();
+        List<Long> candidates = candidates(line);
         if (candidates.size() < line.quantity()) {
             return Optional.empty();
         }
@@ -190,6 +205,15 @@ class ExclusiveAllocator implements Allocator, Waitlistable {
                         .thenComparing(Comparator.naturalOrder()))
                 .limit(line.quantity())
                 .toList());
+    }
+
+    /** The instances the line may have: the named one, or every instance of its type, by id. */
+    private List<Long> candidates(LineSnapshot line) {
+        return inventory.instancesOf(line.typeId()).stream()
+                .map(Resource::id)
+                .filter(id -> line.namedResource().map(id::equals).orElse(true))
+                .map(ResourceId::value)
+                .toList();
     }
 
     /** ALLOCATED time per instance within the current Period; instances without any are absent. */
@@ -229,5 +253,79 @@ class ExclusiveAllocator implements Allocator, Waitlistable {
         if (line.allocationClass() != AllocationClass.EXCLUSIVE) {
             throw new IllegalArgumentException("Line " + line.lineId().value() + " is not Exclusive.");
         }
+    }
+
+    // ---------------------------------------------------------------- Bumps
+
+    /**
+     * Per instance, the lines whose live rows overlap one of the Priority line's occurrences, each
+     * with its earliest live occurrence on any instance; then {@link BumpSearch} chooses, with the
+     * cutoff at now plus the type's bump cutoff (none when the type has no pricing settings).
+     */
+    @Override
+    public Optional<BumpPlan> planBump(LineSnapshot line) {
+        checkClass(line);
+        if (!line.priority() || pick(line).isPresent()) {
+            return Optional.empty();
+        }
+        List<Long> candidates = candidates(line);
+        Map<Long, Map<Long, ExclusiveOccurrenceRow>> blockingByInstance = new LinkedHashMap<>();
+        candidates.forEach(resource -> blockingByInstance.put(resource, new LinkedHashMap<>()));
+        for (TimeWindow occurrence : line.occurrences()) {
+            for (ExclusiveOccurrenceRow row : occurrences.liveAmong(candidates, RowState.LIVE, occurrence.start(),
+                    occurrence.end())) {
+                blockingByInstance.get(row.resourceId()).putIfAbsent(row.lineId(), row);
+            }
+        }
+        Map<Long, BumpSearch.Blocker> blockers = new HashMap<>();
+        List<BumpSearch.Instance> instances = new ArrayList<>();
+        blockingByInstance.forEach((resource, rows) -> instances.add(new BumpSearch.Instance(resource,
+                rows.keySet().stream().map(lineId -> blockers.computeIfAbsent(lineId, this::blocker)).toList())));
+        Instant cutoff = clock.instant().plus(bumpCutoff(line.typeId()));
+        return BumpSearch.choose(line.quantity(), instances, line.requestId().value(), cutoff)
+                .map(choice -> new BumpPlan(line,
+                        choice.instances().stream().map(ResourceId::new).toList(),
+                        choice.bumped().stream().map(bumped -> new BumpPlan.BumpedLine(
+                                new RequestLineId(bumped.lineId()), new RequestId(bumped.requestId()),
+                                new TeamId(bumped.teamId()), bumped.held())).toList()));
+    }
+
+    /**
+     * Plans again and requires the same plan; then marks every live row of the Bumped lines BUMPED
+     * and flushes before the Priority line's rows are inserted as HELD, since Hibernate would run
+     * the inserts first and meet the old live rows (design Section 5, "Bump flush order").
+     */
+    @Override
+    public void applyBump(BumpPlan plan) {
+        LineSnapshot line = plan.priorityLine();
+        checkClass(line);
+        if (!planBump(line).equals(Optional.of(plan))) {
+            throw new RuleViolation(INSIDE_BUMP_CUTOFF, "The Bump planned for line " + line.lineId().value()
+                    + " no longer holds: a line it would Bump is now inside the bump cutoff or has changed.");
+        }
+        if (!rowsOf(line, RowState.LIVE).isEmpty()) {
+            throw new IllegalStateException("Line " + line.lineId().value() + " is already held or allocated.");
+        }
+        for (BumpPlan.BumpedLine bumped : plan.bumped()) {
+            occurrences.findByLineIdAndStateIn(bumped.line().value(), RowState.LIVE)
+                    .forEach(row -> row.changeState(RowState.BUMPED));
+        }
+        occurrences.flush();
+        insertOn(line, plan.instances().stream().map(ResourceId::value).toList(), RowState.HELD);
+    }
+
+    /** A blocking line as the plan sees it, from all its live rows. */
+    private BumpSearch.Blocker blocker(Long lineId) {
+        List<ExclusiveOccurrenceRow> rows = occurrences.findByLineIdAndStateIn(lineId, RowState.LIVE);
+        ExclusiveOccurrenceRow first = rows.stream()
+                .min(Comparator.comparing((ExclusiveOccurrenceRow row) -> row.window().start()))
+                .orElseThrow();
+        return new BumpSearch.Blocker(lineId, first.requestId(), first.teamId(),
+                rows.stream().anyMatch(ExclusiveOccurrenceRow::priority), first.submittedAt(), first.window().start(),
+                rows.stream().allMatch(row -> row.state() == RowState.HELD));
+    }
+
+    private Duration bumpCutoff(ResourceTypeId type) {
+        return settings.current().pricingOf(type).map(TypePricing::bumpCutoff).orElse(Duration.ZERO);
     }
 }

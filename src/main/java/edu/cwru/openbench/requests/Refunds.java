@@ -1,5 +1,6 @@
 package edu.cwru.openbench.requests;
 
+import edu.cwru.openbench.allocation.AllocatedPart;
 import edu.cwru.openbench.allocation.Released;
 import edu.cwru.openbench.allocation.ReleasedPiece;
 import edu.cwru.openbench.common.Credits;
@@ -102,5 +103,25 @@ class Refunds {
 
     private static String percent(BigDecimal fraction) {
         return fraction.movePointRight(2).stripTrailingZeros().toPlainString() + "%";
+    }
+
+    /**
+     * The share of the line's locked Quote attributable to these allocated parts, in full, with no
+     * Refund Schedule: what a Bump refunds of a partly Released line (SRS Exclusive.Bump.Effect).
+     */
+    Credits shareOf(RequestLineRow line, List<AllocatedPart> parts) {
+        ZoneId zone = clock.getZone();
+        Optional<TypePricing> pricing = settings.current().pricingOf(new ResourceTypeId(line.typeId()));
+        if (pricing.isEmpty() || line.lockedQuote() == null) {
+            return Credits.ZERO;
+        }
+        Credits locked = new Credits(line.lockedQuote());
+        LineSpec whole = new LineSpec(line.amount(), line.occurrences(zone), line.priority(), zone);
+        Credits share = Credits.ZERO;
+        for (AllocatedPart part : parts) {
+            share = share.plus(Pricing.attributable(locked, whole,
+                    new LineSpec(part.amount(), List.of(part.window()), line.priority(), zone), pricing.get()));
+        }
+        return share;
     }
 }
