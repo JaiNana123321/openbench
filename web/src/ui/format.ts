@@ -15,6 +15,16 @@ export function formatCredits(credits: Credits): string {
   return creditsFormat.format(credits);
 }
 
+/** Instance-hours or unit-hours, as the server rounded them, to two decimals: 2680 gives "2,680.00". */
+export function formatHours(hours: number): string {
+  return creditsFormat.format(hours);
+}
+
+/** A percentage the server computed, to two decimals: 0.28 gives "0.28%". */
+export function formatPercent(percent: number): string {
+  return `${creditsFormat.format(percent)}%`;
+}
+
 /** An upper-case value from the API in words: "RESOURCE_OWNER" gives "Resource owner". */
 export function formatEnum(value: string): string {
   const words = value.toLowerCase().replaceAll('_', ' ');

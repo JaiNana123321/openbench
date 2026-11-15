@@ -71,6 +71,15 @@ class AppRoleGrantsTest extends PostgresTest {
         assertThat(privilege(table, "DELETE")).isTrue();
     }
 
+    @ParameterizedTest
+    @ValueSource(strings = {"v_type_hours", "v_waiting", "v_team_credits"})
+    void leavesTheDashboardViewsReadOnly(String view) {
+        assertThat(privilege(view, "SELECT")).isTrue();
+        assertThat(privilege(view, "INSERT")).isFalse();
+        assertThat(privilege(view, "UPDATE")).isFalse();
+        assertThat(privilege(view, "DELETE")).isFalse();
+    }
+
     private boolean privilege(String table, String privilege) {
         return Boolean.TRUE.equals(jdbc.queryForObject(
                 "SELECT has_table_privilege('openbench_app', ?, ?)", Boolean.class, table, privilege));

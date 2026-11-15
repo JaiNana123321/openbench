@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Link } from 'react-router';
+import { Link, useSearchParams } from 'react-router';
 import type { Id, LedgerTransaction, Period, RequestLine, Statement } from '../../api/types';
 import { useCurrentMember } from '../../auth/currentMember';
 import { ErrorPage } from '../../shell/ErrorPage';
@@ -25,8 +25,10 @@ import { useChargedLines, usePeriods, useStatement, useTeams } from './queries';
 export function StatementPage() {
   const me = useCurrentMember();
   const isPlanner = me.roles.includes('PLANNER');
-  const [teamId, setTeamId] = useState<Id>(me.team.id);
-  const [chosenPeriodId, setChosenPeriodId] = useState<Id | undefined>();
+  // The dashboard links here with ?team=&period= for one Team's Statement of one Period.
+  const [search] = useSearchParams();
+  const [teamId, setTeamId] = useState<Id>(Number(search.get('team')) || me.team.id);
+  const [chosenPeriodId, setChosenPeriodId] = useState<Id | undefined>(Number(search.get('period')) || undefined);
   const periods = usePeriods();
   const teams = useTeams(isPlanner);
   const periodId = chosenPeriodId ?? defaultPeriod(periods.data ?? [])?.id;
