@@ -70,4 +70,16 @@ class CandidateRow {
     int position() {
         return position;
     }
+
+    /** Prior selections stay in the approval history after a line is abandoned or reopened. */
+    private boolean retired;
+
+    boolean retired() {
+        return retired;
+    }
+
+    void retire() {
+        retired = true;
+    }
+
 }

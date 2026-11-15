@@ -211,4 +211,10 @@ class RequestsController {
 
     /** The body of POST .../candidates: {@code {"members": [12]}}, the Members selected from the Shortlist. */
     record Candidates(@NotNull List<MemberId> members) {}
+
+    @PostMapping("/{id}/reopen")
+    Request reopen(Actor actor, @PathVariable RequestId id) {
+        return ConcurrencyRetry.once(() -> lifecycle.reopenForEdit(actor, id));
+    }
+
 }

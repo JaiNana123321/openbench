@@ -183,7 +183,10 @@ class MatchedAllocator implements Allocator, ApprovalDriven {
                 "A Matched line gives back no part; a Loan ends early through LoanService.endEarly.");
     }
 
-    /** Cancels every Outstanding or Approved approval of the line; Refused ones stay. Idempotent. */
+    /**
+     * Cancels live approvals and retires the selections, preserving decisions as history. A later
+     * submission may select those People again; Refused approvals keep their state. Idempotent.
+     */
     @Override
     public void cancel(LineSnapshot line) {
         checkClass(line);
@@ -191,6 +194,7 @@ class MatchedAllocator implements Allocator, ApprovalDriven {
             if (LIVE.contains(selected.approval().state())) {
                 selected.approval().cancel();
             }
+            selected.candidate().retire();
         }
         approvals.flush();
     }
@@ -523,9 +527,10 @@ class MatchedAllocator implements Allocator, ApprovalDriven {
         return members.findSummary(member).map(MemberSummary::name).orElse("Member " + member.value());
     }
 
-    /** The line's Candidates with their approvals, in the order selected. */
+    /** The line's current Candidates with their approvals, in the order selected. */
     private List<Selected> selected(LineSnapshot line) {
-        List<CandidateRow> rows = candidates.findByLineIdOrderById(line.lineId().value());
+        List<CandidateRow> rows = candidates.findByLineIdOrderById(line.lineId().value()).stream()
+                .filter(row -> !row.retired()).toList();
         Map<Long, ApprovalRow> byCandidate = approvals.findByCandidateIdIn(rows.stream().map(CandidateRow::id).toList())
                 .stream().collect(Collectors.toMap(ApprovalRow::candidateId, Function.identity()));
         return rows.stream().map(row -> new Selected(row, byCandidate.get(row.id()))).toList();

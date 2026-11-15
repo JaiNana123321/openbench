@@ -205,7 +205,7 @@ public class RequestLifecycleService {
         List<Evaluated> evaluated = rows.stream().map(row -> evaluateOrPlanBump(request, row)).toList();
         lockForBumps(request, evaluated);
 
-        if (evaluated.stream().anyMatch(Evaluated::needsApproval)) {
+        if (request.windowEndsAt() == null && evaluated.stream().anyMatch(Evaluated::needsApproval)) {
             request.startWindow(ObjectionWindow.endsAt(now, current.objectionWindowWorkingDays(), clock.getZone()));
         }
         settleMatchedLines(request, evaluated, actor, now);
@@ -215,7 +215,7 @@ public class RequestLifecycleService {
         boolean everyRequiredLineFits = evaluated.stream().filter(Evaluated::required).allMatch(Evaluated::fits);
         if (everyRequiredLineFits) {
             allocate(request, evaluated, actor, now);
-        } else if (awaitingApproval && !matchedLineShort) {
+        } else if (awaitingApproval && !matchedLineShort && request.windowRunsAt(now)) {
             toPending(request, evaluated, actor, now);
         } else {
             toWaiting(request, evaluated, actor, now);
@@ -1956,5 +1956,40 @@ public class RequestLifecycleService {
         for (RequestLineRow row : freed) {
             onCapacityFreed(row.allocationClass(), new ResourceTypeId(row.typeId()), RequestViews.window(row), now);
         }
+    }
+
+    /**
+     * Returns a Waiting Request to Draft (Draft.Create), abandoning its waitlist place and open
+     * approvals. The original Objection Window survives, so resubmission cannot extend it.
+     * Charged allocations must be released first; cancel has no settlement rule for them.
+     */
+    @PreAuthorize("hasAuthority('MANAGER')")
+    @Transactional
+    public Request reopenForEdit(Actor actor, RequestId id) {
+        RequestRow request = access.lockForOwnTeamChange(actor, id);
+        if (request.state() != RequestState.WAITING) {
+            throw new RuleViolation("WRONG_STATE", "Only a Waiting Request can be reopened for editing.");
+        }
+        List<RequestLineRow> rows = lines.findByRequestIdOrderById(request.id());
+        typeLock.lockTypes(new TreeSet<>(rows.stream().map(row -> new ResourceTypeId(row.typeId())).toList()));
+        if (rows.stream().anyMatch(row -> row.state() == RequestLineState.ALLOCATED
+                || row.state() == RequestLineState.PARTLY_RELEASED || row.state() == RequestLineState.LOANED)) {
+            throw new RuleViolation("WRONG_STATE", "Release its allocated lines first");
+        }
+        Instant now = clock.instant();
+        TeamId team = new TeamId(request.teamId());
+        List<RequestLineRow> freed = rows.stream().filter(row -> row.state() == RequestLineState.HELD).toList();
+        for (RequestLineRow row : rows) {
+            allocatorOf(row).cancel(snapshot(request, row));
+            ledger.releaseCredits(team, new RequestLineId(row.id()));
+            row.unlockQuote();
+            changeLine(request, row, RequestLineState.DRAFT, actor, now, "Reopened for editing; Quote unlocked.");
+        }
+        request.reopen();
+        record(request, null, RequestState.WAITING.name(), RequestState.DRAFT.name(), actor, now,
+                "Reopened for editing; waitlist places and open approvals canceled, Quotes unlocked.");
+        notifyManager(request, "Request " + request.id() + " was reopened for editing and is Draft again.");
+        offerFreedCapacity(freed, now);
+        return views.session().request(request);
     }
 }
