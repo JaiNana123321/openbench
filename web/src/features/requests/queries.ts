@@ -253,3 +253,12 @@ export function useEndLoan() {
       ]),
   });
 }
+
+/** Reopens Waiting as Draft, refreshing the editor, detail, waitlists, and held credits. */
+export function useReopenRequest(requestId: Id) {
+  const invalidate = useInvalidateTransition();
+  return useMutation({
+    mutationFn: () => api.post<RequestRecord>(`/api/requests/${requestId}/reopen`),
+    onSuccess: invalidate,
+  });
+}

@@ -17,7 +17,7 @@ import {
   Table,
   type Column,
 } from '../../ui';
-import { useRequestDetail, useWithdrawRequest } from './queries';
+import { useReopenRequest, useRequestDetail, useWithdrawRequest } from './queries';
 import { ReleaseForm } from './ReleaseForm';
 import { PersonLines } from './PersonLines';
 import { personAsk, personCount, whenText } from './personLineText';
@@ -38,6 +38,8 @@ export function RequestDetailView({ id }: { id: Id }) {
   const me = useCurrentMember();
   const detail = useRequestDetail(id);
   const withdraw = useWithdrawRequest(id);
+  const reopen = useReopenRequest(id);
+  const [confirmEdit, setConfirmEdit] = useState(false);
   const [releasing, setReleasing] = useState<Id | null>(null);
 
   if (detail.isError) return <ErrorPage error={detail.error} />;
@@ -64,6 +66,11 @@ export function RequestDetailView({ id }: { id: Id }) {
         }
         actions={
           <>
+            {request.state === 'WAITING' && ownManager && (
+              <Button variant="secondary" onClick={() => setConfirmEdit(true)}>
+                Edit
+              </Button>
+            )}
             {canWithdraw && (
               <Button variant="danger" busy={withdraw.isPending} onClick={() => withdraw.mutate()}>
                 Withdraw
@@ -76,6 +83,26 @@ export function RequestDetailView({ id }: { id: Id }) {
         }
       />
       <ProblemMessage error={withdraw.error} />
+      {confirmEdit && (
+        <section className="section panel" aria-labelledby="edit-title">
+          <h2 id="edit-title" className="section-title">
+            Edit this Request?
+          </h2>
+          <p>
+            The Request goes back to Draft and loses its waitlist place. Open approvals are canceled and Quotes are
+            recomputed at current prices.
+          </p>
+          <div className="actions">
+            <Button busy={reopen.isPending} onClick={() => reopen.mutate()}>
+              Return to Draft
+            </Button>
+            <Button variant="secondary" disabled={reopen.isPending} onClick={() => setConfirmEdit(false)}>
+              Cancel
+            </Button>
+          </div>
+          <ProblemMessage error={reopen.error} />
+        </section>
+      )}
 
       <section className="section" aria-labelledby="lines-title">
         <h2 id="lines-title" className="section-title">

@@ -279,3 +279,67 @@ describe('RequestPage, the Request detail', () => {
     expect(screen.queryByRole('button', { name: 'Withdraw' })).not.toBeInTheDocument();
   });
 });
+
+
+describe('RequestPage, editing a Waiting Request', () => {
+  it('confirms the lost waitlist place, opens the Draft editor, and shows the new locked Quote after submit', async () => {
+    let state: 'WAITING' | 'DRAFT' | 'ALLOCATED' = 'WAITING';
+    const request = () => ({ ...bobWaiting.request, state, submittedAt: state === 'DRAFT' ? null : bobWaiting.request.submittedAt });
+    const server = serve(aliceDraft, bob, {
+      'GET /api/requests/:id/draft': () => json({
+        ...aliceDraft,
+        request: request(),
+        lines: [{ ...roomLine, requestId: 43, quote: 60 }],
+        requiredSum: 60,
+      }),
+      'GET /api/requests/:id': () => json({
+        ...bobWaiting,
+        request: request(),
+        lines: [{ ...bobWaiting.lines[0], line: { ...bobWaiting.lines[0].line, state, quote: state === 'WAITING' ? 30 : 60 } }],
+      }),
+      'POST /api/requests/:id/reopen': () => {
+        state = 'DRAFT';
+        return json(request());
+      },
+      'POST /api/requests/:id/submit': () => {
+        state = 'ALLOCATED';
+        return json(request());
+      },
+    });
+    const { user } = renderApp('/requests/43');
+    await user.click(await screen.findByRole('button', { name: 'Edit' }));
+    expect(screen.getByText(/goes back to Draft and loses its waitlist place/)).toBeInTheDocument();
+    expect(server.callsTo('POST /api/requests/:id/reopen')).toHaveLength(0);
+    await user.click(screen.getByRole('button', { name: 'Cancel' }));
+    expect(screen.queryByRole('button', { name: 'Return to Draft' })).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Edit' }));
+    await user.click(screen.getByRole('button', { name: 'Return to Draft' }));
+    expect(await screen.findByRole('button', { name: 'Add line' })).toBeInTheDocument();
+    expect(server.callsTo('POST /api/requests/:id/reopen').map((call) => call.path)).toEqual(['/api/requests/43/reopen']);
+    await user.click(screen.getByRole('button', { name: 'Submit' }));
+    expect(await screen.findByRole('columnheader', { name: 'Locked Quote' })).toBeInTheDocument();
+    const rows = within(screen.getByRole('table', { name: 'Lines' })).getAllByRole('row');
+    expect(rows[1]).toHaveTextContent('60.00');
+    expect(screen.queryByRole('button', { name: 'Edit' })).not.toBeInTheDocument();
+  });
+
+  it('shows the reopen refusal beside the confirmation and keeps the detail open', async () => {
+    serve({ ...aliceDraft, request: bobWaiting.request }, bob, {
+      'GET /api/requests/:id': json(bobWaiting),
+      'POST /api/requests/:id/reopen': problem(409, 'WRONG_STATE', 'Release its allocated lines first'),
+    });
+    const { user } = renderApp('/requests/43');
+    await user.click(await screen.findByRole('button', { name: 'Edit' }));
+    await user.click(screen.getByRole('button', { name: 'Return to Draft' }));
+    expect(await screen.findByText('Release its allocated lines first')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'History' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Submit' })).not.toBeInTheDocument();
+  });
+
+  it('offers no Edit to a Planner viewing another Team’s Waiting Request', async () => {
+    serve({ ...aliceDraft, request: bobWaiting.request }, erin, { 'GET /api/requests/:id': json(bobWaiting) });
+    renderApp('/requests/43');
+    await screen.findByRole('heading', { name: 'History' });
+    expect(screen.queryByRole('button', { name: 'Edit' })).not.toBeInTheDocument();
+  });
+});
