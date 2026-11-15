@@ -18,7 +18,7 @@ interface CandidateRepository extends JpaRepository<CandidateRow, Long> {
      */
     @Query("""
             select distinct c.memberId from CandidateRow c, ApprovalRow a
-            where a.candidateId = c.id and c.requestId = :request and c.lineId <> :line and a.state in :states
+            where a.candidateId = c.id and not c.retired and c.requestId = :request and c.lineId <> :line and a.state in :states
               and c.startsOn <= :to and c.endsOn >= :from""")
     List<Long> selectedOnOverlappingLines(Long request, Long line, LocalDate from, LocalDate to,
             Collection<ApprovalState> states);

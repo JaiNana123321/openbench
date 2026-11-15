@@ -77,4 +77,13 @@ class RequestAccess {
     RequestRow lockForSystem(RequestId id) {
         return requests.lockById(id.value()).orElseThrow(() -> notFound(id));
     }
+
+    /** A write scoped strictly to the caller's Team, including for a Manager with Planner roles. */
+    RequestRow lockForOwnTeamChange(Actor actor, RequestId id) {
+        requests.findTeamIdById(id.value())
+                .filter(team -> team == actor.teamId().value())
+                .orElseThrow(() -> notFound(id));
+        return lockForChange(actor, id);
+    }
+
 }

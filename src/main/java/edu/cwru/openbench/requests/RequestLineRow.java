@@ -232,4 +232,11 @@ class RequestLineRow {
     void markBumped() {
         this.bumped = true;
     }
+
+    /** A new Draft loses both its locked Quote and its old Bumped waitlist precedence. */
+    void unlockQuote() {
+        lockedQuote = null;
+        bumped = false;
+    }
+
 }

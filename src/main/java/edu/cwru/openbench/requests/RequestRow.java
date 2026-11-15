@@ -109,4 +109,11 @@ class RequestRow {
     boolean windowRunsAt(Instant now) {
         return windowEndsAt != null && now.isBefore(windowEndsAt);
     }
+
+    /** Waiting to Draft: submission time is cleared, but the Objection Window never restarts. */
+    void reopen() {
+        moveTo(RequestState.DRAFT);
+        submittedAt = null;
+    }
+
 }
