@@ -37,14 +37,19 @@ describe('Skill list administration', () => {
 
   it('shows the refusal of a name already on the list', async () => {
     serve({
-      'POST /api/admin/skills': problem(422, 'SKILL_NAME_TAKEN', 'A skill named java is already on the list.'),
+      'POST /api/admin/skills': problem(422, 'SKILL_NAME_TAKEN', 'A skill named java is already on the list.', {
+        title: 'Unprocessable Entity',
+      }),
     });
     const { user } = renderApp('/admin/skills');
 
     await user.type(await screen.findByLabelText('Name'), 'java');
     await user.click(screen.getByRole('button', { name: 'Add skill' }));
 
-    expect(await screen.findByRole('alert')).toHaveTextContent('A skill named java is already on the list.');
+    const refusal = await screen.findByRole('alert');
+    expect(refusal).toHaveTextContent('Name already taken');
+    expect(refusal).toHaveTextContent('A skill named java is already on the list.');
+    expect(refusal).not.toHaveTextContent('Unprocessable Entity');
   });
 
   it('retires a skill', async () => {
