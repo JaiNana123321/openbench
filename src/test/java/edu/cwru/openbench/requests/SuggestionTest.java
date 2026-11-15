@@ -28,6 +28,7 @@ class SuggestionTest extends PostgresTest {
     @Autowired Clock clock;
     @Autowired LedgerService ledger;
     private long team;
+    private long period;
     private long member;
     private long manager;
     private long room;
@@ -61,7 +62,7 @@ class SuggestionTest extends PostgresTest {
                 INSERT INTO price_band (type_id, weekdays, start_time, end_time, multiplier)
                 VALUES (?, '12345', '09:00', '17:00', 1.5)
                 """, room);
-        long period = testData().periodContaining(LocalDate.now(clock));
+        period = testData().periodContaining(LocalDate.now(clock));
         ledger.postGrant(new TeamId(team), new PeriodId(period), Credits.of("5000.00"), "Test Grant", null);
         LocalDate d = LocalDate.now(clock).plusDays(14).with(TemporalAdjusters.nextOrSame(DayOfWeek.WEDNESDAY));
         start = d.atTime(10, 0).atZone(clock.getZone()).toInstant();
@@ -87,6 +88,9 @@ class SuggestionTest extends PostgresTest {
                 .andExpect(jsonPath("$.content[0].memberId").value(member));
         mvc.perform(get("/api/ledger/account").with(signedInAs(alice)))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.available").value(5000.00));
+        mvc.perform(get("/api/ledger/statements/{team}/{period}", team, period).with(signedInAs(alice)))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.account.available").value(5000.00))
+                .andExpect(jsonPath("$.transactions.length()").value(before));
         assertThat(transactions()).isEqualTo(before);
         assertThat(jdbc.queryForObject("SELECT count(*) FROM request WHERE team_id = ?", Long.class, team)).isZero();
         assertThat(jdbc.queryForObject("SELECT count(*) FROM held_credit WHERE team_id = ?", Long.class, team)).isZero();
@@ -133,6 +137,8 @@ class SuggestionTest extends PostgresTest {
                 .andExpect(jsonPath("$.content[0].state").value("OPEN"))
                 .andExpect(jsonPath("$.content[1].state").value("ACCEPTED"))
                 .andExpect(jsonPath("$.content[2].state").value("ACCEPTED"));
+        mvc.perform(delete("/api/requests/{id}/lines/{line}", draft, line).with(signedInAs(alice)).with(xsrf()))
+                .andExpect(status().isConflict()).andExpect(jsonPath("$.code").value("WRONG_STATE"));
         assertThat(jdbc.queryForObject("SELECT locked_quote FROM request_line WHERE id = ?", Object.class, line)).isNull();
     }
 

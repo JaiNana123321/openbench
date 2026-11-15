@@ -35,10 +35,11 @@ public class SuggestionService {
     private final InventoryQueries inventory;
     private final Notifier notifier;
     private final Clock clock;
+    private final RequestRepository requestRows;
 
     SuggestionService(SuggestionRepository suggestions, RequestLineRepository lines, RequestService requests,
             RequestAccess access, LineRules rules, PersonLineRules people, MemberService members,
-            InventoryQueries inventory, Notifier notifier, Clock clock) {
+            InventoryQueries inventory, Notifier notifier, Clock clock, RequestRepository requestRows) {
         this.suggestions = suggestions;
         this.lines = lines;
         this.requests = requests;
@@ -49,6 +50,7 @@ public class SuggestionService {
         this.inventory = inventory;
         this.notifier = notifier;
         this.clock = clock;
+        this.requestRows = requestRows;
     }
 
     @PreAuthorize("hasAuthority('MEMBER')")
@@ -149,8 +151,8 @@ public class SuggestionService {
 
     private void ownDraft(Actor actor, RequestId draft) {
         // Planner visibility must not reveal another Team's Draft to a Manager deciding a Suggestion.
-        RequestRow request = access.visible(actor, draft);
-        if (!request.teamId().equals(actor.teamId().value())) {
+        Long team = requestRows.findTeamIdById(draft.value()).orElseThrow(() -> RequestAccess.notFound(draft));
+        if (!team.equals(actor.teamId().value())) {
             throw RequestAccess.notFound(draft);
         }
         access.editableDraft(actor, draft);

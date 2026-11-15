@@ -56,11 +56,13 @@ public class RequestService {
     private final LedgerService ledger;
     private final Clock clock;
     private final PersonLineRules personRules;
+    private final SuggestionRepository suggestions;
 
     RequestService(RequestRepository requests, RequestLineRepository lines, RequestEventRepository events,
             RequestAccess access, LineRules rules, RequestViews views, LedgerService ledger, Clock clock,
-            PersonLineRules personRules) {
+            PersonLineRules personRules, SuggestionRepository suggestions) {
         this.personRules = personRules;
+        this.suggestions = suggestions;
         this.requests = requests;
         this.lines = lines;
         this.events = events;
@@ -119,7 +121,11 @@ public class RequestService {
     @Transactional
     public void removeLine(Actor actor, RequestId id, RequestLineId lineId) {
         RequestRow request = access.editableDraft(actor, id);
-        lines.delete(lineOf(request, lineId));
+        RequestLineRow line = lineOf(request, lineId);
+        if (suggestions.existsByAcceptedLineId(line.id())) {
+            throw new RuleViolation("WRONG_STATE", "This line keeps accepted Suggestions; edit it instead of removing it.");
+        }
+        lines.delete(line);
     }
 
     /**

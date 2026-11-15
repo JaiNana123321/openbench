@@ -10,6 +10,8 @@ import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 
 interface SuggestionRepository extends JpaRepository<SuggestionRow, Long> {
+    boolean existsByAcceptedLineId(Long lineId);
+
     Page<SuggestionRow> findByMemberIdOrderByCreatedAtDescIdDesc(Long member, Pageable page);
 
     @Query("select s from SuggestionRow s where s.teamId = :team and s.managerId = :manager "
