@@ -19,3 +19,4 @@ export {
   toPickerValue,
 } from './format';
 export { formatDay, formatDayRange, todayInCompanyZone } from './format';
+export { formatHours, formatPercent } from './format';

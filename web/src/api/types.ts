@@ -750,3 +750,71 @@ export interface LedgerTransaction {
   /** The original Earning that an Earning correction (after an early Loan end) corrects; null otherwise. */
   corrects?: Id | null;
 }
+
+// ---------------------------------------------------------------- Dashboard
+
+/**
+ * GET /api/dashboard/utilization?periodId=: one Exclusive or Metered type over a Period (the
+ * current one by default). Available hours are capacity x 24 x the Period's days. Hours are
+ * rounded to 2 decimals and the percentage to 2 decimals of a percent.
+ */
+export interface TypeUtilization {
+  type: Id;
+  name: string;
+  allocationClass: AllocationClass;
+  period: Id;
+  capacity: number;
+  availableHours: number;
+  allocatedHours: number;
+  idleHours: number;
+  utilizationPercent: number;
+}
+
+/** GET /api/dashboard/idle?days=7: one type's idle hours from now over the coming days. */
+export interface TypeIdle {
+  type: Id;
+  name: string;
+  allocationClass: AllocationClass;
+  days: number;
+  from: Instant;
+  to: Instant;
+  capacity: number;
+  availableHours: number;
+  allocatedHours: number;
+  idleHours: number;
+}
+
+/** GET /api/dashboard/waiting: the lines waiting on one type now. */
+export interface TypeWaiting {
+  type: Id;
+  name: string;
+  allocationClass: AllocationClass;
+  waiting: number;
+}
+
+/**
+ * GET /api/dashboard/credits?periodId=: one Team's credits for a Period. Balance and Available are
+ * the Account now, or the Period's closing figures once it has `ended`.
+ */
+export interface TeamCredits {
+  team: Id;
+  teamName: string;
+  period: Id;
+  grants: Credits;
+  charges: Credits;
+  earnings: Credits;
+  refunds: Credits;
+  expired: Credits;
+  balance: Credits;
+  available: Credits;
+  ended: boolean;
+}
+
+/** GET /api/dashboard/person-days?periodId=: one Team's person-days lent and borrowed in a Period. */
+export interface PersonDays {
+  team: Id;
+  teamName: string;
+  period: Id;
+  lent: number;
+  borrowed: number;
+}

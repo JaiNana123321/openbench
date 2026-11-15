@@ -4,7 +4,9 @@ import {
   formatDay,
   formatDayRange,
   formatEnum,
+  formatHours,
   formatInstant,
+  formatPercent,
   formatWindow,
   toInstant,
   todayInCompanyZone,
@@ -17,6 +19,15 @@ describe('formatCredits', () => {
     expect(formatCredits(1120)).toBe('1,120.00');
     expect(formatCredits(5000)).toBe('5,000.00');
     expect(formatCredits(-12.5)).toBe('-12.50');
+  });
+});
+
+describe('formatHours and formatPercent', () => {
+  it('show two decimals, the percentage with its sign', () => {
+    expect(formatHours(2680)).toBe('2,680.00');
+    expect(formatHours(332)).toBe('332.00');
+    expect(formatPercent(0.28)).toBe('0.28%');
+    expect(formatPercent(41.67)).toBe('41.67%');
   });
 });
 
