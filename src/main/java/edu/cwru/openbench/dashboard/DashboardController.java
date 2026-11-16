@@ -54,4 +54,9 @@ class DashboardController {
             @RequestParam(required = false) TeamId teamId) {
         return dashboard.personDays(actor, periodId, teamId);
     }
+
+    @GetMapping("/usage")
+    List<TeamTypeUsage> usage(Actor actor, @RequestParam(required = false) PeriodId periodId) {
+        return dashboard.usage(actor, periodId);
+    }
 }
