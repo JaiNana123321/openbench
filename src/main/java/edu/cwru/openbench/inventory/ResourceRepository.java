@@ -21,4 +21,8 @@ interface ResourceRepository extends JpaRepository<ResourceRow, Long>, JpaSpecif
             select count(r) > 0 from ResourceRow r
             where r.typeId = :typeId and lower(r.name) = lower(:name) and r.id <> :exceptId""")
     boolean nameTaken(Long typeId, String name, long exceptId);
+
+    /** The types of the Member's unretired Resources. */
+    @Query("select distinct r.typeId from ResourceRow r where r.ownerMemberId = :ownerId and r.retiredAt is null")
+    List<Long> typesOwnedBy(Long ownerId);
 }
