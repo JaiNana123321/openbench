@@ -839,3 +839,43 @@ export interface Suggestion {
   reason: string | null;
   createdAt: Instant;
 }
+
+// ---------------------------------------------------------------- Metered usage
+
+/**
+ * GET /api/usage?periodId=: one Allocated Metered allocation of a type the Resource Owner owns,
+ * overlapping the Period. Requested unit-hours are units x the window's hours. `usedUnits`,
+ * `recordedAt`, and `recordedBy` (a name) are null until usage is recorded; `recordable` says
+ * whether the Period containing it has ended. PUT /api/usage/{id} with `{ usedUnits }` records it.
+ */
+export interface MeteredUsage {
+  id: Id;
+  team: TeamRef;
+  request: Id;
+  type: Id;
+  typeName: string;
+  units: number;
+  window: TimeWindow;
+  requestedUnitHours: number;
+  usedUnits: number | null;
+  recordedAt: Instant | null;
+  recordedBy: string | null;
+  recordable: boolean;
+}
+
+/**
+ * GET /api/dashboard/usage?periodId=: requested against used unit-hours of one Team on one Metered
+ * type, over the allocations whose usage is recorded, clipped to the Period; `unrecorded` counts the
+ * others.
+ */
+export interface TeamTypeUsage {
+  team: Id;
+  teamName: string;
+  type: Id;
+  typeName: string;
+  period: Id;
+  requestedUnitHours: number;
+  usedUnitHours: number;
+  recorded: number;
+  unrecorded: number;
+}

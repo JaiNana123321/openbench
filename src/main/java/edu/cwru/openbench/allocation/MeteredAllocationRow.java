@@ -93,4 +93,37 @@ class MeteredAllocationRow {
     void keepUnits(int newUnits) {
         this.units = newUnits;
     }
+
+    // ---------------------------------------------------------------- Actual usage (issue #24)
+
+    /** The units recorded as consumed, null until a Resource Owner records them; never read by the hourly check. */
+    private Integer usedUnits;
+
+    private Instant usageRecordedAt;
+
+    private Long usageRecordedBy;
+
+    Long teamId() {
+        return teamId;
+    }
+
+    Long requestId() {
+        return requestId;
+    }
+
+    Long typeId() {
+        return typeId;
+    }
+
+    Integer usedUnits() {
+        return usedUnits;
+    }
+
+    Instant usageRecordedAt() {
+        return usageRecordedAt;
+    }
+
+    Long usageRecordedBy() {
+        return usageRecordedBy;
+    }
 }

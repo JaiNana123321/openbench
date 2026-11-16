@@ -327,4 +327,27 @@ public final class TestData {
         }
         return ids;
     }
+
+    // ---------------------------------------------------------------- Allocation: Metered usage (issue #24)
+
+    /**
+     * An ALLOCATED Metered allocation of the Team for {@code units} of the type over the window, on a
+     * Metered line of a new submitted Request, as the lifecycle leaves one; the window may lie in the
+     * past. Returns the {@code metered_allocation} id.
+     */
+    public long meteredAllocation(long teamId, long typeId, int units, Instant startsAt, Instant endsAt) {
+        long request = submittedRequest(teamId, startsAt);
+        long line = meteredLine(request, typeId, units, startsAt, endsAt);
+        return jdbc.queryForObject("""
+                INSERT INTO metered_allocation (line_id, team_id, request_id, type_id, units, starts_at, ends_at, state)
+                VALUES (?, ?, ?, ?, ?, ?, ?, 'ALLOCATED') RETURNING id""",
+                Long.class, line, teamId, request, typeId, units, utc(startsAt), utc(endsAt));
+    }
+
+    /** The allocation's usage, as if the Member had recorded {@code usedUnits} now. */
+    public void usedUnits(long allocationId, int usedUnits, long recordedBy) {
+        jdbc.update("""
+                UPDATE metered_allocation SET used_units = ?, usage_recorded_at = now(), usage_recorded_by = ?
+                WHERE id = ?""", usedUnits, recordedBy, allocationId);
+    }
 }

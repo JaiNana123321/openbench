@@ -1,6 +1,15 @@
 import { useState } from 'react';
 import { Link } from 'react-router';
-import type { Id, Period, PersonDays, TeamCredits, TypeIdle, TypeUtilization, TypeWaiting } from '../../api/types';
+import type {
+  Id,
+  Period,
+  PersonDays,
+  TeamCredits,
+  TeamTypeUsage,
+  TypeIdle,
+  TypeUtilization,
+  TypeWaiting,
+} from '../../api/types';
 import { useCurrentMember } from '../../auth/currentMember';
 import { ErrorPage } from '../../shell/ErrorPage';
 import {
@@ -13,11 +22,20 @@ import {
   formatPercent,
   Loading,
   PageHeader,
+  ProblemMessage,
   Table,
   todayInCompanyZone,
   type Column,
 } from '../../ui';
-import { useIdle, usePeriods, usePersonDays, useTeamCredits, useUtilization, useWaiting } from './queries';
+import {
+  useIdle,
+  usePeriods,
+  usePersonDays,
+  useTeamCredits,
+  useUsageComparison,
+  useUtilization,
+  useWaiting,
+} from './queries';
 
 /** One row of the utilization table: a type's Period figures with its idle week and waiting lines. */
 interface TypeRow {
@@ -36,8 +54,9 @@ interface TeamRow {
  * The showback dashboard. Utilization, idle capacity, and waiting lines per type for a Manager,
  * a Resource Owner (their types only), and the Capacity Planner; Team credits and person-days for
  * a Manager (their Team) and the Capacity Planner (every Team). The server applies the scope; the
- * page only leaves out the credits a Resource Owner may not ask for. The Period defaults to the
- * current one, and any past Period can be chosen.
+ * page only leaves out the credits a Resource Owner may not ask for. Requested against used
+ * unit-hours per Team and Metered type, for every role, in the server's scope. The Period defaults
+ * to the current one, and any past Period can be chosen.
  */
 export function DashboardPage() {
   const me = useCurrentMember();
@@ -51,6 +70,7 @@ export function DashboardPage() {
   const waiting = useWaiting();
   const credits = useTeamCredits(periodId, seesCredits);
   const personDays = usePersonDays(periodId, seesCredits);
+  const usage = useUsageComparison(periodId);
 
   for (const query of [periods, utilization, idle, waiting, credits, personDays]) {
     if (query.isError) return <ErrorPage error={query.error} />;
@@ -113,9 +133,37 @@ export function DashboardPage() {
           )}
         </section>
       )}
+
+      <section className="section" aria-labelledby="usage-title">
+        <h2 id="usage-title" className="section-title">
+          Requested vs used
+        </h2>
+        {usage.isError ? (
+          <ProblemMessage error={usage.error} />
+        ) : usage.isPending ? (
+          periodId !== undefined && <Loading />
+        ) : (
+          <Table
+            label="Requested vs used"
+            columns={usageColumns}
+            rows={usage.data}
+            rowKey={(row) => `${row.team}-${row.type}`}
+            empty={<EmptyState title="No Metered allocations in your view for this Period." />}
+          />
+        )}
+      </section>
     </>
   );
 }
+
+const usageColumns: Column<TeamTypeUsage>[] = [
+  { header: 'Team', cell: (row) => row.teamName },
+  { header: 'Metered type', cell: (row) => row.typeName },
+  { header: 'Requested unit-hours', cell: (row) => formatHours(row.requestedUnitHours), numeric: true },
+  { header: 'Used unit-hours', cell: (row) => formatHours(row.usedUnitHours), numeric: true },
+  { header: 'Allocations recorded', cell: (row) => row.recorded, numeric: true },
+  { header: 'Not yet recorded', cell: (row) => row.unrecorded, numeric: true },
+];
 
 const typeColumns: Column<TypeRow>[] = [
   { header: 'Type', cell: (row) => row.utilization.name },

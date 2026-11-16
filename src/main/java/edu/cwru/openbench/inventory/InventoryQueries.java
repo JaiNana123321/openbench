@@ -1,5 +1,6 @@
 package edu.cwru.openbench.inventory;
 
+import edu.cwru.openbench.common.MemberId;
 import edu.cwru.openbench.common.NotFoundException;
 import edu.cwru.openbench.common.ResourceId;
 import edu.cwru.openbench.common.ResourceTypeId;
@@ -8,6 +9,8 @@ import jakarta.persistence.criteria.Root;
 import jakarta.persistence.criteria.Subquery;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
+import java.util.stream.Collectors;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
@@ -94,6 +97,11 @@ public class InventoryQueries {
     public Resource resource(ResourceId id) {
         return views.resource(resources.findById(id.value())
                 .orElseThrow(() -> new NotFoundException("Resource " + id.value() + " does not exist.")));
+    }
+
+    /** (Unscoped) The types of which the Member owns at least one in-service (unretired) Resource. */
+    public Set<ResourceTypeId> typesOwnedBy(MemberId owner) {
+        return resources.typesOwnedBy(owner.value()).stream().map(ResourceTypeId::new).collect(Collectors.toSet());
     }
 
     static NotFoundException typeNotFound(ResourceTypeId id) {

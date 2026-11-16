@@ -1,6 +1,15 @@
 import { useQuery } from '@tanstack/react-query';
 import { api } from '../../api/client';
-import type { Id, Period, PersonDays, TeamCredits, TypeIdle, TypeUtilization, TypeWaiting } from '../../api/types';
+import type {
+  Id,
+  Period,
+  PersonDays,
+  TeamCredits,
+  TeamTypeUsage,
+  TypeIdle,
+  TypeUtilization,
+  TypeWaiting,
+} from '../../api/types';
 
 // Query keys start with the API group's noun: ['dashboard', 'utilization', periodId], and so on.
 // Nothing is cached across visits beyond TanStack Query's default: the figures are read at request
@@ -45,6 +54,15 @@ export function useTeamCredits(periodId: Id | undefined, enabled: boolean) {
     queryKey: ['dashboard', 'credits', periodId],
     queryFn: () => api.get<TeamCredits[]>('/api/dashboard/credits', { periodId }),
     enabled: enabled && periodId !== undefined,
+  });
+}
+
+/** Requested against used unit-hours per Team and Metered type in scope for the Period. */
+export function useUsageComparison(periodId: Id | undefined) {
+  return useQuery({
+    queryKey: ['dashboard', 'usage', periodId],
+    queryFn: () => api.get<TeamTypeUsage[]>('/api/dashboard/usage', { periodId }),
+    enabled: periodId !== undefined,
   });
 }
 

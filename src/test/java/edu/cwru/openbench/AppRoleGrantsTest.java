@@ -72,7 +72,7 @@ class AppRoleGrantsTest extends PostgresTest {
     }
 
     @ParameterizedTest
-    @ValueSource(strings = {"v_type_hours", "v_waiting", "v_team_credits"})
+    @ValueSource(strings = {"v_type_hours", "v_waiting", "v_team_credits", "v_metered_usage"})
     void leavesTheDashboardViewsReadOnly(String view) {
         assertThat(privilege(view, "SELECT")).isTrue();
         assertThat(privilege(view, "INSERT")).isFalse();

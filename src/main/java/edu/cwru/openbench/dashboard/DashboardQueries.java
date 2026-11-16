@@ -12,6 +12,7 @@ import edu.cwru.openbench.dashboard.DashboardViews.CreditsRow;
 import edu.cwru.openbench.dashboard.DashboardViews.TeamScope;
 import edu.cwru.openbench.dashboard.DashboardViews.TypeHours;
 import edu.cwru.openbench.dashboard.DashboardViews.TypeScope;
+import edu.cwru.openbench.dashboard.DashboardViews.UsageScope;
 import edu.cwru.openbench.inventory.AllocationClass;
 import edu.cwru.openbench.inventory.InventoryQueries;
 import edu.cwru.openbench.settings.Period;
@@ -157,6 +158,29 @@ public class DashboardQueries {
                         row.personDaysLent(), row.personDaysBorrowed()))
                 .toList();
         return foundTeam(rows, team);
+    }
+
+    /**
+     * GET /api/dashboard/usage: requested against used unit-hours per Team and Metered type over the
+     * Period (the current one if {@code null}), counting only allocations whose usage is recorded,
+     * with the number still unrecorded. Scope as for credits, joined by the Resource Owner's: the
+     * Capacity Planner sees every Team, a Manager their own Team, a Resource Owner the types of the
+     * Resources they own.
+     *
+     * @throws NotFoundException for an unknown Period
+     */
+    @PreAuthorize("hasAnyAuthority('MANAGER', 'RESOURCE_OWNER', 'PLANNER')")
+    public List<TeamTypeUsage> usage(Actor actor, PeriodId periodId) {
+        Period period = periodId == null ? settings.currentPeriod() : settings.period(periodId);
+        Instant from = period.startsOn().atStartOfDay(clock.getZone()).toInstant();
+        Instant to = period.endsOn().plusDays(1).atStartOfDay(clock.getZone()).toInstant();
+        UsageScope scope = new UsageScope(actor.has(Role.PLANNER), actor.has(Role.MANAGER), actor.teamId(),
+                actor.has(Role.RESOURCE_OWNER), actor.memberId());
+        return views.usage(scope, from, to).stream()
+                .map(row -> new TeamTypeUsage(new TeamId(row.teamId()), row.teamName(),
+                        new ResourceTypeId(row.typeId()), row.typeName(), period.id(),
+                        hours(row.requestedHours()), hours(row.usedHours()), row.recorded(), row.unrecorded()))
+                .toList();
     }
 
     private static TeamCredits credits(CreditsRow row, boolean ended) {
