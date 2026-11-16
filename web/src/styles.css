@@ -957,3 +957,16 @@ textarea:focus {
   color: var(--ink-muted);
   font-style: italic;
 }
+
+/* ------------------------------------------------------------------ Metered usage (Resource Owner) */
+
+.usage-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  align-items: center;
+}
+
+.usage-form input {
+  width: 72px;
+}
