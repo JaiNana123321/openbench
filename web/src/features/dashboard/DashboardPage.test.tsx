@@ -1,8 +1,17 @@
 import { screen, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { Period, PersonDays, Statement, TeamCredits, TypeIdle, TypeUtilization, TypeWaiting } from '../../api/types';
+import type {
+  Period,
+  PersonDays,
+  Statement,
+  TeamCredits,
+  TeamTypeUsage,
+  TypeIdle,
+  TypeUtilization,
+  TypeWaiting,
+} from '../../api/types';
 import { alice, ben, dave, erin } from '../../test/members';
-import { json, mockApi, session } from '../../test/mockApi';
+import { json, mockApi, problem, session } from '../../test/mockApi';
 import { renderApp } from '../../test/renderApp';
 
 const october: Period = { id: 10, startsOn: '2026-10-01', endsOn: '2026-10-31', previous: null };
@@ -99,6 +108,20 @@ const dashboardApi = {
   'GET /api/dashboard/waiting': json(waiting),
   'GET /api/dashboard/credits': json(credits),
   'GET /api/dashboard/person-days': json(personDays),
+  'GET /api/dashboard/usage': json([]),
+};
+
+/** dsh-usage: Platform requested 4 GPU units for E 10:00 to 12:00 and 3 were recorded as used. */
+const gpuUsage: TeamTypeUsage = {
+  team: 1,
+  teamName: 'Platform',
+  type: 3,
+  typeName: 'GPU',
+  period: 10,
+  requestedUnitHours: 8,
+  usedUnitHours: 6,
+  recorded: 1,
+  unrecorded: 0,
 };
 
 function rowOf(table: string, name: string): HTMLElement {
@@ -222,6 +245,38 @@ describe('DashboardPage', () => {
     expect(server.callsTo('GET /api/dashboard/credits')).toHaveLength(0);
     expect(server.callsTo('GET /api/dashboard/person-days')).toHaveLength(0);
     expect(screen.getByRole('link', { name: 'Dashboard' })).toBeInTheDocument();
+  });
+
+  it('compares requested with used unit-hours per Team and Metered type for the chosen Period (dsh-usage)', async () => {
+    const server = mockApi({
+      'GET /api/me': session(erin),
+      ...dashboardApi,
+      'GET /api/dashboard/usage': (request) => json(request.query.get('periodId') === '10' ? [gpuUsage] : []),
+    });
+    const { user } = renderApp('/dashboard');
+
+    expect(await screen.findByText('No Metered allocations in your view for this Period.')).toBeInTheDocument();
+    await user.selectOptions(screen.getByLabelText('Period'), 'Oct 1, 2026 to Oct 31, 2026');
+
+    await screen.findByRole('table', { name: 'Requested vs used' });
+    const cells = within(rowOf('Requested vs used', 'Platform')).getAllByRole('cell');
+    expect(cells.map((cell) => cell.textContent)).toEqual(['Platform', 'GPU', '8.00', '6.00', '1', '0']);
+    expect(server.callsTo('GET /api/dashboard/usage').map((call) => call.query.get('periodId'))).toEqual([
+      '11',
+      '10',
+    ]);
+  });
+
+  it('shows a refused comparison in its own section and keeps the rest of the dashboard', async () => {
+    mockApi({
+      'GET /api/me': session(alice),
+      ...dashboardApi,
+      'GET /api/dashboard/usage': problem(403, 'FORBIDDEN', 'You may not see this.'),
+    });
+    renderApp('/dashboard');
+
+    expect(await screen.findByText('You may not see this.')).toBeInTheDocument();
+    expect(screen.getByRole('table', { name: 'Utilization' })).toBeInTheDocument();
   });
 
   it('says so when no type is in view', async () => {
