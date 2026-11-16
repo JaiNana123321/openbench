@@ -13,6 +13,9 @@ import java.math.BigDecimal;
 import java.sql.Timestamp;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.OffsetDateTime;
+import org.hamcrest.CustomTypeSafeMatcher;
+import org.hamcrest.Matcher;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
@@ -155,7 +158,7 @@ class ReopenRequestTest extends MatchedWorldTest {
         lifecycle.onWindowLapse(new RequestId(request));
         int transactions = transactionsOf(platform);
         reopen(as(alice), request).andExpect(status().isOk())
-                .andExpect(jsonPath("$.windowEndsAt").value(deadline.atZone(clock.getZone()).toOffsetDateTime().toString()));
+                .andExpect(jsonPath("$.windowEndsAt").value(sameInstant(deadline)));
         assertThat(jdbc.queryForList("SELECT a.state FROM approval a JOIN candidate c ON c.id = a.candidate_id WHERE c.line_id = ?",
                 String.class, people)).containsExactly("CANCELED", "CANCELED");
         assertThat(jdbc.queryForObject("SELECT count(*) FROM held_credit WHERE line_id = ?", Integer.class, roomLine)).isZero();
@@ -165,7 +168,7 @@ class ReopenRequestTest extends MatchedWorldTest {
         assertThat(jdbc.queryForObject("SELECT decided_at FROM approval WHERE id = ?", Timestamp.class, approval))
                 .isNotNull();
         submit(as(alice), request).andExpect(status().isOk()).andExpect(jsonPath("$.state").value("WAITING"))
-                .andExpect(jsonPath("$.windowEndsAt").value(deadline.atZone(clock.getZone()).toOffsetDateTime().toString()));
+                .andExpect(jsonPath("$.windowEndsAt").value(sameInstant(deadline)));
         select(as(alice), request, people, world.rita().id(), world.dave().id()).andExpect(status().isOk());
         assertThat(jdbc.queryForObject("SELECT count(*) FROM approval a JOIN candidate c ON c.id = a.candidate_id WHERE c.line_id = ? AND a.state = 'OUTSTANDING' AND a.escalated",
                 Integer.class, people)).isEqualTo(2);
@@ -238,5 +241,18 @@ class ReopenRequestTest extends MatchedWorldTest {
 
     private int transactionsOf(long team) {
         return jdbc.queryForObject("SELECT count(*) FROM transaction WHERE team_id = ?", Integer.class, team);
+    }
+
+    /**
+     * A date-time in the JSON naming this instant. Jackson drops trailing zeros of the fraction that
+     * {@code OffsetDateTime.toString()} keeps, so comparing strings fails one run in ten (#26).
+     */
+    private static Matcher<String> sameInstant(Instant expected) {
+        return new CustomTypeSafeMatcher<>("a date-time at " + expected) {
+            @Override
+            protected boolean matchesSafely(String actual) {
+                return OffsetDateTime.parse(actual).toInstant().equals(expected);
+            }
+        };
     }
 }
