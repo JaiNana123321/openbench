@@ -145,4 +145,19 @@ public sealed interface SettingChange {
             return "tiers." + type.value();
         }
     }
+
+    /**
+     * {@code surcharge.{typeId}}: the demand surcharge rate of an Exclusive or Metered type, 0 or
+     * more; 0 turns the surcharge off.
+     */
+    record Surcharge(ResourceTypeId type, BigDecimal rate) implements SettingChange {
+        public Surcharge {
+            Objects.requireNonNull(type, "type");
+            Objects.requireNonNull(rate, "rate");
+        }
+
+        public String key() {
+            return "surcharge." + type.value();
+        }
+    }
 }

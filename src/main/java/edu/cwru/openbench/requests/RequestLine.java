@@ -4,6 +4,7 @@ import edu.cwru.openbench.common.Credits;
 import edu.cwru.openbench.common.DateRange;
 import edu.cwru.openbench.common.MemberId;
 import edu.cwru.openbench.members.Skill;
+import java.math.BigDecimal;
 import java.util.List;
 import edu.cwru.openbench.common.RequestId;
 import edu.cwru.openbench.common.RequestLineId;
@@ -23,7 +24,9 @@ import edu.cwru.openbench.inventory.AllocationClass;
  * {@code recurrence} is null unless an Exclusive line recurs weekly, and the Quote then covers every
  * occurrence. {@code priority} is the Priority mark, offered on Exclusive lines only; the Quote
  * then carries the priority premium. {@code tier} and {@code tierName} are a Metered line's service
- * tier, null for none; the Quote then carries the tier's premium.
+ * tier, null for none; the Quote then carries the tier's premium. {@code surcharge} is the demand
+ * surcharge multiplier in a Draft line's current Quote (SRS Ledger.Surcharge), such as 1.5; null
+ * when no surcharge applies, and once submitted, when the locked Quote already includes it.
  *
  * <p>A Person (Matched) line asks for {@code quantity} Persons over whole days: {@code days} holds
  * them, inclusive at both ends ({@code {"from": "2026-11-25", "to": "2026-11-26"}}), and its
@@ -51,4 +54,5 @@ public record RequestLine(
         List<Skill> skills,
         DateRange days,
         ServiceTierId tier,
-        String tierName) {}
+        String tierName,
+        BigDecimal surcharge) {}

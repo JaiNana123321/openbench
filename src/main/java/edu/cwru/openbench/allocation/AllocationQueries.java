@@ -7,6 +7,7 @@ import edu.cwru.openbench.common.RequestLineId;
 import edu.cwru.openbench.common.ResourceId;
 import edu.cwru.openbench.common.ResourceTypeId;
 import edu.cwru.openbench.common.TimeWindow;
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
@@ -97,4 +98,13 @@ public interface AllocationQueries {
      * Planner, decided, by id: what the Manager's Approvals screen shows as decided for them.
      */
     List<Approval> decidedOnEscalation(MemberId approver);
+
+    /**
+     * The type's peak fill over a line's occurrences, for the demand surcharge (SRS Ledger.Surcharge):
+     * the largest share of its capacity held or allocated in any hour, between 0 and 1. A Metered
+     * type counts live units against its Pool Capacity, an Exclusive type its in-service instances
+     * with a live occurrence against all of them; a capacity of 0, and a Matched type, give 0.
+     * Windows start and end on whole hours.
+     */
+    BigDecimal peakFill(ResourceTypeId type, List<TimeWindow> occurrences);
 }

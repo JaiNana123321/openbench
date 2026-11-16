@@ -87,7 +87,8 @@ public class SettingsService {
      *     {@code CLASS_MISMATCH}, {@code BAND_INVALID}, {@code BANDS_OVERLAP}, {@code REFUND_STEP_TOO_HIGH},
      *     {@code UNIT_PRICE_REQUIRED} (a bump cutoff or tiers for a type with no Unit Price),
      *     {@code VALIDATION_FAILED} (a tier's premium below 1.0, or a name or premium twice in a type), or
-     *     {@code TIER_IN_USE} (the removal of a tier a line refers to)
+     *     {@code TIER_IN_USE} (the removal of a tier a line refers to); a negative surcharge rate is
+     *     {@code VALIDATION_FAILED}
      * @throws NotFoundException when the change names a Team, Period, or type that does not exist
      */
     @PreAuthorize("hasAuthority('PLANNER')")
@@ -220,7 +221,8 @@ public class SettingsService {
                     bands.getOrDefault(row.typeId(), List.of()),
                     new RefundSchedule(steps.getOrDefault(row.typeId(), List.of())),
                     cutoff,
-                    tiersByType.getOrDefault(row.typeId(), List.of())));
+                    tiersByType.getOrDefault(row.typeId(), List.of()),
+                    row.surchargeRate()));
         }
         return pricing;
     }

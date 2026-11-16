@@ -125,6 +125,7 @@ class SettingWriter {
             case SettingChange.BumpCutoff cutoff -> bumpCutoff(cutoff);
             case SettingChange.Quota quota -> quota(quota, actorId);
             case SettingChange.Tiers tierChange -> tiers(tierChange, actorId);
+            case SettingChange.Surcharge surcharge -> surcharge(surcharge);
         };
     }
 
@@ -365,6 +366,29 @@ class SettingWriter {
         }
         tiers.flush();
         return new Values(old, tiersText(given));
+    }
+
+    /**
+     * The demand surcharge rate of a priced Exclusive or Metered type (SRS Ledger.Surcharge): 0 or
+     * more, 0 for off. It affects Quotes not yet locked only.
+     */
+    private Values surcharge(SettingChange.Surcharge change) {
+        requireClass(change.type(), "A demand surcharge", AllocationClass.EXCLUSIVE, AllocationClass.METERED);
+        BigDecimal rate = change.rate().setScale(3, RoundingMode.HALF_UP);
+        if (rate.signum() < 0 || rate.compareTo(MULTIPLIER_LIMIT) >= 0) {
+            throw invalid("A demand surcharge rate is 0 or more, and less than 1000; 0 turns it off.");
+        }
+        TypePricingRow row = typePricing.findById(change.type().value())
+                .orElseThrow(() -> new RuleViolation("UNIT_PRICE_REQUIRED",
+                        "Set the type's Unit Price before its demand surcharge."));
+        String old = rateText(row.surchargeRate());
+        row.changeSurchargeRate(rate);
+        return new Values(old, rateText(rate));
+    }
+
+    /** Such as "1" or "0.5"; "off" for 0. */
+    private static String rateText(BigDecimal rate) {
+        return rate.signum() == 0 ? "off" : rate.stripTrailingZeros().toPlainString();
     }
 
     // ---------------------------------------------------------------- rules

@@ -29,7 +29,8 @@ import java.util.Optional;
  *     "start": "00:00", "end": "00:00", "multiplier": 0.25}]} (an end of 00:00 is midnight);
  * <li>{@code refund_steps.{typeId}}: every step of the Refund Schedule, {@code [{"minLead": "PT168H", "fraction": 0.5}]};
  * <li>{@code tiers.{typeId}}: every service tier of a Metered type, {@code [{"id": 3, "name": "Standard", "premium": 1.0},
- *     {"name": "Express", "premium": 1.5}]}: an entry with an id edits that tier, one without adds a tier.
+ *     {"name": "Express", "premium": 1.5}]}: an entry with an id edits that tier, one without adds a tier;
+ * <li>{@code surcharge.{typeId}}: the demand surcharge rate, a number such as {@code 1.0}; 0 is off.
  * </ul>
  * An unknown key is {@code NOT_FOUND}; a body without a value of the right shape is {@code VALIDATION_FAILED}.
  */
@@ -63,6 +64,7 @@ final class SettingKeys {
             case "refund_steps" -> new SettingChange.Refunds(type(parts, key),
                     new RefundSchedule(convert(value, json, STEPS)));
             case "tiers" -> new SettingChange.Tiers(type(parts, key), convert(value, json, TIERS));
+            case "surcharge" -> new SettingChange.Surcharge(type(parts, key), decimal(value));
             default -> throw unknown(key);
         };
     }
