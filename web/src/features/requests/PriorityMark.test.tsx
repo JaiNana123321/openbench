@@ -12,6 +12,7 @@ import { aliceAllocated, aliceDraft, gpuLine, roomLine } from './fixtures';
 
 function serve(draft: DraftView = aliceDraft, routes = {}) {
   return mockApi({
+    'GET /api/suggestions/request/:id': json([]),
     'GET /api/me': session(alice),
     'GET /api/requests/:id/draft': json(draft),
     'GET /api/requests/:id': json(aliceAllocated),

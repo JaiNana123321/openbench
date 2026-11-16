@@ -20,6 +20,7 @@ import type {
   ResourceType,
   Shortlist,
   Skill,
+  Suggestion,
 } from '../../api/types';
 
 // The Requests API (design Section 7, "Requests"). Keys start with 'requests': ['requests', 'list', ...]
@@ -251,5 +252,14 @@ export function useEndLoan() {
         queryClient.invalidateQueries({ queryKey: ['ledger'] }),
         queryClient.invalidateQueries({ queryKey: ['members'] }),
       ]),
+  });
+}
+
+/** Original Suggestions linked to this Request's lines; shared with the Suggestions decision cache. */
+export function useRequestSuggestions(requestId: Id, enabled: boolean) {
+  return useQuery({
+    queryKey: ['suggestions', 'request', requestId],
+    queryFn: () => api.get<Suggestion[]>(`/api/suggestions/request/${requestId}`),
+    enabled,
   });
 }

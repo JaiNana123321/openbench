@@ -5,13 +5,14 @@ import {
   EmptyState,
   formatCredits,
   formatEnum,
+  formatWindow,
   ProblemMessage,
   StatusBadge,
   Table,
   type Column,
 } from '../../ui';
 import { personAsk, personCount, whenText } from './personLineText';
-import { useRemoveLine, useSetPriority, useSetRequired, useSplitLine } from './queries';
+import { useRemoveLine, useSetPriority, useSetRequired, useSplitLine, useRequestSuggestions } from './queries';
 
 interface LinesTableProps {
   requestId: Id;
@@ -29,6 +30,7 @@ export function LinesTable({ requestId, lines, editable }: LinesTableProps) {
   const setPriority = useSetPriority(requestId);
   const split = useSplitLine(requestId);
   const remove = useRemoveLine(requestId);
+  const suggestions = useRequestSuggestions(requestId, editable && lines.length > 0);
   const number = new Map(lines.map((line, index) => [line.id, index + 1]));
 
   const columns: Column<RequestLine>[] = [
@@ -85,6 +87,20 @@ export function LinesTable({ requestId, lines, editable }: LinesTableProps) {
   ];
   if (editable) {
     columns.push({
+      header: 'Suggestions',
+      cell: (line) => (
+        <ul>
+          {suggestions.data?.filter((s) => s.acceptedLineId === line.id).map((s) => (
+            <li key={s.id}>
+              #{s.id} · {s.memberName} · {s.proposal.quantity} · {s.note ?? 'No note'}
+              <br />
+              {formatWindow({ start: s.proposal.start, end: s.proposal.end })}
+            </li>
+          ))}
+        </ul>
+      ),
+    });
+    columns.push({
       header: 'Actions',
       cell: (line) => (
         <div className="line-actions">
@@ -121,6 +137,7 @@ export function LinesTable({ requestId, lines, editable }: LinesTableProps) {
         rowKey={(line) => line.id}
         empty={<EmptyState title="No lines yet.">{editable && 'Add the first line above.'}</EmptyState>}
       />
+      <ProblemMessage error={suggestions.error} />
       <ProblemMessage error={setRequired.error ?? setPriority.error ?? split.error ?? remove.error} />
     </section>
   );

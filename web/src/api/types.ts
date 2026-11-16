@@ -750,3 +750,24 @@ export interface LedgerTransaction {
   /** The original Earning that an Earning correction (after an early Loan end) corrects; null otherwise. */
   corrects?: Id | null;
 }
+
+// ---------------------------------------------------------------- Suggestions
+
+/** An immutable original ask and the Manager's decision. */
+export interface Suggestion {
+  id: Id;
+  memberId: Id;
+  memberName: string;
+  managerId: Id | null;
+  managerName: string | null;
+  typeName: string;
+  proposal: NewLine;
+  note: string | null;
+  state: 'OPEN' | 'ACCEPTED' | 'DECLINED';
+  acceptedLineId: Id | null;
+  decidedBy: Id | null;
+  decidedByName: string | null;
+  decidedAt: Instant | null;
+  reason: string | null;
+  createdAt: Instant;
+}

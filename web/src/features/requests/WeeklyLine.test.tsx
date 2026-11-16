@@ -20,6 +20,7 @@ const weeklyRoomLine: RequestLine = {
 
 function serve(draft: DraftView = aliceDraft) {
   return mockApi({
+    'GET /api/suggestions/request/:id': json([]),
     'GET /api/me': session(alice),
     'GET /api/requests/:id/draft': json(draft),
     'GET /api/inventory/types': json(types),
