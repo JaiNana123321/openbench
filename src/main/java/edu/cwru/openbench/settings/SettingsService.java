@@ -129,6 +129,15 @@ public class SettingsService {
         return current();
     }
 
+    /**
+     * GET /api/settings/tiers/{typeId}: a Metered type's service tiers, lowest premium first, for the
+     * tier choice on a Draft line; empty for a type without tiers.
+     */
+    @PreAuthorize("hasAuthority('MEMBER')")
+    public List<ServiceTier> listTiers(ResourceTypeId type) {
+        return tiers.findByTypeIdOrderByPremium(type.value()).stream().map(ServiceTierRow::toServiceTier).toList();
+    }
+
     /** GET /api/settings/periods: every Period, for a Period selector. */
     @PreAuthorize("hasAuthority('MEMBER')")
     public List<Period> listPeriods() {

@@ -1,6 +1,7 @@
 package edu.cwru.openbench.requests;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.hamcrest.Matchers.contains;
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.hasItem;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -44,7 +45,12 @@ class TierCasesTest extends TierWorldTest {
         long express = jdbc.queryForObject("SELECT id FROM service_tier WHERE type_id = ? AND name = 'Express'",
                 Long.class, gpu);
 
-        // 2. As alice, add L1 (GPU, 4 units, D 10:00-12:00, Express) to a Draft: the line has the tier, Quote 90.00.
+        // 2. As alice, add L1 (GPU, 4 units, D 10:00-12:00, Express) to a Draft: the line offers a tier
+        // choice, and with Express its Quote is 90.00.
+        mvc.perform(get("/api/settings/tiers/{type}", gpu).with(as(alice)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[*].name").value(contains("Standard", "Express")))
+                .andExpect(jsonPath("$[1].id").value(express));
         long draft = createDraft(as(alice));
         addTieredLine(as(alice), draft, gpu, 4, at(d, 10), at(d, 12), express)
                 .andExpect(status().isCreated())

@@ -957,3 +957,20 @@ textarea:focus {
   color: var(--ink-muted);
   font-style: italic;
 }
+
+/* ------------------------------------------------------------------ Service tiers */
+
+.tier-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr)) auto;
+  gap: 0 var(--space-3);
+  align-items: end;
+  margin: 0 0 var(--space-3);
+  padding: var(--space-3) 0 0;
+  border: 0;
+  border-top: 1px solid var(--line);
+}
+
+.tier-select {
+  min-width: 9rem;
+}

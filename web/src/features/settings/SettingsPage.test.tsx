@@ -183,7 +183,7 @@ describe('Capacity Planner settings', () => {
     ]);
   });
 
-  it('removes a refund step, and shows a Metered type without a bump cutoff', async () => {
+  it('removes a refund step, and shows a Metered type with an empty bump cutoff and its tiers', async () => {
     const server = serve();
     const { user } = renderApp('/settings');
 
@@ -197,7 +197,8 @@ describe('Capacity Planner settings', () => {
 
     await user.selectOptions(screen.getByLabelText('Resource Type'), 'GPU');
     expect(within(form('Unit Price')).getByRole('spinbutton')).toHaveValue(5);
-    expect(screen.queryByRole('form', { name: 'Bump cutoff (hours)' })).not.toBeInTheDocument();
+    expect(within(form('Bump cutoff (hours)')).getByRole('spinbutton')).toHaveValue(null);
+    expect(within(form('Service tiers')).queryByRole('group')).not.toBeInTheDocument();
     expect(within(form('Price Bands')).queryByRole('group')).not.toBeInTheDocument();
   });
 

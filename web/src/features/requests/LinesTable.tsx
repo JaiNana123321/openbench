@@ -12,6 +12,7 @@ import {
   type Column,
 } from '../../ui';
 import { personAsk, personCount, whenText } from './personLineText';
+import { TierSelect } from './TierSelect';
 import { useRemoveLine, useSetPriority, useSetRequired, useSplitLine, useRequestSuggestions } from './queries';
 
 interface LinesTableProps {
@@ -23,7 +24,7 @@ interface LinesTableProps {
 
 /**
  * The Request's lines with their Quotes; in an editable Draft, the Required mark, the Priority mark
- * (Exclusive lines only), split, and remove.
+ * (Exclusive lines only), the service tier (Metered lines only), split, and remove.
  */
 export function LinesTable({ requestId, lines, editable }: LinesTableProps) {
   const setRequired = useSetRequired(requestId);
@@ -82,6 +83,15 @@ export function LinesTable({ requestId, lines, editable }: LinesTableProps) {
           'Priority'
         ) : (
           '—'
+        ),
+    },
+    {
+      header: 'Tier',
+      cell: (line) =>
+        editable && line.allocationClass === 'METERED' ? (
+          <TierSelect requestId={requestId} line={line} number={number.get(line.id) ?? 0} />
+        ) : (
+          (line.tierName ?? '—')
         ),
     },
   ];

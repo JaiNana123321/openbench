@@ -155,7 +155,9 @@ function lineColumns(number: Map<Id, number>): Column<LineDetail>[] {
     { header: 'Resource Type', cell: ({ line }) => `${line.typeName} (${formatEnum(line.allocationClass)})` },
     {
       header: 'Quantity',
-      cell: ({ line }) => personCount(line) ?? amountText(line.allocationClass, line.quantity),
+      cell: ({ line }) =>
+        personCount(line) ??
+        amountText(line.allocationClass, line.quantity) + (line.tierName ? ` · ${line.tierName}` : ''),
       numeric: true,
     },
     { header: 'Window', cell: ({ line }) => whenText(line) },
@@ -166,7 +168,9 @@ function lineColumns(number: Map<Id, number>): Column<LineDetail>[] {
         line.state === 'WAITING' && reason === 'BUMPED' ? (
           <>
             <StatusBadge status={line.state} />
-            <span className="timeline__note">Bumped by a Priority line</span>
+            <span className="timeline__note">
+              Bumped by a {line.allocationClass === 'METERED' ? 'higher-tier' : 'Priority'} line
+            </span>
           </>
         ) : (
           <StatusBadge status={line.state} />

@@ -58,6 +58,7 @@ export const problemMessages: Readonly<Record<string, string>> = {
   TEAM_NEEDS_MANAGER: 'Team needs a Manager',
   TEAM_NOT_EMPTY: 'Team still has Members',
   TEAM_RETIRED: 'Team is retired',
+  TIER_IN_USE: 'Tier is in use',
   TYPE_MISMATCH: 'Resource Types do not match',
   TYPE_NAME_TAKEN: 'Name already taken',
   TYPE_RETIRED: 'Resource Type is retired',

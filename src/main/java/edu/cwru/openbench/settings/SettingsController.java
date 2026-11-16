@@ -6,6 +6,7 @@ import edu.cwru.openbench.common.Actor;
 import edu.cwru.openbench.common.Credits;
 import edu.cwru.openbench.common.PageResponse;
 import edu.cwru.openbench.common.PeriodId;
+import edu.cwru.openbench.common.ResourceTypeId;
 import edu.cwru.openbench.common.TeamId;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
@@ -40,6 +41,12 @@ class SettingsController {
     @GetMapping("/periods")
     List<Period> periods() {
         return settings.listPeriods();
+    }
+
+    /** A Metered type's service tiers, for any Member drafting a line; not in the design's table (issue #23). */
+    @GetMapping("/tiers/{typeId}")
+    List<ServiceTier> tiers(@PathVariable ResourceTypeId typeId) {
+        return settings.listTiers(typeId);
     }
 
     @GetMapping("/grants/{periodId}")
