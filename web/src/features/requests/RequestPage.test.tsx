@@ -9,6 +9,7 @@ import { aliceAllocated, aliceDraft, bobWaiting, gpuLine, roomLine } from './fix
 
 function serve(draft: DraftView = aliceDraft, me = alice, routes = {}) {
   return mockApi({
+    'GET /api/suggestions/request/:id': json([]),
     'GET /api/me': session(me),
     'GET /api/requests/:id/draft': json(draft),
     'GET /api/requests/:id': json(aliceAllocated),

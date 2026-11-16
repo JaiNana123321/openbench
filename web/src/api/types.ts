@@ -818,3 +818,24 @@ export interface PersonDays {
   lent: number;
   borrowed: number;
 }
+
+// ---------------------------------------------------------------- Suggestions
+
+/** An immutable original ask and the Manager's decision. */
+export interface Suggestion {
+  id: Id;
+  memberId: Id;
+  memberName: string;
+  managerId: Id | null;
+  managerName: string | null;
+  typeName: string;
+  proposal: NewLine;
+  note: string | null;
+  state: 'OPEN' | 'ACCEPTED' | 'DECLINED';
+  acceptedLineId: Id | null;
+  decidedBy: Id | null;
+  decidedByName: string | null;
+  decidedAt: Instant | null;
+  reason: string | null;
+  createdAt: Instant;
+}

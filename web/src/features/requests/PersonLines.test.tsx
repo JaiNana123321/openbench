@@ -88,6 +88,7 @@ const pendingDraftView: DraftView = { ...aliceDraft, request: pending.request };
 
 function serve(detail: RequestDetail = pending, me = alice, routes: Record<string, MockReply> = {}) {
   return mockApi({
+    'GET /api/suggestions/request/:id': json([]),
     'GET /api/me': session(me),
     'GET /api/requests/:id/draft': json({ ...pendingDraftView, request: detail.request }),
     'GET /api/requests/:id': json(detail),
@@ -200,6 +201,7 @@ describe('Person lines in the Request detail', () => {
 describe('Person lines in the Draft editor', () => {
   function serveDraft() {
     return mockApi({
+    'GET /api/suggestions/request/:id': json([]),
       'GET /api/me': session(alice),
       'GET /api/requests/:id/draft': json(aliceDraft),
       'GET /api/inventory/types': json(types),

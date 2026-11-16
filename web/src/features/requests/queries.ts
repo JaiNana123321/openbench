@@ -20,6 +20,7 @@ import type {
   ResourceType,
   Shortlist,
   Skill,
+  Suggestion,
 } from '../../api/types';
 
 // The Requests API (design Section 7, "Requests"). Keys start with 'requests': ['requests', 'list', ...]
@@ -260,5 +261,14 @@ export function useReopenRequest(requestId: Id) {
   return useMutation({
     mutationFn: () => api.post<RequestRecord>(`/api/requests/${requestId}/reopen`),
     onSuccess: invalidate,
+  });
+}
+
+/** Original Suggestions linked to this Request's lines; shared with the Suggestions decision cache. */
+export function useRequestSuggestions(requestId: Id, enabled: boolean) {
+  return useQuery({
+    queryKey: ['suggestions', 'request', requestId],
+    queryFn: () => api.get<Suggestion[]>(`/api/suggestions/request/${requestId}`),
+    enabled,
   });
 }
