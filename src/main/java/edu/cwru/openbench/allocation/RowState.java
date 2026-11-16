@@ -10,7 +10,7 @@ enum RowState {
     HELD,
     ALLOCATED,
     RELEASED,
-    /** Exclusive only: the occurrence went to a Priority line. */
+    /** The row went to a Priority line (Exclusive) or a higher-tier line (Metered). */
     BUMPED,
     /** The Hold was dropped before allocation. */
     EXPIRED;

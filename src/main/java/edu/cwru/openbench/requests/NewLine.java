@@ -3,6 +3,7 @@ package edu.cwru.openbench.requests;
 import edu.cwru.openbench.common.MemberId;
 import edu.cwru.openbench.common.ResourceId;
 import edu.cwru.openbench.common.ResourceTypeId;
+import edu.cwru.openbench.common.ServiceTierId;
 import edu.cwru.openbench.common.WeeklyRecurrence;
 import edu.cwru.openbench.common.SkillId;
 import jakarta.validation.constraints.NotNull;
@@ -21,6 +22,8 @@ import java.util.List;
  * midnight after the last, company time, so days D to D+1 are
  * {@code "start": "<D>T00:00:00-05:00", "end": "<D+2>T00:00:00-05:00"}. It names one Person in
  * {@code namedMemberId} (quantity 1), or asks for {@code skills}, a list of skill ids.
+ *
+ * <p>A Metered line may name one service tier of its type in {@code tierId}; absent or null, it has none.
  */
 public record NewLine(
         @NotNull ResourceTypeId typeId,
@@ -30,4 +33,5 @@ public record NewLine(
         ResourceId namedResourceId,
         WeeklyRecurrence recurrence,
         MemberId namedMemberId,
-        List<SkillId> skills) {}
+        List<SkillId> skills,
+        ServiceTierId tierId) {}

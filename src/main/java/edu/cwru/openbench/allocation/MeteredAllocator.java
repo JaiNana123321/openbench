@@ -1,15 +1,25 @@
 package edu.cwru.openbench.allocation;
 
 import edu.cwru.openbench.allocation.HourlyLoad.Excess;
+import edu.cwru.openbench.allocation.HourlyLoad.Hour;
+import edu.cwru.openbench.common.RequestId;
+import edu.cwru.openbench.common.RequestLineId;
 import edu.cwru.openbench.common.ResourceTypeId;
 import edu.cwru.openbench.common.RuleViolation;
+import edu.cwru.openbench.common.TeamId;
 import edu.cwru.openbench.common.TimeWindow;
 import edu.cwru.openbench.inventory.AllocationClass;
 import edu.cwru.openbench.inventory.InventoryQueries;
 import edu.cwru.openbench.settings.SettingsService;
+import edu.cwru.openbench.settings.TypePricing;
 import java.time.Clock;
+import java.time.Duration;
+import java.time.Instant;
+import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Comparator;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -27,10 +37,16 @@ import org.springframework.transaction.annotation.Transactional;
  *
  * <p>No constraint can sum rows, so this is correct only because the sums are read after the type
  * lock at READ COMMITTED (design Section 4.5, "Isolation"); the isolation level is never raised.
+ *
+ * <p>A line with a service tier that does not fit may Bump lines of lower tiers ({@link Bumpable};
+ * SRS Metered.Tier.Bump): the plan is chosen by {@link TierBumpSearch}, and the Bumped rows are
+ * flushed as BUMPED before the tiered line's row is written. A type without a bump cutoff never Bumps.
  */
 @Component
 @Transactional(propagation = Propagation.MANDATORY)
-class MeteredAllocator implements Allocator, Waitlistable {
+class MeteredAllocator implements Allocator, Waitlistable, Bumpable {
+
+    static final String INSIDE_BUMP_CUTOFF = "INSIDE_BUMP_CUTOFF";
 
     private final MeteredAllocationRepository allocations;
     private final HourlySums sums;
@@ -155,7 +171,7 @@ class MeteredAllocator implements Allocator, Waitlistable {
         });
         allocations.saveAndFlush(new MeteredAllocationRow(line.lineId().value(), line.teamId().value(),
                 line.requestId().value(), line.typeId().value(), line.units(), line.window().start(),
-                line.window().end(), state));
+                line.window().end(), state).ranked(line.tierPremium(), line.submittedAt()));
     }
 
     /** The first hour that fails, the pool checked before the Quota; empty when the line fits. */
@@ -187,5 +203,76 @@ class MeteredAllocator implements Allocator, Waitlistable {
         if (line.allocationClass() != AllocationClass.METERED) {
             throw new IllegalArgumentException("Line " + line.lineId().value() + " is not Metered.");
         }
+    }
+
+    // ---------------------------------------------------------------- tier Bumps
+
+    /**
+     * The lines of the type with live rows overlapping the window, each with all its live rows; then
+     * {@link TierBumpSearch} chooses, with the cutoff at now plus the type's bump cutoff. Empty for
+     * a line without a tier, a line that fits, and a type without a bump cutoff.
+     */
+    @Override
+    public Optional<BumpPlan> planBump(LineSnapshot line) {
+        checkClass(line);
+        Optional<Duration> bumpCutoff = settings.current().pricingOf(line.typeId())
+                .map(TypePricing::bumpCutoff);
+        if (line.tierPremium() == null || bumpCutoff.isEmpty() || excess(line).isEmpty()) {
+            return Optional.empty();
+        }
+        TimeWindow window = line.window();
+        Map<Long, List<TierBumpSearch.Span>> spans = new LinkedHashMap<>();
+        for (MeteredAllocationRow row : allocations.overlapping(line.typeId().value(), RowState.LIVE, window.start(),
+                window.end())) {
+            spans.computeIfAbsent(row.lineId(), id -> new ArrayList<>())
+                    .add(new TierBumpSearch.Span(row.units(), row.window().start(), row.window().end()));
+        }
+        List<TierBumpSearch.Candidate> candidates = spans.entrySet().stream()
+                .map(entry -> candidate(entry.getKey(), entry.getValue()))
+                .toList();
+        List<Hour> hours = sums.forWindow(line.typeId(), line.teamId(), window);
+        Instant cutoff = clock.instant().plus(bumpCutoff.get());
+        return TierBumpSearch.choose(line.units(), line.tierPremium(), line.requestId().value(),
+                        line.teamId().value(), hours, inventory.poolCapacity(line.typeId()),
+                        settings.current().quotaOf(line.teamId(), line.typeId()), candidates, cutoff)
+                .map(chosen -> new BumpPlan(line, List.of(), chosen.stream()
+                        .map(bumped -> new BumpPlan.BumpedLine(new RequestLineId(bumped.lineId()),
+                                new RequestId(bumped.requestId()), new TeamId(bumped.teamId()), bumped.held()))
+                        .toList()));
+    }
+
+    /**
+     * Plans again and requires the same plan; then marks every live row of the Bumped lines BUMPED
+     * and flushes before the tiered line's row is inserted as HELD, so the hourly sums no longer
+     * count them.
+     */
+    @Override
+    public void applyBump(BumpPlan plan) {
+        LineSnapshot line = plan.priorityLine();
+        checkClass(line);
+        if (!planBump(line).equals(Optional.of(plan))) {
+            throw new RuleViolation(INSIDE_BUMP_CUTOFF, "The Bump planned for line " + line.lineId().value()
+                    + " no longer holds: a line it would Bump is now inside the bump cutoff or has changed.");
+        }
+        if (!rowsOf(line, RowState.LIVE).isEmpty()) {
+            throw new IllegalStateException("Line " + line.lineId().value() + " is already held or allocated.");
+        }
+        for (BumpPlan.BumpedLine bumped : plan.bumped()) {
+            allocations.findByLineIdAndStateIn(bumped.line().value(), RowState.LIVE)
+                    .forEach(row -> row.changeState(RowState.BUMPED));
+        }
+        allocations.flush();
+        insert(line, RowState.HELD);
+    }
+
+    /** A line with live rows in the window, as the plan sees it, from all its live rows. */
+    private TierBumpSearch.Candidate candidate(Long lineId, List<TierBumpSearch.Span> inWindow) {
+        List<MeteredAllocationRow> rows = allocations.findByLineIdAndStateIn(lineId, RowState.LIVE);
+        MeteredAllocationRow first = rows.stream()
+                .min(Comparator.comparing((MeteredAllocationRow row) -> row.window().start()))
+                .orElseThrow();
+        return new TierBumpSearch.Candidate(lineId, first.requestId(), first.teamId(), first.tierPremium(),
+                first.submittedAt(), first.window().start(),
+                rows.stream().allMatch(row -> row.state() == RowState.HELD), inWindow);
     }
 }

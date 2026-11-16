@@ -27,7 +27,8 @@ public final class Pricing {
 
     /**
      * The sum, over each hour of each occurrence, of quantity times Unit Price times the multiplier
-     * of the Price Band containing that hour (1.0 if none), times the premium for a Priority line;
+     * of the Price Band containing that hour (1.0 if none), times the premium for a Priority line,
+     * times the premium of a Metered line's service tier (SRS Metered.Tier.Define);
      * rounded half-up to two decimals once, for the whole line. Hours are real elapsed hours, read in
      * the line's zone: the day daylight saving time ends has 25 of them.
      *
@@ -47,6 +48,7 @@ public final class Pricing {
         if (line.priority()) {
             amount = amount.multiply(priorityPremium);
         }
+        amount = amount.multiply(line.tierPremium());
         return new Quote(new Credits(amount));
     }
 

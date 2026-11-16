@@ -22,6 +22,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -55,11 +56,12 @@ public class SettingsService {
     private final SettingChangeRepository changes;
     private final SettingWriter writer;
     private final MemberService members;
+    private final ServiceTierRepository tiers;
 
     SettingsService(Clock clock, PeriodRepository periods, PlannerSettingRepository plannerSettings,
             TypePricingRepository typePricing, PriceBandRepository priceBands, RefundStepRepository refundSteps,
             QuotaRepository quotas, GrantPlanRepository grantPlans, SettingChangeRepository changes,
-            SettingWriter writer, MemberService members) {
+            SettingWriter writer, MemberService members, ServiceTierRepository tiers) {
         this.clock = clock;
         this.periods = periods;
         this.plannerSettings = plannerSettings;
@@ -71,6 +73,7 @@ public class SettingsService {
         this.changes = changes;
         this.writer = writer;
         this.members = members;
+        this.tiers = tiers;
     }
 
     /**
@@ -82,7 +85,9 @@ public class SettingsService {
      *
      * @throws edu.cwru.openbench.common.RuleViolation {@code VALUE_OUT_OF_RANGE}, {@code PERIOD_STARTED},
      *     {@code CLASS_MISMATCH}, {@code BAND_INVALID}, {@code BANDS_OVERLAP}, {@code REFUND_STEP_TOO_HIGH},
-     *     or {@code UNIT_PRICE_REQUIRED} (a bump cutoff for a type with no Unit Price)
+     *     {@code UNIT_PRICE_REQUIRED} (a bump cutoff or tiers for a type with no Unit Price),
+     *     {@code VALIDATION_FAILED} (a tier's premium below 1.0, or a name or premium twice in a type), or
+     *     {@code TIER_IN_USE} (the removal of a tier a line refers to)
      * @throws NotFoundException when the change names a Team, Period, or type that does not exist
      */
     @PreAuthorize("hasAuthority('PLANNER')")
@@ -195,6 +200,9 @@ public class SettingsService {
                 PriceBandRow::typeId, Collectors.mapping(PriceBandRow::toPriceBand, Collectors.toList())));
         Map<Long, List<RefundStep>> steps = refundSteps.findAll().stream().collect(Collectors.groupingBy(
                 RefundStepRow::typeId, Collectors.mapping(RefundStepRow::toRefundStep, Collectors.toList())));
+        Map<Long, List<ServiceTier>> tiersByType = tiers.findAll(Sort.by("premium")).stream()
+                .collect(Collectors.groupingBy(ServiceTierRow::typeId,
+                        Collectors.mapping(ServiceTierRow::toServiceTier, Collectors.toList())));
         Map<ResourceTypeId, TypePricing> pricing = new HashMap<>();
         for (TypePricingRow row : typePricing.findAll()) {
             Duration cutoff = row.bumpCutoffHours() == null ? null : Duration.ofHours(row.bumpCutoffHours());
@@ -202,7 +210,8 @@ public class SettingsService {
                     new Credits(row.unitPrice()),
                     bands.getOrDefault(row.typeId(), List.of()),
                     new RefundSchedule(steps.getOrDefault(row.typeId(), List.of())),
-                    cutoff));
+                    cutoff,
+                    tiersByType.getOrDefault(row.typeId(), List.of())));
         }
         return pricing;
     }

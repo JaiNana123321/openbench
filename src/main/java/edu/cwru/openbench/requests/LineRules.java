@@ -1,19 +1,21 @@
 package edu.cwru.openbench.requests;
 
-import edu.cwru.openbench.allocation.AllocatorRegistry;
-import edu.cwru.openbench.allocation.Bumpable;
 import edu.cwru.openbench.common.NotFoundException;
 import edu.cwru.openbench.common.ResourceId;
 import edu.cwru.openbench.common.ResourceTypeId;
 import edu.cwru.openbench.common.RuleViolation;
+import edu.cwru.openbench.common.ServiceTierId;
 import edu.cwru.openbench.common.WeeklyRecurrence;
 import edu.cwru.openbench.inventory.AllocationClass;
 import edu.cwru.openbench.inventory.InventoryQueries;
 import edu.cwru.openbench.inventory.Resource;
 import edu.cwru.openbench.inventory.ResourceType;
+import edu.cwru.openbench.settings.SettingsService;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDateTime;
+import java.util.List;
+import java.util.Map;
 import org.springframework.stereotype.Component;
 
 /**
@@ -32,7 +34,8 @@ import org.springframework.stereotype.Component;
  * <li>a weekly recurrence only on an Exclusive line ({@code RECURRENCE_NOT_OFFERED}), with 2 to 52
  *     occurrences and a window of at most one week, so that its occurrences never overlap each other
  *     ({@code RECURRENCE_INVALID});
- * <li>the Priority mark only on an Exclusive line ({@code PRIORITY_NOT_OFFERED}).
+ * <li>the Priority mark only on an Exclusive line ({@code PRIORITY_NOT_OFFERED});
+ * <li>a service tier only on a Metered line, and only one of the line's type ({@code VALIDATION_FAILED}).
  * </ul>
  */
 @Component
@@ -40,12 +43,12 @@ class LineRules {
 
     private final InventoryQueries inventory;
     private final Clock clock;
-    private final AllocatorRegistry allocators;
+    private final SettingsService settings;
 
-    LineRules(InventoryQueries inventory, Clock clock, AllocatorRegistry allocators) {
+    LineRules(InventoryQueries inventory, Clock clock, SettingsService settings) {
         this.inventory = inventory;
         this.clock = clock;
-        this.allocators = allocators;
+        this.settings = settings;
     }
 
     /** Checks a line and returns its Resource Type. */
@@ -141,17 +144,40 @@ class LineRules {
     }
 
     /**
-     * Checks a line's Priority mark: offered only for a class whose allocator is {@link Bumpable}
-     * (design Section 4.5), which is the Exclusive class.
+     * Checks a line's Priority mark: offered only on an Exclusive line, as {@code request_line}'s
+     * check requires. A Metered line, whose allocator also Bumps, is ranked by its service tier instead.
      */
     void checkPriority(ResourceTypeId typeId, boolean priority) {
         if (!priority) {
             return;
         }
         ResourceType type = typeOf(typeId);
-        if (allocators.capability(type.allocationClass(), Bumpable.class).isEmpty()) {
+        if (type.allocationClass() != AllocationClass.EXCLUSIVE) {
             throw new RuleViolation("PRIORITY_NOT_OFFERED",
                     "A " + type.name() + " line cannot be marked Priority; Priority is offered for Exclusive lines only.");
         }
+    }
+
+    /**
+     * Checks a line's service tier (SRS Metered.Tier.Define): offered only on a Metered line, and
+     * only a tier of the line's type, at the current settings.
+     */
+    void checkTier(ResourceTypeId typeId, ServiceTierId tier) {
+        if (tier == null) {
+            return;
+        }
+        ResourceType type = typeOf(typeId);
+        if (type.allocationClass() != AllocationClass.METERED) {
+            throw tierInvalid("A " + type.name() + " line cannot have a service tier; tiers are offered for Metered lines only.");
+        }
+        boolean ofType = settings.current().pricingOf(typeId).flatMap(pricing -> pricing.tier(tier)).isPresent();
+        if (!ofType) {
+            throw tierInvalid("Service tier " + tier.value() + " is not a tier of " + type.name() + ".");
+        }
+    }
+
+    private static RuleViolation tierInvalid(String message) {
+        return new RuleViolation("VALIDATION_FAILED", message,
+                Map.of("errors", List.of(Map.of("field", "tierId", "message", message))));
     }
 }

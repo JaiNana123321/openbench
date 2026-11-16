@@ -166,6 +166,7 @@ class RequestLineRow {
         part.recurrence = recurrence;
         part.priority = priority;
         part.skills = skills;
+        part.tierId = tierId;
         return part;
     }
 
@@ -233,10 +234,36 @@ class RequestLineRow {
         this.bumped = true;
     }
 
-    /** A new Draft loses both its locked Quote and its old Bumped waitlist precedence. */
+    /** A new Draft loses its locked Quote, its locked tier premium, and its old Bumped waitlist precedence. */
     void unlockQuote() {
         lockedQuote = null;
+        tierPremium = null;
         bumped = false;
+    }
+
+    // ---------------------------------------------------------------- service tiers
+
+    /** The service tier of a Metered line; null for none, and on any other line. */
+    private Long tierId;
+
+    /** The tier's premium locked at submission with the Quote: the rank the line Bumps with. */
+    private BigDecimal tierPremium;
+
+    Long tierId() {
+        return tierId;
+    }
+
+    void setTier(Long tierId) {
+        this.tierId = tierId;
+    }
+
+    /** The tier's premium locked at submission; null in a Draft and for a line without a tier. */
+    BigDecimal tierPremium() {
+        return tierPremium;
+    }
+
+    void lockTierPremium(BigDecimal premium) {
+        this.tierPremium = premium;
     }
 
 }

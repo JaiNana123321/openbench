@@ -9,6 +9,7 @@ import edu.cwru.openbench.common.RequestId;
 import edu.cwru.openbench.common.RequestLineId;
 import edu.cwru.openbench.common.ResourceId;
 import edu.cwru.openbench.common.ResourceTypeId;
+import edu.cwru.openbench.common.ServiceTierId;
 import edu.cwru.openbench.common.TimeWindow;
 import edu.cwru.openbench.common.WeeklyRecurrence;
 import edu.cwru.openbench.inventory.AllocationClass;
@@ -21,7 +22,8 @@ import edu.cwru.openbench.inventory.AllocationClass;
  * null unless an Exclusive line names one Resource. {@code window} is the first occurrence;
  * {@code recurrence} is null unless an Exclusive line recurs weekly, and the Quote then covers every
  * occurrence. {@code priority} is the Priority mark, offered on Exclusive lines only; the Quote
- * then carries the priority premium.
+ * then carries the priority premium. {@code tier} and {@code tierName} are a Metered line's service
+ * tier, null for none; the Quote then carries the tier's premium.
  *
  * <p>A Person (Matched) line asks for {@code quantity} Persons over whole days: {@code days} holds
  * them, inclusive at both ends ({@code {"from": "2026-11-25", "to": "2026-11-26"}}), and its
@@ -47,4 +49,6 @@ public record RequestLine(
         MemberId namedMember,
         String namedMemberName,
         List<Skill> skills,
-        DateRange days) {}
+        DateRange days,
+        ServiceTierId tier,
+        String tierName) {}

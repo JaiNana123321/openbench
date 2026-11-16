@@ -82,7 +82,7 @@ class SuggestionRow {
                 namedResourceId == null ? null : new ResourceId(namedResourceId),
                 recurrence == null ? null : new WeeklyRecurrence(recurrence),
                 namedMemberId == null ? null : new MemberId(namedMemberId),
-                skills == null ? null : Arrays.stream(skills).map(SkillId::new).toList());
+                skills == null ? null : Arrays.stream(skills).map(SkillId::new).toList(), null);
     }
 
     void decide(Actor actor, String state, Long line, String reason, Instant now) {

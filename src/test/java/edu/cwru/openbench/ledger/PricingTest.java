@@ -144,6 +144,20 @@ class PricingTest {
         }
 
         @Test
+        @DisplayName("Metered.Tier.Define: a tier premium multiplies the line, with the bands, and the attributable share ignores it")
+        void multipliesATieredLineByItsTierPremium() {
+            // GPU 4 units, Wednesday 10:00 to 12:00, in the 1.5 band: 60.00, with Express x1.5 90.00.
+            List<TimeWindow> window = List.of(new TimeWindow(at(2026, 11, 25, 10), at(2026, 11, 25, 12)));
+            LineSpec express = new LineSpec(4, window, false, ZONE, new BigDecimal("1.5"));
+            assertThat(Pricing.quote(express, GPU, PREMIUM).amount()).isEqualTo(Credits.of("90.00"));
+            assertThat(Pricing.quote(new LineSpec(4, window, false, ZONE), GPU, PREMIUM).amount())
+                    .isEqualTo(Credits.of("60.00"));
+            LineSpec firstHour = new LineSpec(4, List.of(new TimeWindow(at(2026, 11, 25, 10), at(2026, 11, 25, 11))),
+                    false, ZONE, new BigDecimal("1.5"));
+            assertThat(Pricing.attributable(Credits.of("90.00"), express, firstHour, GPU)).isEqualTo(Credits.of("45.00"));
+        }
+
+        @Test
         void leavesAStandardLineAtItsPrice() {
             LineSpec standard = new LineSpec(1, List.of(new TimeWindow(at(2026, 10, 27, 14), at(2026, 10, 27, 16))), false, ZONE);
             assertThat(Pricing.quote(standard, MEETING_ROOM, PREMIUM).amount()).isEqualTo(Credits.of("30.00"));

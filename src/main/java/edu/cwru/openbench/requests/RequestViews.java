@@ -7,6 +7,7 @@ import edu.cwru.openbench.common.RequestId;
 import edu.cwru.openbench.common.RequestLineId;
 import edu.cwru.openbench.common.ResourceId;
 import edu.cwru.openbench.common.ResourceTypeId;
+import edu.cwru.openbench.common.ServiceTierId;
 import edu.cwru.openbench.common.SkillId;
 import edu.cwru.openbench.common.TeamId;
 import edu.cwru.openbench.common.TimeWindow;
@@ -17,7 +18,10 @@ import edu.cwru.openbench.ledger.Pricing;
 import edu.cwru.openbench.members.MemberService;
 import edu.cwru.openbench.members.TeamSummary;
 import edu.cwru.openbench.settings.PlannerSettings;
+import edu.cwru.openbench.settings.ServiceTier;
 import edu.cwru.openbench.settings.SettingsService;
+import edu.cwru.openbench.settings.TypePricing;
+import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.LocalDate;
 import java.util.HashMap;
@@ -54,9 +58,21 @@ class RequestViews {
     /** The Quote of a line at these settings, or empty when its type has no pricing settings. */
     Optional<Credits> currentQuote(RequestLineRow line, PlannerSettings current) {
         return current.pricingOf(new ResourceTypeId(line.typeId())).map(pricing -> Pricing.quote(
-                new LineSpec(line.amount(), line.occurrences(clock.getZone()), line.priority(), clock.getZone()),
+                new LineSpec(line.amount(), line.occurrences(clock.getZone()), line.priority(), clock.getZone(),
+                        tierOf(line, pricing).map(ServiceTier::premium).orElse(BigDecimal.ONE)),
                 pricing,
                 current.priorityPremium()).amount());
+    }
+
+    /** The current premium of the line's service tier, or empty when it has none or its type is unpriced. */
+    Optional<BigDecimal> currentTierPremium(RequestLineRow line, PlannerSettings current) {
+        return current.pricingOf(new ResourceTypeId(line.typeId()))
+                .flatMap(pricing -> tierOf(line, pricing))
+                .map(ServiceTier::premium);
+    }
+
+    private static Optional<ServiceTier> tierOf(RequestLineRow line, TypePricing pricing) {
+        return line.tierId() == null ? Optional.empty() : pricing.tier(new ServiceTierId(line.tierId()));
     }
 
     static TimeWindow window(RequestLineRow line) {
@@ -124,7 +140,10 @@ class RequestViews {
                             id -> members.summary(new MemberId(id)).name()),
                     row.skills().isEmpty() ? List.of()
                             : members.skillsById(row.skills().stream().map(SkillId::new).toList()),
-                    row.allocationClass() == AllocationClass.MATCHED ? days(row) : null);
+                    row.allocationClass() == AllocationClass.MATCHED ? days(row) : null,
+                    row.tierId() == null ? null : new ServiceTierId(row.tierId()),
+                    row.tierId() == null ? null : settings().pricingOf(new ResourceTypeId(row.typeId()))
+                            .flatMap(pricing -> tierOf(row, pricing)).map(ServiceTier::name).orElse(null));
         }
 
         private TeamSummary team(Long id) {

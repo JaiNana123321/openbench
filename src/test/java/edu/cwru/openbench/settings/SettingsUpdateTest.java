@@ -288,21 +288,25 @@ class SettingsUpdateTest extends PostgresTest {
     }
 
     @Test
-    @DisplayName("Bump cutoff: set on an Exclusive type; a Metered type, a negative or part-hour cutoff, and an unpriced type are refused")
+    @DisplayName("Bump cutoff: set on an Exclusive or a Metered type (issue #23); a Person type, a negative or part-hour cutoff, and an unpriced type are refused")
     void setsABumpCutoff() throws Exception {
         set("bump_cutoff." + room, "\"PT48H\"")
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.pricing['" + room + "'].bumpCutoff").value("PT48H"));
         assertThat(log("bump_cutoff." + room)).containsExactly("24 hours>48 hours");
 
-        refused(set("bump_cutoff." + gpu, "\"PT24H\""), "CLASS_MISMATCH");
+        set("bump_cutoff." + gpu, "\"PT24H\"")
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.pricing['" + gpu + "'].bumpCutoff").value("PT24H"));
+        assertThat(log("bump_cutoff." + gpu)).containsExactly("->24 hours");
+        refused(set("bump_cutoff." + matched, "\"PT24H\""), "CLASS_MISMATCH");
         refused(set("bump_cutoff." + room, "\"PT-1H\""), "VALUE_OUT_OF_RANGE");
         refused(set("bump_cutoff." + room, "\"PT90M\""), "VALUE_OUT_OF_RANGE");
         long unpriced = testData().resourceType(unique("Lab bench"), "EXCLUSIVE");
         refused(set("bump_cutoff." + unpriced, "\"PT1H\""), "UNIT_PRICE_REQUIRED");
 
         assertThat(log("bump_cutoff." + room)).hasSize(1);
-        assertNothingLogged("bump_cutoff." + gpu);
+        assertNothingLogged("bump_cutoff." + matched);
         assertNothingLogged("bump_cutoff." + unpriced);
         assertThat(jdbc.queryForObject("SELECT bump_cutoff_hours FROM type_pricing WHERE type_id = ?", Integer.class, room))
                 .isEqualTo(48);

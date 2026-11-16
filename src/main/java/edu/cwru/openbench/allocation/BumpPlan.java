@@ -9,8 +9,9 @@ import java.util.Objects;
 
 /**
  * What a Priority line's Bump would do ({@link Bumpable#planBump}): the instances the Priority line
- * gets, by id, and the standard lines it Bumps, by line id, each Bumped whole. Valid only in the
- * transaction that made it, under the type lock.
+ * gets, by id, and the standard lines it Bumps, by line id, each Bumped whole. A tiered Metered
+ * line's plan has no instances, only the lower-tier lines it Bumps. Valid only in the transaction
+ * that made it, under the type lock.
  *
  * @param priorityLine the Priority line that does not fit
  * @param instances every instance the Priority line gets, free or cleared

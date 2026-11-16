@@ -105,7 +105,7 @@ public sealed interface SettingChange {
         }
     }
 
-    /** {@code bump_cutoff.{typeId}}: how long before an Exclusive line starts it may no longer be Bumped. */
+    /** {@code bump_cutoff.{typeId}}: how long before a line of an Exclusive or Metered type starts it may no longer be Bumped. */
     record BumpCutoff(ResourceTypeId type, Duration cutoff) implements SettingChange {
         public BumpCutoff {
             Objects.requireNonNull(type, "type");
@@ -127,6 +127,22 @@ public sealed interface SettingChange {
 
         public String key() {
             return "quota." + team.value() + "." + type.value();
+        }
+    }
+
+    /**
+     * {@code tiers.{typeId}}: every service tier of a Metered type. A tier with an id keeps it and
+     * takes the given name and premium; one without an id is added; a tier of the type left out is
+     * removed.
+     */
+    record Tiers(ResourceTypeId type, List<ServiceTier> tiers) implements SettingChange {
+        public Tiers {
+            Objects.requireNonNull(type, "type");
+            tiers = List.copyOf(tiers);
+        }
+
+        public String key() {
+            return "tiers." + type.value();
         }
     }
 }
