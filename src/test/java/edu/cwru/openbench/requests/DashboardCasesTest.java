@@ -102,13 +102,14 @@ class DashboardCasesTest extends LoanEndWorldTest {
         assertThat(figure(waiting, "type", gpu, "waiting")).isEqualByComparingTo("0");
         assertThat(figure(waiting, "type", microscope, "waiting")).isEqualByComparingTo("0");
 
-        // 2. Idle capacity for the coming seven days: 2 x 168 - 4, 16 x 168 - 8, and 168.
+        // 2. Idle capacity for the Period to date: not built yet (the test is partial).
+        // 3. Idle capacity for the coming seven days: 2 x 168 - 4, 16 x 168 - 8, and 168.
         String idle = read(erin, "/api/dashboard/idle");
         assertThat(figure(idle, "type", room, "idleHours")).isEqualByComparingTo("332");
         assertThat(figure(idle, "type", gpu, "idleHours")).isEqualByComparingTo("2680");
         assertThat(figure(idle, "type", microscope, "idleHours")).isEqualByComparingTo("168");
 
-        // 3. Alice Releases the GPU line: GPU 0% and 2688 idle unit-hours on the next read; the room,
+        // 4. Alice Releases the GPU line: GPU 0% and 2688 idle unit-hours on the next read; the room,
         // allocated and not Released, stays counted.
         mvc.perform(post("/api/requests/{id}/lines/{line}/release", a1, gpuLine).with(as(alice))
                         .contentType(MediaType.APPLICATION_JSON).content("{\"kind\": \"WHOLE\"}"))

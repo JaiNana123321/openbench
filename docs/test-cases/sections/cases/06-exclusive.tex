@@ -98,7 +98,7 @@ These cases establish that an Exclusive instance is never given to two overlappi
 \tcfield{Automated by}{\code{BumpCasesTest}: ``exc-bump: a Priority line Bumps the latest-submitted blocking standard line, and its Charge is Q4 = 60.00''}
 \end{testcase}
 
-\begin{testcase}{exc-bump-effect}{A Bumped line is refunded in full, heads its waitlist, and returns its Request to Waiting}{Exclusive.Bump.Effect, Lifecycle.States}
+\begin{testcase}{exc-bump-effect}{A Bumped line is refunded in full, heads its waitlist, and returns its Request to Waiting}{Exclusive.Bump.Effect, Lifecycle.States, Draft.Create}
 \tcfield{Actor}{\code{oscar} (Manager, Operations)}
 \tcfield{Priority}{High}
 \tcfield{Preconditions}{O1 as in \TC{exc-bump}, with a second line O1b: GPU, 4 units, D 10:00--12:00 (60.00), both Required; O1 was Allocated with Charges 30.00 and 60.00 before Alice's Priority line Bumped its room line.}
@@ -107,7 +107,8 @@ These cases establish that an Exclusive instance is never given to two overlappi
 \tcstep{Open the notifications.}{None}{A notification that O1's room line was Bumped, with the reason (a Priority line).}
 \tcstep{Open O1.}{None}{O1 is Waiting; the room line is Bumped and at position 1 of the waitlist for Meeting room, D 10:00--12:00; O1b is still allocated. The history records the Bump with both lines, the actor, and the timestamp.}
 \tcstep{Open the Statement of Operations.}{None}{A Refund of 30.00 referencing the room line's Charge; the GPU Charge of 60.00 is untouched; Balance 940.00 (1000.00 $-$ 30.00 $-$ 60.00 $+$ 30.00).}
-\tcfield{Pass criteria}{The Refund, the waitlist head, the state change, and the record were all made together.}
+\tcstep{Withdraw O1.}{None}{Refused with \code{WRONG\_STATE}: O1b is still allocated and is Released first. O1, both lines, the waitlist, and the Statement are unchanged.}
+\tcfield{Pass criteria}{The Refund, the waitlist head, the state change, and the record were all made together, and a Request holding an allocated line is not withdrawn.}
 \tcfield{Automated by}{\code{BumpCasesTest}: ``exc-bump-effect: the Bumped line is refunded in full, heads its waitlist, and its Request is Waiting''}
 \end{testcase}
 

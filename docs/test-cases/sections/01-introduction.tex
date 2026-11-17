@@ -8,7 +8,7 @@ This document describes the functional test cases for Release~1 of \SRSproduct. 
 
 The product is a single web application: a Spring Boot server with a PostgreSQL database and a React client in the browser, which talks to the server only through a REST API. The build under test is the \code{openbench} repository; the requirements are those of SRS version \SRSversion, and the product follows Software Design Document (SDD) version \SDDversion.
 
-The product was built in increments while this document was written. At commit \code{8e76cc5} (2026-11-16) the build implements every Release~1 feature and the six Stretch requirements, and an automated test runs every test case: in that build's run report, 89 cases pass in full and 2 pass in part (\TC{drf-line-options} and \TC{drf-withdraw}, whose steps are spread over several tests, none of which runs the whole case). The Automated by field of each case names the tests that ran it. Four details of the SDD are not built, and no case depends on them: splitting a line into shorter windows, planning Bumps when the last approval arrives rather than at submission, idle capacity for the Period to date, and the oldest waiting submission on the dashboard. Section~\ref{sec:special} explains how cases for features not yet built are treated.
+The product was built in increments while this document was written. At commit \code{4656265} (2026-11-16) the build implements every Release~1 feature and the six Stretch requirements except idle capacity for the Period to date (\req{Dashboard.Utilization}), and an automated test runs every test case: in that build's run report, 88 cases pass in full and 3 pass in part (\TC{drf-line-options} and \TC{drf-withdraw}, whose steps are spread over several tests, none of which runs the whole case, and \TC{dsh-utilization}, whose step for the Period to date waits for that figure). The Automated by field of each case names the tests that ran it. Four details of the SDD are not built, and no case depends on them: splitting a line into shorter windows, planning Bumps when the last approval arrives rather than at submission, idle capacity for the Period to date, and the oldest waiting submission on the dashboard. Section~\ref{sec:special} explains how cases for features not yet built are treated.
 
 \subsection{Scope}\label{sec:scope}
 \textbf{In scope.} All 47 functional requirements of the SRS short edition, Section~4: the 41 Release~1 requirements and the 6 marked Stretch, which have their own test cases marked as such. Appendix~\ref{app:trace} lists every requirement with the test cases that cover it.
@@ -17,7 +17,7 @@ The product was built in increments while this document was written. At commit \
 
 \subsection{References}
 \begin{itemize}
-  \item \SRSproduct{} Software Requirements Specification, version \SRSversion, 2026-11-07 (short edition: the requirements tested here).
+  \item \SRSproduct{} Software Requirements Specification, version \SRSversion, 2026-11-16 (short edition: the requirements tested here).
   \item \SRSproduct{} Software Design Document, version \SDDversion, 2026-11-07 (screens, API conventions, error codes, testing strategy).
   \item Architecture decision records ADR-0001 to ADR-0007, in particular ADR-0001 (Holds bounded by the Objection Window) and ADR-0006 (allocation correctness in the database).
   \item The \code{openbench} repository \code{README.md}: building, running with the demo data, and the demo logins.

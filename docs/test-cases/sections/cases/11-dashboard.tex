@@ -14,10 +14,11 @@ These cases establish that the dashboard reports utilization, idle capacity, and
 \tcfield{Test data}{None.}
 \tcsteps
 \tcstep{Open the dashboard for the current Period.}{None}{Meeting room: utilization $4 \div (2 \times h) \times 100\%$ (for a 30-day Period, $h = 720$: 0.28\%); 1 line waiting. GPU: utilization $8 \div (16 \times h) \times 100\%$ (0.07\% for $h = 720$); 0 lines waiting. Confocal microscope: 0\%.}
+\tcstep{Read idle capacity for the Period to date.}{None}{Each type's capacity times the hours $h_0$ from the start of the Period to now, since nothing is allocated before E: Meeting room $2h_0$ instance-hours, GPU $16h_0$ unit-hours, Confocal microscope $h_0$.}
 \tcstep{Read idle capacity for the coming seven days.}{None}{Meeting room $2 \times 168 - 4 = 332$ instance-hours; GPU $16 \times 168 - 8 = 2680$ unit-hours; Confocal microscope 168.}
 \tcstep{Have \code{alice} Release the GPU line, then reload the dashboard.}{None}{GPU utilization 0\% and idle capacity 2688 unit-hours: the Release completed before the page was requested.}
 \tcfield{Pass criteria}{Every figure matches the formula to the stated rounding; the room allocated but not Released stays counted as allocated.}
-\tcfield{Automated by}{\code{DashboardCasesTest}: ``dsh-utilization: utilization, idle capacity for seven days, and waiting lines per type; a Release shows at once''}
+\tcfield{Automated by}{\code{DashboardCasesTest}: ``dsh-utilization: utilization, idle capacity for seven days, and waiting lines per type; a Release shows at once'' (in part)}
 \end{testcase}
 
 \begin{testcase}{dsh-credits}{Credits and Loans per Team and Period}{Dashboard.Credits}

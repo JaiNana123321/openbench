@@ -17,11 +17,11 @@ None. The system manages records; it doesn't control doors, instruments, or comp
 
 \subsection{Software Interfaces}
 
-All data is stored in PostgreSQL~16, a standard SQL database. Communication between the web interface and the back end goes only through a REST/JSON API over HTTPS. Every action described in the use cases can be done through this API with the same role controls. The back end is built in Java~17 with Spring Boot and runs in one Docker image. Release~1 doesn't connect to calendar, HR, identity, or cluster-scheduling systems (\liref{integrations}).
+All data is stored in PostgreSQL~16, a standard SQL database. Communication between the web interface and the back end goes only through a REST/JSON API over HTTPS. Every action described in the use cases can be done through this API with the same role controls. The back end is built in Java~25 with Spring Boot and runs in one Docker image. Release~1 doesn't connect to calendar, HR, identity, or cluster-scheduling systems (\liref{integrations}).
 
 \si{db}{All persistent data shall be stored in PostgreSQL~16 through JDBC with the schema migrated by the application at start-up; tests shall run against PostgreSQL~16 in a container started by the test suite (Testcontainers) with the same migrations.}
 
-\si{api}{The front end shall talk to the back end only through a REST/JSON API over HTTPS, and every use case in Appendix~\ref{app:usecases} shall be achievable through that API with the same role enforcement; the back end runs on Java~17 with Spring Boot in one Docker image; Release~1 has no interface to any calendar, HR, identity, or cluster-scheduling system (\liref{integrations}).}
+\si{api}{The front end shall talk to the back end only through a REST/JSON API over HTTPS, and every use case in Appendix~\ref{app:usecases} shall be achievable through that API with the same role enforcement; the back end runs on Java~25 with Spring Boot in one Docker image; Release~1 has no interface to any calendar, HR, identity, or cluster-scheduling system (\liref{integrations}).}
 
 \subsection{Communications Interfaces}
 
