@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Fotih · Demo 2</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:ital,wght@0,400;0,600;1,400&family=IBM+Plex+Sans+Condensed:wght@600&family=IBM+Plex+Mono:wght@500&display=swap">
+<link rel="stylesheet" href="demo.css">
+</head>
+<body>
+<main>
+<nav class="pages" aria-label="Demo pages">
+  <a href="index.html">Overview</a>
+  <a href="jai.html">Jai</a>
+  <a href="brian.html">Brian</a>
+  <a href="fotih.html" aria-current="page">Fotih</a>
+  <a href="yerassyl.html">Yerassyl</a>
+</nav>
+
+<h1>Fotih: code coverage</h1>
+<p class="lede">18:00–24:00 · Code coverage, 30 points. The rubric asks for four things. Show a coverage report made by a tool. Say which tests produced it, which code was measured, and what the figures mean. This page follows that order.</p>
+<p class="legend"><span class="say">Purple italics</span> is what to say. <span style="color:var(--accent)">Blue</span> is what should be on screen.</p>
+
+<h2>What to have open</h2>
+<ul class="check">
+  <li><code>~/demo2-reports/jacoco/index.html</code> (server report, JaCoCo)</li>
+  <li><code>~/demo2-reports/web-coverage/index.html</code> (client report, Vitest)</li>
+  <li><code>pom.xml</code> in VS Code, lines 27–28</li>
+  <li>A terminal in the repo, font size up</li>
+</ul>
+
+<h2>1. The report <span class="when">18:00–19:00</span></h2>
+<ol>
+  <li>Open the JaCoCo report.
+    <span class="see">Bottom row "Total": Instructions 96% (1,202 of 35,822 missed), Branches 86% (305 of 2,343 missed), Lines 169 of 5,868 missed, Methods 40 of 1,705 missed, Classes 0 of 307 missed.</span></li>
+  <li class="say">This is JaCoCo, the standard Java coverage tool. <code>mvn verify</code> generates it on every full build. Over the server, 97.1% of lines and 87.0% of branches were executed by at least one test. The page shows 86% because JaCoCo cuts off the decimals: it's 86.98% exactly.</li>
+</ol>
+
+<h2>2. Which tests produced it <span class="when">19:00–19:45</span></h2>
+<ul>
+  <li class="say">All 730 server tests, in 103 classes. Maven runs them with a JaCoCo agent attached, which records every line and branch they execute.</li>
+  <li class="say">Most are integration tests: a real HTTP request goes in, through our controllers and services, to a real PostgreSQL database in a Docker container. So a covered line ran the way it runs in production, not against a mock.</li>
+  <li class="say">They include the 161 tests tied to the functional test cases Brian showed, plus unit tests and concurrency tests.</li>
+</ul>
+
+<h2>3. Which code was measured <span class="when">19:45–20:30</span></h2>
+<ul>
+  <li class="say"><b>Measured:</b> all of the server's own code in <code>src/main/java</code>: the nine modules (requests, allocation, ledger, and so on) plus <code>common</code>, <code>security</code>, and <code>config</code>. That's 307 classes and 5,868 lines.</li>
+  <li class="say"><b>Excluded on purpose:</b> one class, <code>OpenBenchApplication</code>. It only holds <code>main()</code>, which tests never call, because the test framework starts the server itself.</li>
+  <li class="say"><b>Not in this report:</b> test code itself, and the React client, which has its own report (step 6). SQL in our migrations isn't Java bytecode, so JaCoCo can't see it. The database rules are tested by the integration tests instead.</li>
+</ul>
+
+<h2>4. What the figures mean <span class="when">20:30–22:00</span></h2>
+<ol>
+  <li class="say"><b>Lines</b>: a line counts as covered if any test executed it. <b>Branches</b> is stricter: for every <code>if</code>, did tests take both the true and the false side? That's why branches (87%) are lower than lines (97%).</li>
+  <li>Point at the package list.
+    <span class="see">Branch column, lowest: <code>common</code> 68%, <code>security</code> 73%. Highest: <code>jobs</code> and <code>config</code> 100%, <code>dashboard</code> 97%. The largest module, <code>requests</code>, shows 84% of 924 branches.</span></li>
+  <li>Click <b>edu.cwru.openbench.security</b> → <b>LoginHandler</b> → <b>LoginHandler.java</b>.
+    <span class="see">Yellow diamonds on lines 64, 74, and 78: one side of each branch never ran.</span>
+    <span class="say">Yellow means half-covered. These are defensive branches: an unusual login failure type, a missing username, and a username over 64 characters, which we cut so nobody can forge log lines. Tests never send those, so the branch shows yellow.</span></li>
+  <li>Back, then <b>edu.cwru.openbench.common</b> → <b>DateRange</b> → <b>DateRange.java</b>.
+    <span class="see">Lines 23 and 27 in red: <code>contains(…)</code> never ran at all.</span>
+    <span class="say">Red means no test executed it. Coverage is how we find this: these methods may simply be unused, so they're candidates to delete rather than to test.</span></li>
+  <li class="say">Coverage says what ran, not that it's right. That's why we pair it with the functional test cases, which check the expected results.</li>
+</ol>
+
+<h2>5. The coverage gate <span class="when">22:00–23:00</span></h2>
+<ol>
+  <li>Show <code>pom.xml</code> lines 27–28.
+    <span class="see"><code>coverage.line.minimum 0.90</code> and <code>coverage.branch.minimum 0.80</code></span>
+    <span class="say">The build fails if coverage drops below 90% of lines or 80% of branches. So nobody can merge a feature without tests and not notice.</span></li>
+  <li>Prove it. In the terminal:
+<pre>mvn jacoco:check@check -Dcoverage.branch.minimum=0.90</pre>
+    <span class="see">About 1 second: "Rule violated for bundle openbench: branches covered ratio is 0.86, but expected minimum is 0.90", then BUILD FAILURE.</span>
+    <span class="say">I raised the branch minimum to 90% and the build fails. JaCoCo rounds 86.98% down to 0.86 in that message.</span></li>
+</ol>
+
+<h2>6. The client report <span class="when">23:00–24:00</span></h2>
+<ol>
+  <li>Open the Vitest report.
+    <span class="see">Statements 95.49%, Branches 83.66%, Functions 96.61%, Lines 97.96%.</span></li>
+  <li class="say">The React client has 229 tests in 46 files, using Vitest and React Testing Library, with the API mocked. Its own thresholds in <code>web/vite.config.ts</code> are 90% statements, 78% branches, 92% functions, and 92% lines. Only <code>main.tsx</code>, which just mounts the app, and the test helpers are excluded.</li>
+</ol>
+
+<h2>Hand-off <span class="when">24:00</span></h2>
+<p class="say">So we know what's tested and how much of the code that reaches. Yerassyl will show what happens when a test finds a problem.</p>
+
+<h2>Reference: every package</h2>
+<div class="scroll">
+<table>
+  <thead><tr><th>Package</th><th class="num">Lines</th><th class="num">Line cov.</th><th class="num">Branches</th><th class="num">Branch cov.</th></tr></thead>
+  <tbody>
+    <tr><td>common</td><td class="num">166</td><td class="num">94.0%</td><td class="num">70</td><td class="num">68.6%</td></tr>
+    <tr><td>security</td><td class="num">110</td><td class="num">98.2%</td><td class="num">26</td><td class="num">73.1%</td></tr>
+    <tr><td>notifications</td><td class="num">51</td><td class="num">100.0%</td><td class="num">4</td><td class="num">75.0%</td></tr>
+    <tr><td>requests</td><td class="num">1,871</td><td class="num">95.8%</td><td class="num">924</td><td class="num">85.0%</td></tr>
+    <tr><td>allocation</td><td class="num">1,385</td><td class="num">96.3%</td><td class="num">590</td><td class="num">85.9%</td></tr>
+    <tr><td>ledger</td><td class="num">467</td><td class="num">98.7%</td><td class="num">162</td><td class="num">90.7%</td></tr>
+    <tr><td>members</td><td class="num">471</td><td class="num">97.9%</td><td class="num">144</td><td class="num">91.0%</td></tr>
+    <tr><td>settings</td><td class="num">634</td><td class="num">99.8%</td><td class="num">201</td><td class="num">92.5%</td></tr>
+    <tr><td>inventory</td><td class="num">439</td><td class="num">99.8%</td><td class="num">168</td><td class="num">94.6%</td></tr>
+    <tr><td>dashboard</td><td class="num">169</td><td class="num">100.0%</td><td class="num">40</td><td class="num">97.5%</td></tr>
+    <tr><td>config</td><td class="num">42</td><td class="num">90.5%</td><td class="num">6</td><td class="num">100.0%</td></tr>
+    <tr><td>jobs</td><td class="num">67</td><td class="num">92.5%</td><td class="num">8</td><td class="num">100.0%</td></tr>
+  </tbody>
+</table>
+</div>
+<p class="key">History (TESTING.md): 97.2% lines and 84.8% branches on 7 Nov; 97.1% and 87.0% now. Branch coverage went up while we built the rest of Release 1.</p>
+
+<h2>If the grader asks</h2>
+<dl class="qa">
+  <dt>"Why not 100%?"</dt><dd>The rest is mostly defensive code (rare errors, malformed input) and a few unused helpers. Testing those adds little; the gate keeps the floor from slipping.</dd>
+  <dt>"Does high coverage mean no bugs?"</dt><dd>No. Coverage shows what ran. The functional cases show it did the right thing. Bug #27 was in code that was already covered: it ran, but it did the wrong thing in a situation no case described yet.</dd>
+  <dt>"Why is common lowest?"</dt><dd>It holds shared helpers: date ranges, error mapping, retries. Many branches handle errors that the features never trigger.</dd>
+  <dt>"Where is the gate configured?"</dt><dd><code>pom.xml</code>, the <code>jacoco-maven-plugin</code> <code>check</code> execution, using the two properties on lines 27–28.</dd>
+</dl>
+</main>
+</body>
+</html>

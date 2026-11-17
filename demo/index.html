@@ -1,0 +1,99 @@
+<title>OpenBench Demo 2 Plan</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:ital,wght@0,400;0,600;1,400&family=IBM+Plex+Sans+Condensed:wght@600&family=IBM+Plex+Mono:wght@500&display=swap">
+<link rel="stylesheet" href="demo.css">
+
+<main>
+<nav class="pages" aria-label="Demo pages">
+  <a href="index.html" aria-current="page">Overview</a>
+  <a href="jai.html">Jai</a>
+  <a href="brian.html">Brian</a>
+  <a href="fotih.html">Fotih</a>
+  <a href="yerassyl.html">Yerassyl</a>
+</nav>
+
+<h1>Demo 2: how it runs</h1>
+<p class="lede">Wednesday 18 November 2026 · 30 minutes · in person. Read this page to know what everyone else is doing. Your own page has your script.</p>
+
+<h2>The run order <span class="when">30 min</span></h2>
+<div class="scroll">
+<table>
+  <thead><tr><th>Time</th><th>Section</th><th>Who</th><th>Rubric</th></tr></thead>
+  <tbody>
+    <tr><td>0:00–1:30</td><td>1. Opening</td><td><span class="who">Jai</span></td><td>Clarity</td></tr>
+    <tr><td>1:30–12:00</td><td>2. Test cases run by hand in the live app</td><td><span class="who">Jai</span></td><td>Functional testing (40)</td></tr>
+    <tr><td>12:00–18:00</td><td>3. The same cases, automated, and the run report</td><td><span class="who">Brian</span></td><td>Functional testing (40)</td></tr>
+    <tr><td>18:00–24:00</td><td>4. Code coverage</td><td><span class="who">Fotih</span></td><td>Coverage (30)</td></tr>
+    <tr><td>24:00–28:30</td><td>5. Issue tracking</td><td><span class="who">Yerassyl</span></td><td>Issue tracking (20)</td></tr>
+    <tr><td>28:30–29:30</td><td>6. What's left, and close</td><td><span class="who">Yerassyl</span></td><td>Clarity</td></tr>
+  </tbody>
+</table>
+</div>
+<p class="key">One minute is spare. Everything runs on Jai's laptop; hand over by walking to it, not by switching laptops.</p>
+
+<h2>The story in one paragraph</h2>
+<p>OpenBench lets a Manager post one Request for people, rooms (Exclusive), and compute (Metered), and settles it in credits. We wrote 91 functional test cases from the SRS. Jai runs four of them by hand in the real app. Brian shows that those same cases, and all the others, run automatically on every build, and that the run report traces each requirement to its cases. Fotih shows how much of the code those tests reach. Yerassyl shows how a defect the tests exposed went through the tracker, from report to closed.</p>
+
+<h2>Numbers everyone should know</h2>
+<div class="scroll">
+<table>
+  <tbody>
+    <tr><td>Requirements in the submitted SRS</td><td class="num">47</td><td>41 Release 1 + 6 Stretch; every one built</td></tr>
+    <tr><td>Functional test cases</td><td class="num">91</td><td>89 pass in full, 2 pass in part, 0 fail, 0 untested</td></tr>
+    <tr><td>Server tests (JUnit 5)</td><td class="num">730</td><td>103 classes, all against PostgreSQL 16 in a container; full build 98 s</td></tr>
+    <tr><td>Tests tagged with a test case</td><td class="num">161</td><td>via <code>@Verifies("case-key")</code></td></tr>
+    <tr><td>Server coverage (JaCoCo)</td><td class="num">97.1% / 87.0%</td><td>lines / branches; the build fails below 90% / 80%</td></tr>
+    <tr><td>Client tests (Vitest)</td><td class="num">229</td><td>coverage 98.0% lines, 83.7% branches</td></tr>
+    <tr><td>GitHub issues, milestone Release 1</td><td class="num">27</td><td>26 closed, 1 open (#17, spec drift)</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2>Section summaries</h2>
+
+<h3>1–2. Opening and live test cases <span class="who">Jai</span></h3>
+<p>One world, reset just before the demo. Four signed-in users in four tabs: alice (Platform), bob (Research), oscar (Operations), erin (Capacity Planner). Each act names its test case, does the steps, and points at the expected result on screen.</p>
+<ol>
+  <li><b>Quotes</b> (TC-DRF-03): a room line costs 30.00 and a GPU line 50.00, from the price formula.</li>
+  <li><b>No overspending</b> (TC-DRF-07): bob's 660.00 Request is refused, "short by 60.00 credits"; making a line Optional lets it through.</li>
+  <li><b>No double-booking, Release, and the waitlist</b> (TC-EXC-01, TC-REL-01, TC-EXC-05): bob waits for alice's room; alice releases it for a 22.50 Refund; bob's Request is allocated automatically.</li>
+  <li><b>Priority Bump</b> (TC-EXC-07, TC-EXC-08): alice's Priority line bumps oscar's room booking; oscar gets a full Refund and heads the waitlist; withdrawing is refused. That refusal was bug #27, which Yerassyl shows later.</li>
+  <li><b>Dashboard</b> (TC-DSH-01), only if time allows.</li>
+</ol>
+
+<h3>3. Automated tests and the run report <span class="who">Brian</span></h3>
+<p>The test case document (the PDF) shows TC-EXC-08 as written. In the code, <code>BumpCasesTest</code> carries <code>@Verifies("exc-bump-effect")</code> and asserts each step's expected result. Brian runs it live (about 11 s), then opens the run report: every case, its tests, and its status, plus all 47 requirements marked Passed. He also shows the cases nobody can run by hand: two Managers submitting at the same instant, and clock steps such as an Objection Window lapsing.</p>
+
+<h3>4. Code coverage <span class="who">Fotih</span></h3>
+<p>The JaCoCo report from <code>mvn verify</code>: 97.1% of lines and 87.0% of branches over the server's 5,868 lines. Fotih says which tests produced it (all 730), what is measured (the server's main code; only the <code>main()</code> class is excluded), and where coverage is weakest (<code>common</code> and <code>security</code> branches). Then he makes the build fail by raising the branch minimum to 90%, and shows the client's Vitest report.</p>
+
+<h3>5–6. Issue tracking and close <span class="who">Yerassyl</span></h3>
+<p>GitHub Issues on <code>JaiNana123321/openbench</code>, milestone Release 1. Labels carry the status: planned, ready, in progress, in review, blocked, closed. Yerassyl walks through #27 from report to close: blocked on a decision, in progress, in review, then closed with links to the fixing commits. He also shows #18 and #19, two defects that test cases found, and #17, the log of spec changes. He closes with what isn't done: the non-functional gaps (Docker image, HTTPS, performance not measured).</p>
+
+<h2>Before the demo</h2>
+<h3>Tonight <span class="who">Jai</span></h3>
+<ul class="check">
+  <li>Pull <code>main</code> (at <code>578798c</code>). Start Docker.</li>
+  <li>Run <code>mvn verify</code> (about 2 min), then <code>npm --prefix web run coverage</code>.</li>
+  <li>Copy the reports somewhere a later test run can't overwrite them (a single-class <code>mvn test</code> rewrites the run report with only its own cases):
+<pre>mkdir -p ~/demo2-reports
+cp -R target/site/jacoco ~/demo2-reports/jacoco
+cp target/test-cases/report.md ~/demo2-reports/
+cp -R web/coverage ~/demo2-reports/web-coverage</pre></li>
+  <li>Rehearse section 2 once on a fresh world (steps on Jai's page).</li>
+</ul>
+<h3>15 minutes before</h3>
+<ul class="check">
+  <li>Reset the world: <code>docker compose down</code>, then <code>mvn spring-boot:run -Dspring-boot.run.profiles=demo</code>; wait for "Started OpenBenchApplication".</li>
+  <li>Sign in the four users (password <code>demo</code>), one per address, so their sessions don't collide (details on Jai's page).</li>
+  <li>Open, each in its own tab or window: the test case PDF, VS Code on <code>BumpCasesTest</code>, <code>~/demo2-reports/report.md</code> in VS Code preview, <code>~/demo2-reports/jacoco/index.html</code>, <code>~/demo2-reports/web-coverage/index.html</code>, a terminal in the repo, and GitHub Issues.</li>
+  <li>Browser zoom at 125%; notifications and chat apps off.</li>
+</ul>
+
+<h2>If something breaks</h2>
+<ul>
+  <li><b>A live step fails:</b> say what should have happened, then move on. Every case on screen also has a passing automated test, which Brian shows next.</li>
+  <li><b>The app won't start:</b> Brian starts early and runs <code>BumpCasesTest</code>, then the run report. That covers the same cases.</li>
+  <li><b>No network:</b> the tracker section needs GitHub. Have screenshots of #27 (the issue and its timeline) on the laptop.</li>
+</ul>
+</main>

@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Brian · Demo 2</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:ital,wght@0,400;0,600;1,400&family=IBM+Plex+Sans+Condensed:wght@600&family=IBM+Plex+Mono:wght@500&display=swap">
+<link rel="stylesheet" href="demo.css">
+</head>
+<body>
+<main>
+<nav class="pages" aria-label="Demo pages">
+  <a href="index.html">Overview</a>
+  <a href="jai.html">Jai</a>
+  <a href="brian.html" aria-current="page">Brian</a>
+  <a href="fotih.html">Fotih</a>
+  <a href="yerassyl.html">Yerassyl</a>
+</nav>
+
+<h1>Brian: the same cases, automated</h1>
+<p class="lede">12:00–18:00 · Functional testing, 40 points (shared with Jai). Jai just ran test cases by hand. You show that they're written down before the code, that each one is automated, and how the run report proves every requirement was tested.</p>
+<p class="legend"><span class="say">Purple italics</span> is what to say. <span style="color:var(--accent)">Blue</span> is what should be on screen.</p>
+
+<h2>What to have open</h2>
+<ul class="check">
+  <li>The test case document: <code>docs/test-cases/OpenBench-Test-Cases.pdf</code>, at <b>page 33</b> (TC-EXC-08).</li>
+  <li>VS Code on <code>src/test/java/edu/cwru/openbench/requests/BumpCasesTest.java</code>, line 78, and a terminal in the repo with font size up.</li>
+  <li>The saved run report: <code>~/demo2-reports/report.md</code> in VS Code with Markdown preview (Cmd-Shift-V).</li>
+</ul>
+<div class="note"><strong>Don't run <code>mvn test</code> before Jai has stopped the app,</strong> and don't open <code>target/test-cases/report.md</code> after a live run. A single-class Maven run rewrites that file with only its own 4 cases (we saw "4 Passed, 87 Not automated" in rehearsal). Always show the saved copy in <code>~/demo2-reports/</code>.</div>
+
+<h2>1. The test case, as written <span class="when">12:00–13:00</span></h2>
+<ol>
+  <li>Show the PDF at page 33, <b>TC-EXC-08 exc-bump-effect</b>.
+    <span class="see">The template: key, title, the SRS requirements it verifies (Exclusive.Bump.Effect, Lifecycle.States, Draft.Create), actor, preconditions, numbered steps each with its expected result, pass criteria, "Automated by".</span></li>
+  <li class="say">This is the case Jai just ran: oscar's room booking is bumped, refunded in full, and put first on the waitlist. We wrote 91 cases like this from the SRS before or alongside the code. Each step states its expected result, so pass or fail is never a judgment call.</li>
+  <li class="say">The last field, "Automated by", names the test that runs this case on every build.</li>
+</ol>
+
+<h2>2. The test that automates it <span class="when">13:00–14:30</span></h2>
+<ol>
+  <li>Switch to VS Code, <code>BumpCasesTest</code>, method <code>refundsTheBumpedLineAndPutsItFirst</code> (line 81).
+    <span class="see"><code>@DisplayName("exc-bump-effect: …")</code> and <code>@Verifies("exc-bump-effect")</code> above it.</span></li>
+  <li>Scroll through slowly, pointing at the numbered comments.
+    <span class="say">The comments follow the case's steps: 1, the notification; 2, the Request is Waiting at waitlist position 1; 3, the Statement shows the 30.00 Refund and a Balance of 940.00; 4, withdrawing is refused with WRONG_STATE. Each expected result in the document is an assertion here.</span></li>
+  <li class="say"><code>@Verifies</code> takes the case's key. If a key doesn't exist in the document, a convention test fails the build, so the tags can't drift from the document.</li>
+  <li class="say">These are integration tests. Each one starts the real Spring Boot server against a real PostgreSQL 16 database in a Docker container, with the production migrations. No mocks and no in-memory database, because our double-booking rules live in the database itself.</li>
+</ol>
+
+<h2>3. Run it live <span class="when">14:30–15:30</span></h2>
+<ol>
+  <li>Check Jai has stopped the app. In the terminal:
+<pre>mvn test -Dtest=BumpCasesTest -Dskip.npm -Dskip.installnodenpm</pre>
+    About 11 seconds, most of it starting PostgreSQL.
+    <span class="see">4 tests pass: exc-bump, exc-bump-effect, exc-bump-cutoff, exc-priority-protected.</span>
+    <span class="say">That's four cases in about ten seconds, including starting PostgreSQL. The full suite is 730 tests and takes under two minutes.</span></li>
+</ol>
+
+<h2>4. What a person can't run by hand <span class="when">15:30–16:30</span></h2>
+<ul>
+  <li><b>Time.</b> Open <code>PendingCasesTest</code>, around line 155: <code>movableClock.set(windowEnd.plusSeconds(60))</code>.
+    <span class="say">An Objection Window lasts two working days. The server reads time from one clock that the tests can move, so TC-LIF-07 checks the lapse in one run instead of waiting two days.</span></li>
+  <li><b>Races.</b> <code>SubmitConcurrencyTest</code>, line 65, <code>@Verifies("lif-race")</code>.
+    <span class="say">Two Managers submit for the last room at the same instant, on two threads. Exactly one gets it and the other waits at position 1, every time. You can't time that by hand.</span></li>
+</ul>
+
+<h2>5. The run report <span class="when">16:30–18:00</span></h2>
+<ol>
+  <li>Open <code>~/demo2-reports/report.md</code> (preview).
+    <span class="see">Header: "Generated by mvn verify … build 578798c". Summary: 91 cases, 89 Passed, 2 Passed (partial), 0 Failed, 0 Not automated. 161 tagged tests, 0 failed, 0 disabled.</span>
+    <span class="say"><code>mvn verify</code> writes this report from its own test run. A listener records every tagged test's result, then reads the cases from the document and the requirements from the SRS.</span></li>
+  <li>Scroll to <b>EXC: Exclusive Allocation</b>, row TC-EXC-08.
+    <span class="see">Status Passed, with the test name we just ran.</span></li>
+  <li>Scroll to the end, the <b>Requirements</b> table.
+    <span class="see">All 47 requirements of the SRS, each with its cases. Every one is Passed.</span>
+    <span class="say">This is the traceability: requirement to test case to automated test to result. All 47 requirements have at least one case passing in full.</span></li>
+  <li>Explain the 2 partials (TC-DRF-04 and TC-DRF-10).
+    <span class="say">Their steps are split across several smaller tests, so no single test runs the whole case. Every step is covered, but we mark them honestly as partial.</span></li>
+</ol>
+
+<h2>Hand-off <span class="when">18:00</span></h2>
+<p class="say">That's what we test and the results. Fotih will show how much of the code those tests actually reach.</p>
+
+<h2>Key facts</h2>
+<ul>
+  <li>91 cases: 63 High, 23 Medium, 5 Low priority. High: 62 Passed, 1 partial.</li>
+  <li>730 server tests in 103 classes; 161 tests tagged with a case key; 229 client tests (Vitest) besides.</li>
+  <li>Failure means: at least one tagged test for the case failed, and the report never hides it. Not automated means no test ran it, and it must be run by hand (TESTING.md says how).</li>
+  <li>Test cases found real defects: #18 (Priority couldn't be marked) and #19 (weekly recurrence missing). Yerassyl shows them.</li>
+</ul>
+
+<h2>If the grader asks</h2>
+<dl class="qa">
+  <dt>"Who wrote the expected results, and when?"</dt><dd>From the SRS, in the test case document (first draft 5 Nov), reviewed by the team. The code was then made to meet them. Where a case contradicted the SRS, we fixed the case and recorded it.</dd>
+  <dt>"Why integration tests instead of unit tests?"</dt><dd>Both exist. But allocation correctness lives in PostgreSQL (exclusion constraints and locks, per our ADR-0006), so a mock would test nothing that matters. Testcontainers gives the real database in every run.</dd>
+  <dt>"How long does the whole suite take?"</dt><dd>About 100 seconds for <code>mvn verify</code>: 730 tests, coverage, and the report.</dd>
+  <dt>"Is everything automated?"</dt><dd>Every case has an automated test. Two run in parts. Manual runs are still possible for any case; TESTING.md has the procedure and a run record template.</dd>
+</dl>
+</main>
+</body>
+</html>

@@ -1,0 +1,88 @@
+/* Layout: one reading column per page, sections in speaking order, a slim nav to the other pages.
+   Shared by the Demo 2 overview and the four presenter pages. */
+:root {
+  --bg: #fbfcfd;
+  --ink: #16212b;
+  --muted: #586776;
+  --line: #d8e0e7;
+  --soft: #edf2f6;
+  --accent: #1d5f8a;      /* what's on screen */
+  --say: #4a4f8c;         /* what to say */
+  --good: #2c7a4b;
+  --warn: #9a5b08;
+  --font-body: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+  --font-head: "IBM Plex Sans Condensed", "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #12181e; --ink: #e4eaef; --muted: #98a6b3; --line: #2a3540; --soft: #1b252e;
+    --accent: #79b8e3; --say: #b3b6f0; --good: #74c795; --warn: #e5a54e;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #12181e; --ink: #e4eaef; --muted: #98a6b3; --line: #2a3540; --soft: #1b252e;
+  --accent: #79b8e3; --say: #b3b6f0; --good: #74c795; --warn: #e5a54e;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+body {
+  background: var(--bg); color: var(--ink);
+  font: 16.5px/1.6 var(--font-body);
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 20px 72px;
+  margin: 0;
+}
+main { max-width: 760px; margin: 0 auto; }
+
+nav.pages { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 0.9rem; padding-bottom: 12px; border-bottom: 1px solid var(--line); margin-bottom: 20px; }
+nav.pages a { color: var(--muted); text-decoration: none; }
+nav.pages a:hover { color: var(--accent); text-decoration: underline; }
+nav.pages a[aria-current="page"] { color: var(--ink); font-weight: 600; }
+
+h1, h2, h3 { font-family: var(--font-head); line-height: 1.2; text-wrap: balance; }
+h1 { font-size: 1.9rem; margin: 0 0 4px; }
+h2 { font-size: 1.3rem; margin: 40px 0 8px; padding-top: 14px; border-top: 2px solid var(--line); display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: 4px 12px; }
+h2 .when { font: 500 0.85rem var(--font-mono); color: var(--muted); }
+h3 { font-size: 1.05rem; margin: 22px 0 6px; }
+p { margin: 6px 0; }
+.lede { color: var(--muted); margin-bottom: 8px; }
+ul, ol { margin: 6px 0; padding-left: 1.4em; }
+li { margin: 5px 0; }
+li::marker { color: var(--muted); }
+a { color: var(--accent); }
+
+code, kbd { font-family: var(--font-mono); font-size: 0.86em; background: var(--soft); padding: 1px 5px; border-radius: 4px; overflow-wrap: anywhere; }
+pre { font: 0.84rem/1.5 var(--font-mono); background: var(--soft); padding: 10px 12px; border-radius: 6px; overflow-x: auto; margin: 8px 0; }
+
+.say { color: var(--say); font-style: italic; }
+.say::before { content: "Say: "; font-style: normal; font-weight: 600; font-size: 0.85em; letter-spacing: 0.02em; }
+.see { display: block; color: var(--accent); }
+.see::before { content: "Screen: "; font-weight: 600; font-size: 0.85em; letter-spacing: 0.02em; }
+.key { color: var(--muted); font-size: 0.92em; }
+.legend { font-size: 0.9rem; color: var(--muted); }
+.legend .say::before, .legend .see::before { content: none; }
+
+.note { border-left: 3px solid var(--warn); padding: 6px 12px; background: var(--soft); border-radius: 0 6px 6px 0; margin: 12px 0; }
+.note strong { color: var(--warn); }
+
+.scroll { overflow-x: auto; }
+table { border-collapse: collapse; font-size: 0.92rem; width: 100%; font-variant-numeric: tabular-nums; }
+th, td { text-align: left; padding: 6px 12px 6px 0; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { font-weight: 600; color: var(--muted); font-size: 0.82rem; text-transform: uppercase; letter-spacing: 0.04em; }
+td.num, th.num { text-align: right; }
+
+.who { display: inline-block; font-size: 0.8rem; font-weight: 600; padding: 1px 8px; border-radius: 999px; background: var(--soft); color: var(--ink); border: 1px solid var(--line); white-space: nowrap; }
+.ok { color: var(--good); font-weight: 600; }
+
+.check li { list-style: none; position: relative; }
+.check { padding-left: 1.6em; }
+.check li::before { content: ""; position: absolute; left: -1.5em; top: 0.35em; width: 0.85em; height: 0.85em; border: 1.5px solid var(--muted); border-radius: 3px; }
+
+.qa dt { font-weight: 600; margin-top: 12px; }
+.qa dd { margin: 2px 0 0; }
+
+@media print { nav.pages { display: none; } }
