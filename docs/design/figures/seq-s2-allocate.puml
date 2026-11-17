@@ -50,7 +50,7 @@ note over Lock, Ledger
 end note
 RLS -> Lock : lockTypes(types)
 RLS -> MA : decide(a, APPROVE, reason, actor)
-MA --> RLS : ApprovalOutcome, or RuleViolation\nNOT_A_CANDIDATE (re-checked)
+MA --> RLS : Approval, or RuleViolation\nNOT_A_CANDIDATE (re-checked)
 RLS -> MA : outstanding(request)
 alt Request Pending or Waiting, no Required approval outstanding
   RLS -> RLS : allocate:\nevaluateAll

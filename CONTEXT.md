@@ -70,6 +70,10 @@ _Avoid_: quota, limit, size
 An optional per-Team cap on the units of one Metered Resource Type the Team may hold concurrently, set by the Capacity Planner. A safety valve against monopolizing a pool, not a rationing mechanism.
 _Avoid_: budget, allowance, share, capacity
 
+**Used units**:
+The units a Metered allocation actually consumed, recorded by a Resource Owner of the Resource Type once the Period containing the allocation has ended. Compared with the units requested on the dashboard; has no effect on the Ledger.
+_Avoid_: actuals, consumption, metered usage
+
 **Inventory**:
 The record of every Resource that exists, its Resource Type, and who currently holds it or has it on Hold.
 _Avoid_: capacity ledger, catalog, registry
@@ -120,9 +124,21 @@ _Avoid_: assignment, secondment, transfer, placement
 An Exclusive Request Line that is charged a premium, a multiple of the Unit Price set by the Capacity Planner. Can Bump a standard line and cannot itself be Bumped.
 _Avoid_: urgent, high-priority flag, VIP
 
+**Service tier**:
+A named level of a Metered Resource Type, set by the Capacity Planner, carrying a premium, a multiple of the Unit Price. A Manager marks a Metered line with a tier as an Exclusive line is marked Priority. Tiers rank by premium; a line with no tier ranks below every tier.
+_Avoid_: class of service, plan, level
+
 **Bump**:
-The displacement of a standard Exclusive line by a Priority line. The displaced line goes to the head of the waitlist with a full Refund. Not allowed inside the bump cutoff before the window starts.
+The displacement of a standard Exclusive line by a Priority line, or of a Metered line by a line of a higher Service tier. The displaced line goes to the head of the waitlist with a full Refund. Not allowed inside the bump cutoff before the window starts.
 _Avoid_: preempt, evict, override
+
+**Bump cutoff**:
+The time before a line's window starts, set per Resource Type by the Capacity Planner, inside which the line can no longer be Bumped. A Metered type without one never Bumps.
+_Avoid_: freeze period, lock-in, grace period
+
+**Escalation**:
+Handing a Request's outstanding approvals to the Capacity Planner when its Objection Window lapses. The Capacity Planner then approves or refuses each on the silent Manager's behalf.
+_Avoid_: override, appeal, timeout
 
 **Release**:
 A Manager giving back an allocated Exclusive or Metered line, in whole or in part, before it is consumed, or ending a Loan early. Triggers a Refund according to the Refund Schedule.
@@ -158,6 +174,18 @@ _Avoid_: encumbrance, reserved credits, pending charges
 One entry in the Ledger against an Account. Exactly four kinds: a Grant (from the Capacity Planner), a Charge (for an allocated Exclusive or Metered line), an Earning (for a Loan), or a Refund (for a Release).
 _Avoid_: debit, credit (as a direction), payment, entry
 
+**Charge**:
+The Transaction that takes a line's locked Quote from a Team's Account when the line is allocated, granted credits first, then earned credits.
+_Avoid_: debit, fee, payment
+
+**Earning**:
+The Transaction that credits a lending Team the Day Rate times the person-days of a Loan when the Loan forms. Corrected by a negative Earning when the Loan ends early.
+_Avoid_: income, revenue, payment
+
+**Refund**:
+The Transaction that returns credits for a Release, by the Refund Schedule, or in full for a Bump, in the proportions the Charge drew from granted and earned credits.
+_Avoid_: reimbursement, credit note, rebate
+
 **Grant**:
 Credits given to a Team by the Capacity Planner at the start of a Period, or as a mid-period adjustment. Expire at the end of the Period.
 _Avoid_: allowance, budget allocation, deposit
@@ -177,6 +205,10 @@ _Avoid_: cost, rate, fee, base price
 **Price Band**:
 A time-of-day and day-of-week window, defined per Resource Type by the Capacity Planner, carrying a multiplier on the Unit Price. Rewards use at low-demand times.
 _Avoid_: tariff, peak/off-peak (as terms), surge
+
+**Demand surcharge**:
+An optional multiplier on the whole Quote, set per Resource Type by the Capacity Planner as a rate: 1 + rate × the largest fraction of the type's capacity already allocated or held in any hour of the line's window when it is quoted. Locks with the Quote.
+_Avoid_: surge pricing, congestion fee, peak price
 
 **Quote**:
 The credits a Request Line will cost, shown to the Manager while drafting and locked when the Request is submitted. The Charge that posts equals the Quote.

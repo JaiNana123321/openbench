@@ -77,6 +77,6 @@ alt BumpPlan found
 else no plan (inside the bump cutoff, or only Priority holders)
   RLS -> RLS : toWaiting
 end
-RLS --> Web : SubmitOutcome
+RLS --> Web : Request
 deactivate RLS
 @enduml

@@ -18,17 +18,21 @@ Members records who the people are: Members, Teams, the assignable roles, the sk
 \field{Provided interface}
 \begin{lstlisting}[language=Java]
 interface MemberService {
-  Member createMember(NewMember cmd);                       // ADMIN; team required; initial password hashed
-  void deactivate(MemberId id);                             // ADMIN; cannot log in, no Shortlist
-  void moveToTeam(MemberId id, TeamId team);                // ADMIN
-  void grantRole(MemberId id, Role role);                   // ADMIN; MANAGER: the Team's previous Manager loses it (exactly one per Team)
-  void revokeRole(MemberId id, Role role);                  // ADMIN; refused if it would leave a Team with no Manager
-  Team createTeam(String name); void renameTeam(TeamId, String); void retireTeam(TeamId);  // ADMIN; retire refused while Members remain
+  MemberSummary createMember(NewMember cmd);                // ADMIN; team required; initial password hashed
+  MemberSummary deactivate(MemberId id);                    // ADMIN; cannot log in, no Shortlist
+  MemberSummary moveToTeam(MemberId id, TeamId team);       // ADMIN
+  MemberSummary grantRole(MemberId id, Role role);          // ADMIN; MANAGER: the Team's previous Manager loses it (exactly one per Team)
+  MemberSummary revokeRole(MemberId id, Role role);         // ADMIN; refused if it would leave a Team with no Manager
+  TeamOverview createTeam(String name); TeamOverview renameTeam(TeamId, String); TeamOverview retireTeam(TeamId);  // ADMIN; retire refused while Members remain
+  List<TeamOverview> teamOverview();                        // (read-only) ADMIN; Teams with retired flag, Manager, active-Member count
+  Page<AdminChange> changes(PageRequest page);              // (read-only) ADMIN; the admin_change record, newest first
   void updateSkills(MemberId id, Set<SkillId> skills);      // self
   void updateAvailability(MemberId id, List<DateRange> ranges);  // self or own Manager
   MemberProfile profile(MemberId id);                       // (read-only) self, own Manager, PLANNER, ADMIN
   MemberSummary summary(MemberId id);                       // (read-only, unscoped) name, Team, active, roles; for other modules' rules
   List<MemberSummary> roster(TeamId team);                  // (read-only) that Team's Manager, PLANNER, ADMIN
+  List<MemberSummary> lendable();                           // (read-only) MANAGER; active Members of every other Team, for a named Person line
+  Map<MemberId, MemberSummary> summaries(Collection<MemberId> ids); Map<MemberId, List<Skill>> skillsOf(Collection<MemberId> ids);  // (read-only, unscoped) bulk reads
   boolean isAvailable(MemberId id, DateRange window);       // (read-only) every day inside one range
   Set<MemberId> availableWithSkills(Set<SkillId> skills, DateRange window, TeamId excludeTeam); // (read-only) active Members only
   List<Skill> skills(); Skill addSkill(String name); void retireSkill(SkillId id);  // ADMIN for writes
@@ -37,14 +41,14 @@ interface MemberService {
   List<Team> teams();                                       // (read-only)
 }
 \end{lstlisting}
-Every active Member holds the authority \code{MEMBER}; \code{member\_role} stores only \code{MANAGER}, \code{RESOURCE\_OWNER}, \code{PLANNER}, and \code{ADMIN}. Members also provides the \code{UserDetailsService} bean that \code{security} installs in Spring Security; it reports a deactivated Member as disabled and is the only code that reads \code{password\_hash}.
+Every active Member holds the authority \code{MEMBER}; \code{member\_role} stores only \code{MANAGER}, \code{RESOURCE\_OWNER}, \code{PLANNER}, and \code{ADMIN}. Members also provides the \code{UserDetailsService} bean that \code{security} installs in Spring Security; it reports a deactivated Member as disabled and is the only code that reads \code{password\_hash}. An Administrator's write returns the new state, and every one writes an \code{admin\_change} row (kind, Member, Team, old and new value, actor, time) in its transaction. \code{deactivate}, \code{moveToTeam}, \code{grantRole}, and \code{revokeRole} (a new Manager's predecessor included) publish the application event \code{MemberAccessChanged}; \code{security} listens and, once the change commits, ends that Member's sessions through Spring's session registry, since Members sits below \code{security} and may not call it.
 
 {\footnotesize\setlength{\tabcolsep}{4pt}\renewcommand{\arraystretch}{1.1}
 \begin{tabularx}{\textwidth}{@{}L{3.0cm}YL{5.2cm}@{}}
 \toprule
 \textbf{Operation} & \textbf{Preconditions (refused with)} & \textbf{Notes} \\
 \midrule
-\code{createMember} & username unused (\code{USERNAME\_TAKEN}); Team not retired (\code{TEAM\_RETIRED}) & password hashed with bcrypt; plain text never stored or logged \\
+\code{createMember} & username unused (\code{USERNAME\_TAKEN}); email unused (\code{EMAIL\_TAKEN}); Team not retired (\code{TEAM\_RETIRED}) & password hashed with bcrypt; plain text never stored or logged \\
 \code{deactivate}, \code{moveToTeam} & a Manager leaves only as the Team's last active Member (\code{TEAM\_NEEDS\_MANAGER}); an active Administrator remains (\code{LAST\_ADMINISTRATOR}); target Team not retired (\code{TEAM\_RETIRED}) & history, formed Loans, and submitted Requests are unchanged \\
 \code{grantRole} & Member active (\code{MEMBER\_INACTIVE}) & \code{MANAGER}: the previous Manager of the Member's own Team loses it in the same transaction \\
 \code{revokeRole} & role is not \code{MANAGER} (\code{TEAM\_NEEDS\_MANAGER}); not the last \code{ADMIN} (\code{LAST\_ADMINISTRATOR}) & a Manager is replaced by granting the role to the successor \\
@@ -55,10 +59,10 @@ Every active Member holds the authority \code{MEMBER}; \code{member\_role} store
 \end{tabularx}\par}
 
 \field{Required interfaces}
-None. Members hashes passwords with the bcrypt \code{PasswordEncoder} bean of the \code{security} configuration.
+None. Members hashes passwords with the bcrypt \code{PasswordEncoder} bean of the \code{security} configuration and reaches \code{security} only through the \code{MemberAccessChanged} event.
 
 \field{Data owned}
-{\raggedright\code{team(id, name, manager\_member\_id, retired\_at)}, \code{member(id, team\_id, name, email, username, password\_hash, active)}, \code{member\_role(member\_id, team\_id, role)}, \code{skill(id, name, retired\_at)}, \code{member\_skill(member\_id, skill\_id)}, \code{availability\_range(id, member\_id, from\_date, to\_date)}. Username, Team name, and skill name are unique. A composite foreign key from \code{team(manager\_member\_id, id)} to \code{member(id, team\_id)} keeps every Team's Manager inside that Team.\par}
+{\raggedright\code{team(id, name, manager\_member\_id, retired\_at)}, \code{member(id, team\_id, name, email, username, password\_hash, active)}, \code{member\_role(member\_id, team\_id, role)}, \code{skill(id, name, retired\_at)}, \code{member\_skill(member\_id, skill\_id)}, \code{availability\_range(id, member\_id, from\_date, to\_date)}; \code{admin\_change(id, kind, member\_id, team\_id, old\_value, new\_value, actor\_id, at)}, insert only, the Administrator's counterpart of \code{setting\_change}. Username, email, Team name, and skill name are unique. A composite foreign key from \code{team(manager\_member\_id, id)} to \code{member(id, team\_id)} keeps every Team's Manager inside that Team.\par}
 
 \field{Invariants}
 \begin{itemize}
@@ -89,7 +93,7 @@ Inventory holds Resource Types as data and the Resources that exist, with their 
 \begin{itemize}
 \item \req{Inventory.Type.Define}: Resource Types as rows (unique name, one Allocation Class, typed attributes) defined, changed, and retired with no code or deployment, which is also the first half of \req{QA-extensible}; the built-in Person type cannot be retired.
 \item \req{Inventory.Resource.Add}: adding, editing, and retiring Exclusive and Metered Resources; Pool Capacity as the sum of unretired units; a retirement or reduction below future usage refused, naming the earliest hour.
-\item \req{Inventory.View.Holder}: listing and filtering Resources by type and attribute value. The Holds timeline and the ``free for a window'' filter come from \code{AllocationQueries.holders} through Allocation's controller; the Web client calls both APIs.
+\item \req{Inventory.View.Holder}: listing and filtering Resources by type and attribute value. The Holds timeline and the ``free for a window'' filter of an Exclusive type come from \module{Allocation}'s \code{HolderService} through Allocation's controller; the Web client calls both APIs.
 \end{itemize}
 
 \field{Provided interface}
@@ -110,6 +114,8 @@ interface InventoryQueries {                                // all read-only
   List<Resource> instancesOf(ResourceTypeId id);           // unretired
   int poolCapacity(ResourceTypeId id);                      // sum of units of unretired Resources
   List<Resource> search(ResourceFilter f);                  // by type, attribute value; free-for-window answered by Allocation
+  Resource resource(ResourceId id);                         // (unscoped) one Resource, retired or not
+  Set<ResourceTypeId> typesOwnedBy(MemberId owner);         // (unscoped) types of which the owner has an in-service Resource
 }
 interface ReductionGuard {                                   // port declared here, implemented in allocation
   Optional<Instant> earliestHourExceeding(ResourceTypeId type, Optional<ResourceId> instance, int newUnits, Instant from);
@@ -168,7 +174,7 @@ Settings holds every Capacity Planner setting as data and logs every change. Oth
 
 \field{Responsibilities}
 \begin{itemize}
-\item \req{Planner.Settings}: the Period, Grants per Team and Period, each Exclusive and Metered type's Unit Price, Price Bands, and Refund Schedule, the Day Rate, Quotas, the priority premium, bump cutoffs, and the Objection Window, all set without deployment; a change affects only Quotes not yet locked and events after it. The escalation list of the same requirement belongs to \module{Requests}.
+\item \req{Planner.Settings}: the Period, Grants per Team and Period, each Exclusive and Metered type's Unit Price, Price Bands, and Refund Schedule, the Day Rate, Quotas, the priority premium, bump cutoffs, and the Objection Window, all set without deployment; and the Stretch settings of each type, its service tiers (\req{Metered.Tier.Define}) and demand surcharge rate (\req{Ledger.Surcharge}); a change affects only Quotes not yet locked and events after it. The escalation list of the same requirement belongs to \module{Requests}.
 \item \req{Admin.Member.Create}, last sentence: every setting change recorded with actor, old and new value, and timestamp.
 \item The rules the SRS states on settings: Price Bands do not overlap (\req{Ledger.Price.Formula}); no refund step reaches 100\% (\req{Release.Refund}).
 \end{itemize}
@@ -177,13 +183,18 @@ Settings holds every Capacity Planner setting as data and logs every change. Oth
 \begin{lstlisting}[language=Java]
 interface SettingsService {
   PlannerSettings current();                                // (read-only) typed snapshot, see below
-  void update(SettingChange change);                        // PLANNER; writes setting_change(actor, key, old, new, at)
+  PlannerSettings update(SettingChange change);             // PLANNER; writes setting_change(actor, key, old, new, at); returns the new snapshot
   List<Period> periods();                                   // (read-only) past and planned Periods
+  Page<SettingChangeEntry> changes(PageRequest page);       // (read-only) PLANNER; the change log, newest first
+  Map<TeamId, Credits> plannedGrants(PeriodId period);      // (read-only) PLANNER; each Team's Grant for that Period
+  List<ServiceTier> tiers(ResourceTypeId type);             // (read-only) any Member; a Metered type's tiers, for the Draft editor
 }
 record PlannerSettings(Period currentPeriod, int objectionWindowWorkingDays, Credits dayRate,
                        BigDecimal priorityPremium, Map<ResourceTypeId, TypePricing> pricing,
-                       Map<TeamTypeKey, Integer> quotas, Map<TeamId, Credits> grants) {}
-record TypePricing(Credits unitPrice, List<PriceBand> bands, RefundSchedule refundSchedule, Duration bumpCutoff) {}
+                       Map<TeamTypeKey, Integer> quotas, Map<TeamId, Credits> grants, int periodMonths) {}
+record TypePricing(Credits unitPrice, List<PriceBand> bands, RefundSchedule refundSchedule, Duration bumpCutoff,
+                   List<ServiceTier> tiers, BigDecimal surchargeRate) {}   // bumpCutoff null: none; surchargeRate 0: off
+record ServiceTier(ServiceTierId id, String name, BigDecimal premium) {}  // Metered only; premium >= 1
 \end{lstlisting}
 \code{SettingChange} is a sealed interface with one record per kind of setting, so \code{update} is one entry point with typed arguments. The value types are declared here because \code{TypePricing} holds them and Settings sits below \module{Ledger}.
 \begin{lstlisting}[language=Java]
@@ -196,6 +207,8 @@ sealed interface SettingChange {      // every record below implements SettingCh
   record Refunds(ResourceTypeId type, RefundSchedule schedule) {}
   record BumpCutoff(ResourceTypeId type, Duration cutoff) {}
   record Quota(TeamId team, ResourceTypeId type, Optional<Integer> maxUnits) {}   // empty: no Quota
+  record Tiers(ResourceTypeId type, List<ServiceTier> tiers) {}    // the whole list: an id edits, no id adds, one left out is removed
+  record Surcharge(ResourceTypeId type, BigDecimal rate) {}         // 0 turns it off
 }
 record Period(PeriodId id, LocalDate startsOn, LocalDate endsOn, Optional<PeriodId> previous) {}
 record PriceBand(Set<DayOfWeek> weekdays, LocalTime start, LocalTime end, BigDecimal multiplier) {}  // end exclusive
@@ -210,16 +223,21 @@ record RefundSchedule(List<RefundStep> steps) {}      record RefundStep(Duration
 \toprule
 \textbf{Change} & \textbf{Validation (refused with)} & \textbf{Takes effect for} \\
 \midrule
-\code{PeriodLength} & 1 to 12 calendar months (\code{VALUE\_OUT\_OF\_RANGE}) & Periods not yet started \\
-\code{GrantPlan} & Period not started (\code{PERIOD\_STARTED}); amount $\ge 0$ & that Period's start; a mid-Period Grant is \code{LedgerService.postGrant} \\
+\code{PeriodLength} & 1 to 12 calendar months (\code{VALUE\_OUT\_OF\_RANGE}) & Periods after the current one, rewritten up to 120 months ahead; a planned Grant moves to the first new Period starting on or after its old one \\
+\code{GrantPlan} & Period not started (\code{PERIOD\_STARTED}); amount $\ge 0$ and within \code{numeric(12,2)} (\code{VALUE\_OUT\_OF\_RANGE}) & that Period's start; a mid-Period Grant is \code{LedgerService.postGrant} \\
 \code{UnitPrice}, \code{PriceBands} & type Exclusive or Metered (\code{CLASS\_MISMATCH}); each band has weekdays, start before end, multiplier $> 0$ (\code{BAND\_INVALID}); no hour in two bands (\code{BANDS\_OVERLAP}) & Quotes computed after the commit; a locked Quote never changes \\
-\code{Refunds} & type Exclusive or Metered; every fraction in $[0, 1)$ (\code{REFUND\_STEP\_TOO\_HIGH}) & Releases after the change \\
-\code{BumpCutoff}, \code{Quota} & Exclusive, respectively Metered, type (\code{CLASS\_MISMATCH}); cutoff $\ge 0$, Quota $\ge 1$ or empty (\code{VALUE\_OUT\_OF\_RANGE}) & Bumps planned and lines evaluated after the change; existing allocations stand \\
+\code{Refunds} & type Exclusive or Metered; every fraction below 1 (\code{REFUND\_STEP\_TOO\_HIGH}); no negative fraction, part-hour or negative lead time, or two steps with one lead time (\code{VALUE\_OUT\_OF\_RANGE}) & Releases after the change \\
+\code{BumpCutoff} & Exclusive or Metered type (\code{CLASS\_MISMATCH}); type priced (\code{UNIT\_PRICE\_REQUIRED}); whole hours $\ge 0$ (\code{VALUE\_OUT\_OF\_RANGE}) & Bumps planned after the change; existing allocations stand \\
+\code{Quota} & Metered type (\code{CLASS\_MISMATCH}); $\ge 1$ or empty (\code{VALUE\_OUT\_OF\_RANGE}) & lines evaluated after the change; existing allocations stand \\
+\code{Tiers} & Metered type (\code{CLASS\_MISMATCH}); type priced (\code{UNIT\_PRICE\_REQUIRED}); each tier named, premium from 1 to under 1000, names and premiums unique within the type (\code{VALIDATION\_FAILED}); a removed tier no line refers to (\code{TIER\_IN\_USE}) & Quotes computed after the change; a locked Quote keeps its premium \\
+\code{Surcharge} & Exclusive or Metered type (\code{CLASS\_MISMATCH}); type priced (\code{UNIT\_PRICE\_REQUIRED}); rate from 0 to under 1000 (\code{VALIDATION\_FAILED}) & Quotes computed after the change \\
 \code{DayRate}, \code{PriorityPremium}, \code{ObjectionWindow} & rate $\ge 0$, premium $\ge 1$, window $\ge 1$ working day (\code{VALUE\_OUT\_OF\_RANGE}) & Loans formed, Quotes computed, and Requests submitted after the change \\
 \bottomrule
 \end{tabularx}\par}
 
-Periods are rows. When the length is set (first by the installation migration, with the default of one calendar month), Settings writes the \code{period} rows ten years ahead, each starting the day after the previous one ends; \code{current()} returns the row containing today by the injected \code{Clock}. A Team's Grant for a Period is that Period's \code{grant\_plan} row or else the Team's most recent earlier one, so a Grant set once recurs until changed.
+Periods are rows. When the length is set (first by the installation migration, with the default of one calendar month), Settings writes the \code{period} rows ten years ahead, each starting the day after the previous one ends; \code{current()} returns the row containing today by the injected \code{Clock}. A Team's Grant for a Period is that Period's \code{grant\_plan} row or else the Team's most recent earlier one, so a Grant set once recurs until changed. A Period-length change keeps the current Period and rewrites only the Periods after it.
+
+The service tiers of a Metered type rank its lines by premium: a line Bumps only lines of a strictly lower tier, and a line with no tier ranks below every tier. Without a bump cutoff on the type, its tiers set prices but never Bump. The demand surcharge rate of a type is 0 (off) or more; \module{Requests} reads the type's fill and \code{Pricing} applies it (Section~\ref{mod:ledger}).
 
 The Objection Window is counted in working days. The setting is \code{objection\_window\_working\_days} (the SRS example default is 2), and \code{window\_ends\_at} is the instant of submission, when any line needs approval, plus that many Monday-to-Friday days. With the default, the window of a Request submitted on a Friday at 10:00 ends on the next Tuesday at 10:00.
 
@@ -227,7 +245,7 @@ The Objection Window is counted in working days. The setting is \code{objection\
 \module{Inventory}: \code{InventoryQueries.type}, to check that a type exists and has the Allocation Class the setting requires. \module{Members}: no call; \code{team\_id} and \code{actor\_id} are read-only foreign keys to \code{team} and \code{member}.
 
 \field{Data owned}
-{\raggedright\code{period(id, starts\_on, ends\_on)} with an exclusion constraint against overlap; \code{grant\_plan(team\_id, period\_id, amount)}; \code{type\_pricing(type\_id, unit\_price, bump\_cutoff\_hours)}; \code{price\_band(id, type\_id, weekdays, start\_time, end\_time, multiplier)}; \code{refund\_step(id, type\_id, min\_lead\_hours, fraction)} with \code{check (fraction >= 0 and fraction < 1)}; \code{quota(team\_id, type\_id, max\_units)}; \code{planner\_setting(key, value)} for \code{day\_rate}, \code{priority\_premium}, \code{objection\_window\_working\_days}, and \code{period\_months}; \code{setting\_change(id, key, old\_value, new\_value, actor\_id, at)}, insert only.\par}
+{\raggedright\code{period(id, starts\_on, ends\_on)} with an exclusion constraint against overlap; \code{grant\_plan(team\_id, period\_id, amount)}; \code{type\_pricing(type\_id, unit\_price, bump\_cutoff\_hours, surcharge\_rate)}, the cutoff null for none and the rate 0 for off; \code{service\_tier(id, type\_id, name, premium)} with \code{premium >= 1} and \code{(type\_id, name)} and \code{(type\_id, premium)} unique; \code{price\_band(id, type\_id, weekdays, start\_time, end\_time, multiplier)}; \code{refund\_step(id, type\_id, min\_lead\_hours, fraction)} with \code{check (fraction >= 0 and fraction < 1)}; \code{quota(team\_id, type\_id, max\_units)}; \code{planner\_setting(key, value)} for \code{day\_rate}, \code{priority\_premium}, \code{objection\_window\_working\_days}, and \code{period\_months}; \code{setting\_change(id, key, old\_value, new\_value, actor\_id, at)}, insert only.\par}
 
 \field{Invariants}
 \begin{itemize}
@@ -238,7 +256,7 @@ The Objection Window is counted in working days. The setting is \code{objection\
 \end{itemize}
 
 \field{Failure behavior}
-A refused change is a \code{RuleViolation} with a code above; the change and its log row roll back together. \code{update} locks the changed row before reading the old value, so concurrent edits of one setting are serialized and each logged old value is the one replaced.
+A refused change is a \code{RuleViolation} with a code above; the change and its log row roll back together. \code{update} first takes one transaction-scoped advisory lock for all of Settings (\code{pg\_advisory\_xact\_lock}) before reading the old value, so concurrent changes are serialized, a Period-length change is ordered against a Grant plan, and each logged old value is the one replaced. A value at or above the \code{numeric(12,2)} limit is \code{VALUE\_OUT\_OF\_RANGE}.
 
 \field{Information hiding}
 The settings table layout is hidden behind \code{PlannerSettings}: no caller knows that some settings are key--value rows and others typed tables, or that Periods are written ahead. Only the \module{Dashboard} views read a settings table (\code{period}).
@@ -264,16 +282,16 @@ Notifications tells a Member, inside the application, that something concerning 
 \field{Responsibilities}
 \begin{itemize}
 \item \req{CI-inapp}: every notification in Release~1 is in-app; email (Stretch) is a second \code{Delivery}.
-\item The notification sentences of \req{Lifecycle.Allocate} (allocation, state changes, Bumps, Waitlist fills, escalations, approval requests), \req{Matched.Loan.Form} (the Candidate when selected, the Person when the Loan forms), \req{Exclusive.Bump.Effect} (the Bumped line's Manager, with the reason), and \req{Suggest.Accept.Existing} (the Member when declined, with the reason); and the notification list every screen shows.
+\item The notification sentences of \req{Lifecycle.Allocate} (allocation, state changes, Bumps, Waitlist fills, escalations, approval requests), \req{Matched.Loan.Form} (the Candidate when selected, the Person when the Loan forms), \req{Exclusive.Bump.Effect} and \req{Metered.Tier.Bump} (the Bumped line's Manager, with the reason), \req{Matched.Escalate} (the silent Manager, of the Capacity Planner's decision), \req{Release.Loan.End} (the Person and the lending Manager), \req{Ledger.Grant.Period} (each Manager at rollover), and \req{Suggest.Accept.Existing} (the Member when declined, with the reason); and the notification list every screen shows.
 \end{itemize}
 
 \field{Provided interface}
 \begin{lstlisting}[language=Java]
 interface Notifier { void notify(MemberId to, NotificationKind kind, String text, String link); }
-interface NotificationQueries { List<Notification> unread(MemberId me); void markRead(NotificationId id); }
+class NotificationService implements Notifier {             // also the queries: Page<Notification> unread(PageRequest p); Notification markRead(NotificationId id)
 interface Delivery { void deliver(Notification n); }         // InAppDelivery (row only); EmailDelivery is Stretch
 \end{lstlisting}
-\code{notify} inserts the row, then hands it to every \code{Delivery} bean; Release~1 has only \code{InAppDelivery}, which does nothing more because the row is the delivery. The text is complete when written, and \code{link} is a Web client route such as \code{/requests/42}. \code{unread} answers only for the signed-in Member; \code{markRead} sets \code{read\_at} once.
+\code{notify} inserts the row, then hands it to every \code{Delivery} bean; Release~1 has only \code{InAppDelivery}, which does nothing more because the row is the delivery. The text is complete when written, and \code{link} is a Web client route such as \code{/requests/42}. \code{unread} answers only for the signed-in Member, paged, and each \code{Notification} carries its \code{recipient}; \code{markRead} sets \code{read\_at} once and returns the notice.
 
 {\footnotesize\setlength{\tabcolsep}{4pt}\renewcommand{\arraystretch}{1.1}
 \begin{tabularx}{\textwidth}{@{}L{3.7cm}YL{4.9cm}@{}}
@@ -282,9 +300,11 @@ interface Delivery { void deliver(Notification n); }         // InAppDelivery (r
 \midrule
 \code{APPROVAL\_REQUESTED} & routing approvals; any approval on an escalated Request & the lending Manager; the Capacity Planners once escalated \\
 \code{CANDIDATE\_SELECTED}, \code{LOAN\_FORMED} & \code{selectCandidates}; \code{allocate} & the Person \\
+\code{LOAN\_ENDED} & \code{endLoanEarly} & the Person and the lending Manager \\
 \code{REQUEST\_UPDATE} & every Request state change, a dropped Optional line, a refusal asking for a replacement & the requesting Manager \\
-\code{BUMPED}, \code{WAITLIST\_FILLED} & after \code{applyBump}, by \code{RequestLifecycleService}; \code{onCapacityFreed} & the Manager of the Bumped line or filled Request \\
-\code{ESCALATED} & \code{onWindowLapse} & the Capacity Planners and the requesting Manager \\
+\code{BUMPED}, \code{WAITLIST\_FILLED} & after \code{applyBump}, by \code{RequestLifecycleService}, for a Priority or a tier Bump; \code{onCapacityFreed} & the Manager of the Bumped line or filled Request \\
+\code{ESCALATED} & \code{onWindowLapse}; \code{decideApproval} by a Capacity Planner on an escalated approval & the Capacity Planners and the requesting Manager; the lending Manager the approval was addressed to \\
+\code{PERIOD\_ROLLOVER} & \code{rollover} (S7) & each Team's Manager; a Team without one gets none \\
 \code{SUGGESTION} & creating, accepting, or declining a Suggestion & the Manager (new); the Member (decided) \\
 \bottomrule
 \end{tabularx}\par}

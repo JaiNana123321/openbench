@@ -1,6 +1,14 @@
 # OpenBench documentation (snapshot)
 
-These files are copied from the documentation repository [`swe_csds393`](https://github.com/JaiNana123321/swe_csds393) at commit `e03bcc9` on 2026-10-20, then updated on 2026-11-07 from commit `f90134a` to SRS version 0.4, Software Design Document version 1.1, and an amended ADR-0001. That update lets an Optional Matched line outlive allocation and starts the Objection Window at submission (design RC-4), and measures the Refund lead time to the start of the released part's occurrence (design RC-5). The Functional Test Case Descriptions (version 0.2) were added on 2026-11-07 from commit `e16ec25`, without their build files, updated on 2026-11-09 to the reviewed version 0.3 from commit `9bed03e`, and on 2026-11-16 to version 0.4 (pending review) from commit `2421668`, which names the tests that automate every case and corrects three cases. They are the specification this code implements. Change a requirement, a design decision, or a term in `swe_csds393` first, then copy the changed file here; do not edit the copies in place.
+These files are copied from the documentation repository [`swe_csds393`](https://github.com/JaiNana123321/swe_csds393) at commit `e03bcc9` on 2026-10-20, then updated on 2026-11-07 from commit `f90134a` to SRS version 0.4, Software Design Document version 1.1, and an amended ADR-0001. That update lets an Optional Matched line outlive allocation and starts the Objection Window at submission (design RC-4), and measures the Refund lead time to the start of the released part's occurrence (design RC-5). The Functional Test Case Descriptions (version 0.2) were added on 2026-11-07 from commit `e16ec25`, without their build files, and updated on 2026-11-09 to the reviewed version 0.3 from commit `9bed03e`.
+
+On 2026-11-16 everything was updated from commit `4213cb3`, all of it pending review:
+
+- **The full editions** become SRS 0.5 and design 1.2. They record what the Release 1 build and its Stretch work settled: the codes, endpoints, columns and signatures logged on issue #17, the Java 25 platform, and the precise Stretch rules. The short, submitted editions stay at SRS 0.4 and design 1.1, and requirement identifiers are unchanged.
+- **`CONTEXT.md`** gains Service tier, Demand surcharge, Used units and other terms.
+- **The Functional Test Case Descriptions** become version 0.4. Every case names the tests that automate it, and three cases are corrected.
+
+They are the specification this code implements. Change a requirement, a design decision, or a term in `swe_csds393` first, then copy the changed file here; do not edit the copies in place.
 
 | Path | Contents |
 |---|---|

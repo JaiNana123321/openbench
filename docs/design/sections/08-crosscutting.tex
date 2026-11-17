@@ -33,8 +33,8 @@ Request r = requests.findVisible(id, actor.teamId(), actor.has(PLANNER)).orElseT
 \bottomrule
 \endlastfoot
 Member (everyone) & Own profile, Loans, Suggestions, and notifications; the skill list, Teams, Resource Types, Resources, and whether each Resource is free, on Hold, or allocated in a window & \code{member\_id = caller}; Inventory open, holding Team and Request hidden \\
-Manager & Own Team's roster, profiles, and Loans; the Team's Requests with Shortlists, Holds, Waitlist positions, and history; Suggestions and approvals addressed to them; the Team's Account, Statements, credits, and person-days; company-wide utilization, idle capacity, and waiting counts & \code{team\_id = caller's Team}; approvals by \code{approver\_member\_id} \\
-Resource Owner & Timelines of the Resources they own, with holding Team and Request; utilization of their Resources & \code{owner\_member\_id = caller} \\
+Manager & Own Team's roster, profiles, and Loans; the Team's Requests with Shortlists, Holds, Waitlist positions, and history; Suggestions and approvals addressed to them; the Team's Account, Statements, credits, person-days, and requested against used units; company-wide utilization, idle capacity, and waiting counts & \code{team\_id = caller's Team}; approvals by \code{approver\_member\_id} \\
+Resource Owner & Timelines of the Resources they own, with holding Team and Request; utilization of their Resources; the Allocated Metered rows of the types they own a Resource of, to record usage, and requested against used units for those types & \code{owner\_member\_id = caller} \\
 Capacity Planner & Every Team's roster, Requests, Shortlists, Account, Statements, credits, and person-days; every timeline; escalated Requests; every setting & none \\
 Administrator & Members, Teams, roles, skills, profiles, and Resource Types; no Requests, Ledger, or settings & Members and Inventory definitions only \\
 \end{longtable}
@@ -42,17 +42,17 @@ Administrator & Members, Teams, roles, skills, profiles, and Resource Types; no 
 
 \subsection{Audit Trail}
 
-Three records keep the history, each written by its owning module in the same transaction as the change it records, so a change and its record commit together or not at all (\req{QA-audit}, \req{Lifecycle.States}).
+Four records keep the history, each written by its owning module in the same transaction as the change it records, so a change and its record commit together or not at all (\req{QA-audit}, \req{Lifecycle.States}).
 
 \begin{itemize}
   \item \textbf{Request history.} \code{RequestLifecycleService.record} writes a \code{request\_event} row (Request, line, from-state, to-state, actor, time, note) for every state change of a Request or a Request Line. A Bump writes one row for each of the two lines, each naming the other (\req{Exclusive.Bump.Effect}); an approval decision also keeps \code{decided\_by}, \code{decided\_at}, and \code{reason} on the \code{approval} row.
-  \item \textbf{Setting changes.} \code{SettingsService.update} writes a \code{setting\_change} row (key, old value, new value, actor, time) for every Capacity Planner change (\req{Admin.Member.Create}, \req{Planner.Settings}).
+  \item \textbf{Setting and Administrator changes.} \code{SettingsService.update} writes a \code{setting\_change} row (key, old value, new value, actor, time) for every Capacity Planner change (\req{Admin.Member.Create}, \req{Planner.Settings}), the service tiers and surcharge rates included; \module{Members} writes an \code{admin\_change} row (kind, Member, Team, old value, new value, actor, time) for every Member, Team, and role change an Administrator makes. Both are insert-only by grant.
   \item \textbf{Ledger.} Rows of \code{transaction} are append-only (\req{Ledger.Transaction.Kinds}): the application's database role may insert and select them but not update or delete them, so a correction is a new row naming the one it corrects.
 \end{itemize}
 
 Every table also carries \code{created\_at} and \code{created\_by}. There is no Hibernate Envers and no generic event store: one explicit table per concern, written where the change happens and readable with plain SQL. Nothing is purged in Release~1 (\req{QA-retention}).
 
-\textbf{Who the actor is.} The actor is the Member who acted. Changes a job makes (Objection Window lapse, Waitlist expiry, Period rollover) record the system: \code{actor\_id} is null and the note names the job. Consequences the system draws on other objects from a Member's action, such as a Waitlist fill after a Release or an Optional line dropped at allocation, also record the system, with a note naming the cause. When the Capacity Planner decides an escalated approval on a silent Manager's behalf, both are kept: the \code{approval} row keeps \code{approver\_member\_id}, the lending Manager it was addressed to, and sets \code{decided\_by} to the Capacity Planner and \code{escalated} to true; the \code{request\_event} row names the Capacity Planner as actor and the Manager in its note (\req{Matched.Escalate}).
+\textbf{Who the actor is.} The actor is the Member who acted. Changes a job makes (Objection Window lapse, Waitlist expiry, Period rollover) record the system: \code{actor\_id} is null and the note names the job. Consequences the system draws on other objects from a Member's action, such as a Waitlist fill after a Release or an Optional line dropped at allocation, also record the system, with a note naming the cause; the Charges a fill posts carry a null actor too, so the releasing Manager never appears on the filled Team's Statement. A Bump's Refund names the submitting Manager. When the Capacity Planner decides an escalated approval on a silent Manager's behalf, both are kept: the \code{approval} row keeps \code{approver\_member\_id}, the lending Manager it was addressed to, and sets \code{decided\_by} to the Capacity Planner and \code{escalated} to true; the \code{request\_event} row names the Capacity Planner as actor and the Manager in its note (\req{Matched.Escalate}).
 
 \subsection{Notifications}
 
@@ -78,10 +78,12 @@ Candidate selected & the Candidate & ``You are proposed for a Loan to Team $\lan
 Approval refused & requesting Manager & ``$\langle$Manager$\rangle$ refused $\langle$Person$\rangle$ for line 1: $\langle$reason$\rangle$. Select a replacement.'' & \code{decideApproval} (\req{Matched.Refuse.Replace}) \\
 Loan formed & the Person; lending Manager & ``You are on Loan to Team $\langle$T$\rangle$ from Oct 12 to 23.'' / ``Earning of 1000 credits posted for $\langle$Person$\rangle$.'' & \code{allocate} (\req{Matched.Loan.Form}) \\
 Objection Window lapsed & each Capacity Planner; requesting Manager & ``Request 42 is escalated: 1 approval is outstanding past the Objection Window.'' & \code{onWindowLapse} (\req{Matched.Escalate}) \\
-Line Bumped & Bumped line's Manager & ``Line 2 ($\langle$Resource$\rangle$, Oct 14, 09:00 to 12:00) was Bumped by a Priority line. Full Refund of 270 credits; first on the Waitlist.'' & after \code{applyBump} (\req{Exclusive.Bump.Effect}) \\
-Waitlist fill, or waiting line expired & waiting Request's Manager & ``Freed capacity filled line 2. Request 42 is Allocated.'' & \code{onCapacityFreed}, \code{expireWaiting\-Lines} (\req{Exclusive.Waitlist.Join}) \\
+Escalated approval decided & the lending Manager it was addressed to & ``$\langle$Planner$\rangle$, the Capacity Planner, approved lending $\langle$Person$\rangle$ for Request 42 on your behalf.'' & \code{decideApproval} (\req{Matched.Escalate}) \\
+Loan ended early & the Person; lending Manager & ``Your Loan to Team $\langle$T$\rangle$ now ends on Oct 20.'' / ``An Earning correction of $-400$ credits leaves 600 for it.'' & \code{endLoanEarly} (\req{Release.Loan.End}) \\
+Line Bumped & Bumped line's Manager & ``Line 2 ($\langle$Resource$\rangle$, Oct 14, 09:00 to 12:00) was Bumped by a Priority line. Full Refund of 270 credits; first on the Waitlist.'' & after \code{applyBump}, Priority or tier (\req{Exclusive.Bump.Effect}, \req{Metered.Tier.Bump}) \\
+Waitlist fill & waiting Request's Manager & ``Freed capacity filled line 2. Request 42 is Allocated.'' & \code{onCapacityFreed} (\req{Exclusive.Waitlist.Join}); a waiting line whose start passes leaves the Waitlist without a notice \\
 Suggestion accepted or declined & the Member who made it & ``Your Suggestion ($\langle$type$\rangle$, Oct 12 to 16) was declined: $\langle$reason$\rangle$.'' & \code{SuggestionService} (\req{Suggest.Accept.Existing}) \\
-Period rollover, mid-Period Grant & each Manager & ``Period $\langle$P$\rangle$ began: Grant of 5000 credits. 320 granted credits expired.'' & \code{rollover}, \code{postGrant} (\req{Ledger.Grant.Period}) \\
+Period rollover, mid-Period Grant & each Manager (a Team without one gets none) & ``Period $\langle$P$\rangle$ began: Grant of 5000 credits. 320 granted credits expired.'' & \code{rollover}, \code{postGrant} (\req{Ledger.Grant.Period}) \\
 \end{longtable}
 }
 
@@ -96,8 +98,8 @@ Four exception classes in \code{common} carry every refusal, and one \code{@Rest
 \begin{itemize}
   \item \code{NotFoundException}: the object does not exist or lies outside the caller's scope (404).
   \item \code{ForbiddenException}: the caller sees the object but may not act on it, such as a lending Manager ending a Loan only the borrowing Manager may end (403). A missing role surfaces as Spring's \code{AccessDeniedException}, also 403.
-  \item \code{RuleViolation(code, message)}: a business rule refused the action. Codes that describe the object's current state (\code{WRONG\_STATE}, \code{ALREADY\_DECIDED}, \code{WINDOW\_LAPSED}, \code{SUGGESTION\_CLOSED}, \code{NOT\_ALLOCATED}, \code{PERIOD\_STARTED}) map to 409, all others to 422; the message, written for a Manager, becomes \code{detail}.
-  \item \code{ConcurrencyRetryException}: an allocation transaction failed twice on a deadlock or lock timeout, which Spring reports as \code{PessimisticLocking\allowbreak FailureException} (503). The retry advice sits outside the transaction advice and repeats the whole transaction, and since audit and notification rows are written inside it, a retry repeats no side effect. With ordered locks this should not happen, so a 503 points at a bug or an overloaded database.
+  \item \code{RuleViolation(code, message)}: a business rule refused the action. Codes that describe the object's current state (\code{WRONG\_STATE}, \code{ALREADY\_DECIDED}, \code{WINDOW\_LAPSED}, \code{SUGGESTION\_CLOSED}, \code{NOT\_ALLOCATED}, \code{PERIOD\_STARTED}, \code{INSIDE\_BUMP\_CUTOFF}, \code{ALLOCATION\_CONFLICT}) map to 409, \code{VALIDATION\_FAILED} (a well-formed value that names nothing valid, such as a tier of another type) to 400, all others to 422; the message, written for a Manager, becomes \code{detail}, and properties such as \code{shortfall} or \code{earliestHour} become extension fields.
+  \item \code{ConcurrencyRetryException}: an allocation transaction failed twice on a deadlock or lock timeout, which Spring reports as \code{PessimisticLocking\allowbreak FailureException} (503; the type lock's \code{JdbcTemplate} uses Spring's error-code translator so that a 55P03 lock timeout is reported so, Section~\ref{sec:runtime}). The retry advice sits outside the transaction advice and repeats the whole transaction, and since audit and notification rows are written inside it, a retry repeats no side effect. With ordered locks this should not happen, so a 503 points at a bug or an overloaded database.
 \end{itemize}
 
 An exclusion-constraint violation (SQLSTATE \code{23P01}) on \code{exclusive\_occurrence} or \code{loan} cannot occur while the allocators choose under the type lock; if one does, it is logged as a bug, with its stack trace, and answered with 409 \code{ALLOCATION\_CONFLICT}. Anything else is a 500 whose details stay in the log.
@@ -124,8 +126,8 @@ Deployment configuration comes from environment variables through Spring Boot's 
 \code{SPRING\_DATASOURCE\_URL} & JDBC URL of the PostgreSQL~16 database & \path{jdbc:postgresql://db:5432/openbench} \\
 \code{SPRING\_DATASOURCE\_USERNAME}, \code{SPRING\_DATASOURCE\_PASSWORD} & the application's database role (INSERT and SELECT only on \code{transaction}) & required \\
 \code{SERVER\_SERVLET\_SESSION\_TIMEOUT} & idle session expiry & \code{12h} \\
-\code{OPENBENCH\_TIME\_ZONE} & the company time zone, an IANA id & required, e.g.\ \code{America/New\_York} \\
-\code{OPENBENCH\_LOCK\_TIMEOUT} & PostgreSQL \code{lock\_timeout} on allocation transactions & \code{5s} \\
+\code{OPENBENCH\_ZONE} & the company time zone, an IANA id & \code{America/New\_York} \\
+\code{OPENBENCH\_JOBS\_ENABLED} & run the scheduled jobs and the rollover catch-up at start-up; the tests turn them off & \code{true} \\
 \code{OPENBENCH\_INITIAL\_ADMIN\_USERNAME}, \code{OPENBENCH\_INITIAL\_ADMIN\_PASSWORD} & the first Administrator, created only while no Member exists & unset after the first start \\
 \end{longtable}
 }

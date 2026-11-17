@@ -26,11 +26,12 @@ hide empty members
 
 package "requests" as P_req {
   interface RequestLifecycleService <<interface>> {
-    submit(RequestId, Actor): SubmitOutcome
+    submit(RequestId, Actor): Request
     selectCandidates(RequestLineId, List<MemberId>, Actor)
     decideApproval(ApprovalId, Decision, String, Actor)
-    releaseLine(RequestLineId, ReleasePart, Actor)
-    endLoanEarly(LoanId, LocalDate, Actor)
+    releaseLine(RequestLineId, ReleasePart, Actor): ReleaseOutcome
+    previewRelease(RequestLineId, ReleasePart): RefundQuote
+    endLoanEarly(LoanId, LocalDate, Actor): Loan
     withdraw(RequestId, Actor)
     reopenForEdit(RequestId, Actor)
     lapsedWindows(Instant): List<RequestId>
@@ -59,6 +60,7 @@ package "requests" as P_req {
     decline(SuggestionId, String)
     forManager(TeamId): List<Suggestion>
     mine(MemberId): List<Suggestion>
+    get(SuggestionId), forRequest(RequestId)
   }
 
   class Request <<entity>> {
@@ -80,7 +82,10 @@ package "requests" as P_req {
     priority: boolean
     namedMember: MemberId
     skills: Set<SkillId>
+    tier: ServiceTierId
+    tierPremium: BigDecimal
     lockedQuote: Credits
+    bumped: boolean
     state: RequestLineState
   }
   class Suggestion <<entity>> {

@@ -32,6 +32,9 @@ package "referenced tables" {
   entity period {
     id : PK
   }
+  entity service_tier {
+    id : PK
+  }
 }
 
 package "requests" {
@@ -48,20 +51,25 @@ package "requests" {
     --
     request_id FK
     type_id FK
+    named_resource_id FK
     named_member_id FK
+    tier_id FK
     allocation_class
     quantity, units
     starts_at, ends_at, recurrence
-    required, priority
-    skills, locked_quote
-    state
+    required, priority, bumped
+    skills, tier_premium
+    locked_quote, state
   }
   entity suggestion {
     id PK
     --
-    member_id FK
+    member_id FK, team_id FK
+    manager_id FK
     accepted_line_id FK
-    proposal..., state, reason
+    proposal..., recurrence, skills
+    state, reason
+    decided_by FK, decided_at
   }
   entity request_event {
     id PK
@@ -116,6 +124,7 @@ package "ledger" {
 team ||--o{ request
 request ||--|{ request_line
 resource_type ||--o{ request_line
+service_tier |o--o{ request_line
 request_line |o--o{ suggestion
 request ||--o{ request_event
 team ||--|| account

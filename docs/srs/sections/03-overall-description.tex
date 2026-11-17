@@ -32,7 +32,7 @@ Administrator & One or two IT staff. Creates Members and Teams, grants roles, ma
 \subsection{Operating Environment}
 
 \begin{itemize}
-  \item \textbf{Server:} one on-premises server running one Java~17 process (Spring Boot) that serves both the REST API and the built front end as static files; delivered as a Docker image. An nginx reverse proxy is used only when TLS termination is wanted in front of the process.
+  \item \textbf{Server:} one on-premises server running one Java~25 process (Spring Boot) that serves both the REST API and the built front end as static files; delivered as a Docker image. An nginx reverse proxy is used only when TLS termination is wanted in front of the process.
   \item \textbf{Database:} PostgreSQL~16; automated tests run against PostgreSQL~16 in a container started by the test suite (Testcontainers), with the same schema migrations as production.
   \item \textbf{Clients:} current versions of Chrome, Firefox, Safari, and Edge on desktop; no mobile layout.
   \item \textbf{Organization:} one company, one time zone; all windows, Price Bands, and Periods are expressed in that time zone.
@@ -40,7 +40,7 @@ Administrator & One or two IT staff. Creates Members and Teams, grants roles, ma
 
 \subsection{Design and Implementation Constraints}
 
-\co{stack}{The back end shall be written in Java~17 with Spring Boot and built with Maven; the front end shall be written in TypeScript with React and Vite and built into the Spring Boot artifact by the same Maven build.}
+\co{stack}{The back end shall be written in Java~25 with Spring Boot and built with Maven; the front end shall be written in TypeScript with React and Vite and built into the Spring Boot artifact by the same Maven build.}
 \co{db}{Persistent data shall be stored in PostgreSQL~16; automated tests shall run against PostgreSQL~16 in a container started by the test suite (Testcontainers) with the same schema migrations as production.}
 \co{api}{The front end shall talk to the back end only through the REST/JSON API, and every action available in the user interface shall be available through the API with the same role checks.}
 \co{tx}{Commitment of Holds and posting of the corresponding Charges and Earnings shall be executed inside one database transaction (\BR{commit-atomic}).}
@@ -60,5 +60,5 @@ Administrator & One or two IT staff. Creates Members and Teams, grants roles, ma
 \asm{inventory}{Resource Owners keep the Inventory current, in particular Pool Capacity; the system detects conflicts against its own records only.}
 \asm{honest}{Managers record Loans truthfully; the system has no way to verify that a lent Person actually worked for the borrowing Team.}
 \asm{calendar}{Availability is what a Member records in their profile; no calendar is consulted.}
-\dep{platform}{The system depends on Java~17, Spring Boot, PostgreSQL, and current desktop browsers being available on the company's infrastructure.}
+\dep{platform}{The system depends on Java~25, Spring Boot, PostgreSQL, and current desktop browsers being available on the company's infrastructure.}
 \dep{tooling}{The project's build and documentation toolchain is pinned in the repository's Nix flake; teammates need Nix to reproduce the build.}

@@ -65,8 +65,8 @@ Every responsibility has exactly one owning module, the one that holds its data 
 \rid{29} & Notify Members in-app of approval requests, outcomes, Bumps, Loans, escalations, and declined Suggestions & \req{CI-inapp}, \req{Lifecycle.Allocate}, \req{Matched.Loan.Form}, \req{Suggest.Accept.Existing} & \module{Notifications} & \module{Requests}, \module{Allocation} \\
 \rid{30} & Present the role-based screens over the REST API, with Quotes fetched from the server & \req{UI-draft}, \req{UI-shortlist}, \req{UI-inventory}, \req{QA-usable}, \req{QA-available} & Web client & every controller \\
 \addlinespace
-\multicolumn{5}{@{}l}{\itshape Stretch, designed as extension points (Section~\ref{sec:evo})}\\
-\rid{31} & Service tiers with a premium on Metered lines, and Bumps of lower-tier units by \code{Bumpable} on \code{MeteredAllocator} & \req{Metered.Tier.Define}, \req{Metered.Tier.Bump} & \module{Allocation} & \module{Settings}, \module{Ledger} \\
+\multicolumn{5}{@{}l}{\itshape Stretch: R31 to R33 built after Release~1, R34 an extension point (Section~\ref{sec:evo})}\\
+\rid{31} & Service tiers with a premium on Metered lines, and Bumps of whole lower-tier lines by \code{Bumpable} on \code{MeteredAllocator} & \req{Metered.Tier.Define}, \req{Metered.Tier.Bump} & \module{Allocation} & \module{Settings}, \module{Ledger}, \module{Requests} \\
 \rid{32} & Record units actually used per Metered allocation and compare requested with used & \req{Metered.Usage.Record}, \req{Metered.Usage.Compare}, \req{Dashboard.Usage} & \module{Allocation}, \module{Dashboard} & \module{Inventory} \\
 \rid{33} & Add a demand surcharge multiplier inside \code{Pricing.quote} that rises as the requested window fills & \req{Ledger.Surcharge} & \module{Ledger} & \module{Settings}; \module{Requests} passes the fill from \module{Allocation} \\
 \rid{34} & Deliver notifications by email as well as in-app, through a second \code{Delivery}, \code{EmailDelivery} & \req{CI-inapp} (Stretch part) & \module{Notifications} & \module{Members} \\
@@ -85,7 +85,7 @@ The three Allocation Classes answer the same question, ``can this line have its 
 \textbf{Allocator} & \textbf{\code{Allocator} (five operations)} & \textbf{\code{Waitlistable}} & \textbf{\code{Bumpable}} & \textbf{\code{ApprovalDriven}} \\
 \midrule
 \code{ExclusiveAllocator} & all; \code{hold} writes Held occurrences & yes & yes & no \\
-\code{MeteredAllocator} & all; \code{hold} writes Held units & yes & no (Stretch: yes) & no \\
+\code{MeteredAllocator} & all; \code{hold} writes Held units & yes & yes (Stretch service tiers) & no \\
 \code{MatchedAllocator} & all; \code{hold} is a no-op, \code{commit} forms Loans & no & no & yes \\
 \bottomrule
 \end{tabularx}

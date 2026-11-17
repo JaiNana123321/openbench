@@ -31,7 +31,7 @@ interface Allocator <<interface>> {
   evaluate(LineSnapshot): Evaluation
   hold(LineSnapshot)
   commit(LineSnapshot)
-  release(LineSnapshot, ReleasePart)
+  release(LineSnapshot, ReleasePart): Released
   cancel(LineSnapshot)
 }
 
@@ -39,7 +39,6 @@ interface Waitlistable <<interface>> {
   join(LineSnapshot)
   leave(LineSnapshot)
   waitingFor(ResourceTypeId, TimeWindow): List<WaitingLine>
-  expirePastStart(Instant)
 }
 
 interface Bumpable <<interface>> {
@@ -49,10 +48,13 @@ interface Bumpable <<interface>> {
 
 interface ApprovalDriven <<interface>> {
   buildShortlist(LineSnapshot): Shortlist
-  select(LineSnapshot, List<MemberId>)
-  decide(ApprovalId, Decision, String, Actor): ApprovalOutcome
+  select(LineSnapshot, List<MemberId>, boolean)
+  candidatesLeft(LineSnapshot): boolean
+  decide(LineSnapshot, ApprovalId, Decision,
+  {method}  String, Actor, boolean): Approval
+  refuseIneligible(LineSnapshot, String): List<Approval>
   outstanding(RequestId): List<Approval>
-  escalate(RequestId)
+  escalate(RequestId): List<Approval>
 }
 
 class ExclusiveAllocator
@@ -69,7 +71,23 @@ interface AllocationQueries <<interface>> {
   waitlistPosition(RequestLineId): Optional<Integer>
   peakUnitsInUse(ResourceTypeId, Optional<ResourceId>, Instant): int
   approvalsAwaiting(MemberId): List<Approval>
+  escalatedOutstanding(): List<Approval>
+  decidedOnEscalation(MemberId): List<Approval>
   loansFor(RequestLineId): List<Loan>
+  waitingStartedBy(Instant): List<WaitingLine>
+  previewRelease(LineSnapshot, ReleasePart): Released
+  allocatedParts(RequestLineId): List<AllocatedPart>
+  peakFill(ResourceTypeId, List<TimeWindow>): BigDecimal
+}
+
+class LoanService {
+  endEarly(LoanId, LocalDate): Loan
+  loansOf(MemberId): List<Loan>
+}
+
+class UsageService {
+  usage(PeriodId): List<MeteredUsage>
+  recordUsage(MeteredAllocationId, int): MeteredUsage
 }
 
 class ExclusiveOccurrence <<entity>> {
@@ -81,6 +99,8 @@ class ExclusiveOccurrence <<entity>> {
   startsAt, endsAt: Instant
   state: HELD | ALLOCATED | RELEASED
   \t| BUMPED | EXPIRED
+  priority: boolean
+  submittedAt: Instant
 }
 
 class MeteredAllocation <<entity>> {
@@ -91,8 +111,13 @@ class MeteredAllocation <<entity>> {
   typeId: ResourceTypeId
   units: int
   startsAt, endsAt: Instant
-  state: HELD | ALLOCATED
-  \t| RELEASED | EXPIRED
+  state: HELD | ALLOCATED | RELEASED
+  \t| BUMPED | EXPIRED
+  tierPremium: BigDecimal
+  submittedAt: Instant
+  usedUnits: Integer
+  usageRecordedAt: Instant
+  usageRecordedBy: MemberId
 }
 
 class WaitlistEntry <<entity>> {
@@ -108,8 +133,12 @@ class WaitlistEntry <<entity>> {
 class Candidate <<entity>> {
   id: long
   lineId: RequestLineId
+  requestId: RequestId
+  teamId: TeamId
   memberId: MemberId
   position: int
+  startsOn, endsOn: LocalDate
+  retired: boolean
 }
 
 class Approval <<entity>> {
@@ -141,6 +170,7 @@ Allocator <|.. MatchedAllocator
 Waitlistable <|.. ExclusiveAllocator
 Waitlistable <|.. MeteredAllocator
 Bumpable <|.. ExclusiveAllocator
+Bumpable <|.. MeteredAllocator
 ApprovalDriven <|.. MatchedAllocator
 
 ExclusiveAllocator ..> ExclusiveOccurrence
@@ -150,6 +180,8 @@ MeteredAllocator ..> WaitlistEntry
 MatchedAllocator ..> Candidate
 MatchedAllocator ..> Approval
 MatchedAllocator ..> Loan
+LoanService ..> MatchedAllocator
+UsageService ..> MeteredAllocation
 Candidate "1" -- "0..1" Approval
 
 note bottom of ExclusiveOccurrence

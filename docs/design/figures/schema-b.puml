@@ -68,6 +68,13 @@ package "settings" {
     --
     unit_price
     bump_cutoff_hours
+    surcharge_rate
+  }
+  entity service_tier {
+    id PK
+    --
+    type_id FK
+    name, premium
   }
   entity price_band {
     id PK
@@ -104,6 +111,8 @@ package "settings" {
 package "dashboard (read-only views)" {
   entity v_type_hours <<view>>
   entity v_team_credits <<view>>
+  entity v_waiting <<view>>
+  entity v_metered_usage <<view>>
 }
 
 ' relations
@@ -115,5 +124,6 @@ period ||--o{ grant_plan
 resource_type ||--o| type_pricing
 resource_type ||--o{ price_band
 resource_type ||--o{ refund_step
+resource_type ||--o{ service_tier
 resource_type ||--o{ quota
 @enduml

@@ -31,17 +31,20 @@ hide empty members
     holdCredits(TeamId, RequestLineId, Credits)
     releaseCredits(TeamId, RequestLineId)
     commitCharges(RequestId, List<ChargeSpec>)
-    postEarning(TeamId, LoanId, Credits)
+    postEarning(EarningSpec, Actor)
     refund(TeamId, RequestLineId, Credits)
-    correctEarning(TeamId, LoanId, Credits)
+    correctEarning(TeamId, LoanId, Credits, String)
     postGrant(TeamId, PeriodId, Credits, String, Actor)
     rollover(PeriodId, PeriodId)
     statement(TeamId, PeriodId): Statement
   }
 
   class Pricing <<utility>> {
-    {static} quote(LineSpec, TypePricing, BigDecimal): Quote
+    {static} quote(LineSpec, TypePricing, BigDecimal,
+    {method}  BigDecimal peakFill): Quote
     {static} refund(Credits, RefundSchedule, Duration): Credits
+    {static} attributable(Credits, LineSpec, LineSpec,
+    {method}  TypePricing): Credits
   }
 
   class Account <<entity>> {
@@ -124,7 +127,9 @@ note right of Pricing
   Pure: no Spring, no database.
   quote = sum over hours of
   quantity x Unit Price x band
-  multiplier (x premium if Priority).
+  multiplier (x premium if Priority,
+  x tier premium, x surcharge
+  1 + rate x peak fill).
   refund never returns 100%.
 end note
 @enduml

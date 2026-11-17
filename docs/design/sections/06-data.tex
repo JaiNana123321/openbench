@@ -51,6 +51,7 @@ Table & Purpose & Key columns & Notable constraints \\
 \code{skill} & Skill list & id, name, retired\_at & name unique \\
 \code{member\_skill} & A Member's skills & member\_id, skill\_id & composite key \\
 \code{availability\_range} & Days a Member may be lent & id, member\_id, from\_date, to\_date & from\_date $\le$ to\_date \\
+\code{admin\_change} & Administrator change record & id, kind, member\_id, team\_id, old\_value, new\_value, actor\_id, at & insert-only grant; kind one of eight \\
 \midrule
 \multicolumn{4}{@{}l}{\module{Inventory}}\\
 \code{resource\_type} & Resource Type; the row \code{AllocationLock} locks & id, name, allocation\_class, retired\_at & name unique; Person seeded by the first migration \\
@@ -61,7 +62,8 @@ Table & Purpose & Key columns & Notable constraints \\
 \multicolumn{4}{@{}l}{\module{Settings}}\\
 \code{period} & Period & id, starts\_on, ends\_on & starts\_on $\le$ ends\_on \\
 \code{grant\_plan} & Grant per Team and Period & team\_id, period\_id, amount & amount $\ge$ 0 \\
-\code{type\_pricing} & Unit Price, bump cutoff & type\_id, unit\_price, bump\_cutoff\_hours & Exclusive and Metered types only \\
+\code{type\_pricing} & Unit Price, bump cutoff, surcharge rate & type\_id, unit\_price, bump\_cutoff\_hours, surcharge\_rate & Exclusive and Metered types only; surcharge\_rate $\ge$ 0 \\
+\code{service\_tier} & Service tier of a Metered type & id, type\_id, name, premium & premium $\ge$ 1; (type\_id, name), (type\_id, premium) unique \\
 \code{price\_band} & Price Band & id, type\_id, weekdays, start\_time, end\_time, multiplier & start $<$ end; multiplier $>$ 0 \\
 \code{refund\_step} & Refund Schedule step & id, type\_id, min\_lead\_hours, fraction & 0 $\le$ fraction $<$ 1 \\
 \code{quota} & Quota per Team and Metered type & team\_id, type\_id, max\_units & max\_units $>$ 0 \\
@@ -70,21 +72,21 @@ Table & Purpose & Key columns & Notable constraints \\
 \midrule
 \multicolumn{4}{@{}l}{\module{Requests}}\\
 \code{request} & Request & id, team\_id, state, submitted\_at, window\_ends\_at & window\_ends\_at set once \\
-\code{request\_line} & Request Line, locked Quote & id, request\_id, type\_id, allocation\_class, quantity, units, starts\_at, ends\_at, recurrence, required, priority, named\_member\_id, skills, locked\_quote, state & starts\_at $<$ ends\_at; quantity $>$ 0; priority only if Exclusive; locked\_quote never changes \\
-\code{suggestion} & Suggestion & id, member\_id, proposal columns, state, accepted\_line\_id, reason & never deleted \\
+\code{request\_line} & Request Line, locked Quote & id, request\_id, type\_id, allocation\_class, quantity, units, starts\_at, ends\_at, recurrence, required, priority, named\_resource\_id, named\_member\_id, skills, tier\_id, tier\_premium, locked\_quote, bumped, state & starts\_at $<$ ends\_at; quantity $>$ 0; priority and recurrence (2 to 52) only if Exclusive; tier\_id only if Metered; locked\_quote never changes \\
+\code{suggestion} & Suggestion & id, member\_id, team\_id, manager\_id, proposal columns, recurrence, skills, state, accepted\_line\_id, reason, decided\_by, decided\_at & never deleted \\
 \code{request\_event} & State history & id, request\_id, line\_id, from\_state, to\_state, actor\_id, at, note & insert-only grant \\
 \midrule
 \multicolumn{4}{@{}l}{\module{Allocation}}\\
-\code{exclusive\_occurrence} & One occurrence on one instance & id, line\_id, team\_id, request\_id, resource\_id, starts\_at, ends\_at, state & exclusion constraint on live rows \\
-\code{metered\_allocation} & Units over a window & id, line\_id, team\_id, request\_id, type\_id, units, starts\_at, ends\_at, state & units $>$ 0; partial GiST index \\
+\code{exclusive\_occurrence} & One occurrence on one instance & id, line\_id, team\_id, request\_id, resource\_id, starts\_at, ends\_at, state, priority, submitted\_at & exclusion constraint on live rows \\
+\code{metered\_allocation} & Units over a window & id, line\_id, team\_id, request\_id, type\_id, units, starts\_at, ends\_at, state, tier\_premium, submitted\_at, used\_units, usage\_recorded\_at, usage\_recorded\_by & units $>$ 0; 0 $\le$ used\_units $\le$ units, recorded with who and when or not at all; partial GiST index \\
 \code{waitlist\_entry} & A waiting Required line & id, line\_id, type\_id, starts\_at, ends\_at, priority, bumped, joined\_at & line\_id unique; deleted on leaving \\
-\code{candidate} & Shortlist entry & id, line\_id, member\_id, position & (line\_id, member\_id) unique \\
-\code{approval} & Approval of a Candidate & id, candidate\_id, approver\_member\_id, state, decided\_by, decided\_at, reason, escalated & candidate\_id unique \\
+\code{candidate} & Shortlist entry & id, line\_id, request\_id, team\_id, member\_id, position, starts\_on, ends\_on, retired & (line\_id, member\_id) unique among unretired rows \\
+\code{approval} & Approval of a Candidate & id, candidate\_id, approver\_member\_id, state, decided\_by, decided\_at, reason, escalated & candidate\_id unique; decided\_at set exactly when Approved or Refused; a Canceled approval may keep it \\
 \code{loan} & Loan & id, line\_id, member\_id, lending\_team\_id, borrowing\_team\_id, starts\_on, ends\_on, days\_lent, ended\_early & exclusion constraint per Person; Teams differ \\
 \midrule
 \multicolumn{4}{@{}l}{\module{Ledger}}\\
 \code{account} & Account & team\_id, granted, earned, held & granted, held $\ge$ 0 \\
-\code{transaction} & Grant, Charge, Earning, Refund & id, team\_id, kind, amount, granted\_part, earned\_part, period\_id, line\_id, loan\_id, corrects\_id, reason, actor\_id, posted\_at & insert-only grant; amount = granted\_part + earned\_part \\
+\code{transaction} & Grant, Charge, Earning, Refund & id, team\_id, kind, amount, granted\_part, earned\_part, period\_id, line\_id, loan\_id, corrects\_id, reason, actor\_id, posted\_at & insert-only grant; amount = granted\_part + earned\_part; one uncorrected Earning per Loan \\
 \code{held\_credit} & Held credits per line on Hold & line\_id, team\_id, amount & one row per Held line; deleted when the Hold commits or releases \\
 \code{period\_close} & Expired and closing credits & team\_id, period\_id, expired, closing\_granted, closing\_earned, closed\_at & key (team\_id, period\_id): one row per Team and closed Period; the rollover idempotency key \\
 \midrule
@@ -92,9 +94,10 @@ Table & Purpose & Key columns & Notable constraints \\
 \code{notification} & In-app notification & id, member\_id, kind, text, link, created\_at, read\_at & index on unread rows \\
 \midrule
 \multicolumn{4}{@{}l}{\module{Dashboard} (views; owns no table)}\\
-\code{v\_type\_hours} & Allocated and available hours per type and day & over \code{exclusive\_occurrence}, \code{metered\_allocation}, \code{resource} & read-only \\
+\code{v\_type\_hours} & Allocated spans per type, with capacity and owners & over \code{exclusive\_occurrence}, \code{metered\_allocation}, \code{resource} & read-only \\
 \code{v\_team\_credits} & Credits per Team and Period by kind, expired amount & over \code{transaction}, \code{loan}, \code{period}, \code{period\_close}, plus \code{account} & read-only \\
 \code{v\_waiting} & Waiting lines per type & over \code{waitlist\_entry} & read-only \\
+\code{v\_metered\_usage} & Requested and used units per Allocated Metered row & over \code{metered\_allocation}, \code{resource}, \code{team} & read-only; Stretch \\
 \end{longtable}}
 
 % ======================================================================== 6.2
@@ -136,17 +139,18 @@ A row with the same Resource as a live row and an overlapping window is rejected
 \begin{lstlisting}[language=SQL]
 GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO openbench_app;
 REVOKE UPDATE, DELETE ON transaction, request_event, setting_change FROM openbench_app;
+REVOKE UPDATE, DELETE ON admin_change FROM openbench_app;     -- added with admin_change
 
 ALTER TABLE transaction
   ADD CHECK (kind IN ('GRANT', 'CHARGE', 'EARNING', 'REFUND')),
   ADD CHECK (amount = granted_part + earned_part),
   ADD CHECK (amount >= 0 OR (kind = 'EARNING' AND corrects_id IS NOT NULL));
 \end{lstlisting}
-The application can insert and read Transactions but never change or delete one, so \req{Ledger.Transaction.Kinds} and \req{QA-audit} hold even against a bug. A correction is a new row whose \code{corrects\_id} names the one it corrects; the only one in Release~1, the Earning correction of an early Loan end, is the only negative amount and the only Transaction that may take a Balance below zero. \code{granted\_part} and \code{earned\_part} record where a Charge drew from, so a Refund returns credits in the same proportions. The \code{account} row is the running total, updated under its row lock. \code{request\_event} and \code{setting\_change} get the same insert-only grant.
+The application can insert and read Transactions but never change or delete one, so \req{Ledger.Transaction.Kinds} and \req{QA-audit} hold even against a bug. A correction is a new row whose \code{corrects\_id} names the one it corrects; the only one in Release~1, the Earning correction of an early Loan end, is the only negative amount and the only Transaction that may take a Balance below zero. \code{granted\_part} and \code{earned\_part} record where a Charge drew from, so a Refund returns credits in the same proportions. The \code{account} row is the running total, updated under its row lock. \code{request\_event}, \code{setting\_change}, and \code{admin\_change} get the same insert-only grant.
 % NOTE: the role name openbench_app and extending the insert-only grant to request_event and setting_change are this section's
 % choices; the brief requires it for transaction only.
 
-\paragraph{Check constraints.} Positive amounts: \code{units > 0} (\code{resource}, \code{metered\_allocation}, Metered lines), \code{quantity > 0}, \code{max\_units > 0}, \code{multiplier > 0}, and \code{granted}, \code{held >= 0}. Ordered windows: \code{starts\_at < ends\_at} on every table with a window, and the same for the date and time pairs. A Refund Schedule never reaches 100\% (\req{Release.Refund}): \code{CHECK (fraction >= 0 AND fraction < 1)} on \code{refund\_step}. Priority only on Exclusive lines: \code{CHECK (NOT priority OR allocation\_class = 'EXCLUSIVE')}. A Loan crosses Teams: \code{lending\_team\_id <> borrowing\_team\_id}. Exactly one Manager per Team (\req{Admin.Member.Create}): ``at most one'' is the index below, and ``at least one'' is enforced by \code{revokeRole}, which refuses to remove the last Manager, and \code{grantRole}, which deletes the previous Manager's row and flushes before inserting the new one (the flush-order rule of Section~\ref{sec:runtime}). \code{member\_role.team\_id} follows \code{member.team\_id} through a composite foreign key with \code{ON UPDATE CASCADE}, so moving a Member moves their roles.
+\paragraph{Check constraints.} Positive amounts: \code{units > 0} (\code{resource}, \code{metered\_allocation}, Metered lines), \code{quantity > 0}, \code{max\_units > 0}, \code{multiplier > 0}, and \code{granted}, \code{held >= 0}. Ordered windows: \code{starts\_at < ends\_at} on every table with a window, and the same for the date and time pairs. A Refund Schedule never reaches 100\% (\req{Release.Refund}): \code{CHECK (fraction >= 0 AND fraction < 1)} on \code{refund\_step}. Priority and weekly recurrence only on Exclusive lines: \code{CHECK (NOT priority OR allocation\_class = 'EXCLUSIVE')}, \code{CHECK (recurrence BETWEEN 2 AND 52)}, and \code{CHECK (recurrence IS NULL OR allocation\_class = 'EXCLUSIVE')}; a service tier only on Metered lines: \code{CHECK (tier\_id IS NULL OR allocation\_class = 'METERED')}, and \code{request\_line.tier\_id} references \code{service\_tier}, so removing a tier a line names fails (\code{TIER\_IN\_USE}). Recorded usage within the allocation: \code{CHECK (used\_units >= 0)} and \code{CHECK (used\_units <= units)} on \code{metered\_allocation}. A Loan crosses Teams: \code{lending\_team\_id <> borrowing\_team\_id}. Exactly one Manager per Team (\req{Admin.Member.Create}): ``at most one'' is the index below, and ``at least one'' is enforced by \code{revokeRole}, which refuses to remove the last Manager, and \code{grantRole}, which deletes the previous Manager's row and flushes before inserting the new one (the flush-order rule of Section~\ref{sec:runtime}). \code{member\_role.team\_id} follows \code{member.team\_id} through a composite foreign key with \code{ON UPDATE CASCADE}, so moving a Member moves their roles.
 \begin{lstlisting}[language=SQL]
 CREATE UNIQUE INDEX member_role_one_manager ON member_role (team_id) WHERE role = 'MANAGER';
 \end{lstlisting}

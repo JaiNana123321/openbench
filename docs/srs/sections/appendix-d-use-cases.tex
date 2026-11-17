@@ -148,7 +148,7 @@ Each use case records its actors, trigger, preconditions, postconditions, flows,
 \ucfield{Exceptions}{\ucflow{4.0.E.1}{Unaffordable}
 \begin{enumerate}\item The Required total exceeds the Available Balance; system refuses submission, shows the shortfall, and the Request stays in Draft.\end{enumerate}
 \ucflow{4.0.E.2}{Invalid line}
-\begin{enumerate}\item A line's window starts in the past or its recurrence has no occurrence; system refuses to save it and explains.\end{enumerate}}
+\begin{enumerate}\item A line's window starts in the past, or its recurrence has fewer than 2 or more than 52 occurrences or a window longer than one week; system refuses to save it and explains.\end{enumerate}}
 \ucfield{Includes}{\UC{shortlist}}
 \ucfield{Priority}{High}
 \ucfield{Frequency of Use}{About 10{,}000 Requests per year: roughly four per Team per Period.}

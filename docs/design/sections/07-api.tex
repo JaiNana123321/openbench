@@ -38,11 +38,11 @@ Content-Type: application/problem+json
 \endhead
 \bottomrule
 \endlastfoot
-400 Bad Request & Validation at the controller: malformed JSON, a missing field, a value out of range & \code{VALIDATION\_FAILED} \\
+400 Bad Request & Validation at the controller: malformed JSON, a missing field, a value out of range; or a \code{RuleViolation} on a well-formed value that names nothing valid & \code{VALIDATION\_FAILED} \\
 401 Unauthorized & Unauthenticated: no session, an expired session, wrong credentials at login & \code{UNAUTHENTICATED}, \code{BAD\_CREDENTIALS} \\
 403 Forbidden & A missing role (\code{@PreAuthorize}), a missing or wrong CSRF token, or \code{ForbiddenException} & \code{FORBIDDEN}, \code{CSRF\_REJECTED} \\
 404 Not Found & \code{NotFoundException}, including any object outside the caller's scope & \code{NOT\_FOUND} \\
-409 Conflict & \code{RuleViolation} on a state conflict: the object's state does not allow the action; or an exclusion-constraint violation (SQLSTATE 23P01), logged as a bug & \code{WRONG\_STATE}, \code{ALREADY\_DECIDED}, \code{ALLOCATION\_CONFLICT} \\
+409 Conflict & \code{RuleViolation} on a state conflict: the object's state does not allow the action; or an exclusion-constraint violation (SQLSTATE 23P01), logged as a bug & \code{WRONG\_STATE}, \code{ALREADY\_DECIDED}, \code{INSIDE\_BUMP\_CUTOFF}, \code{ALLOCATION\_CONFLICT} \\
 422 Unprocessable Content & \code{RuleViolation} on a business rule & \code{INSUFFICIENT\_BALANCE}, \code{NOT\_A\_CANDIDATE} \\
 503 Service Unavailable & \code{ConcurrencyRetryException}: a lock wait or deadlock failed twice; \code{Retry-After: 1} & \code{CONCURRENCY\_RETRY} \\
 500 Internal Server Error & Anything else; logged with its stack trace, never returned in the body & \code{INTERNAL} \\
@@ -58,7 +58,7 @@ Authentication is Spring Security form login with a server-side HTTP session (\r
 \begin{itemize}
   \item \textbf{Login and logout.} POST \path{/api/login} takes the form fields \code{username} and \code{password} and answers with JSON instead of a redirect: 200 with the body of GET \path{/api/me}, or a 401 that does not say whether the username exists. The \code{UserDetailsService} that \module{Members} provides (Section~\ref{mod:members}) loads the Member and their roles; a deactivated Member cannot sign in (\req{Admin.Member.Create}). The session id changes at login against session fixation. POST \path{/api/logout} invalidates the session.
   \item \textbf{Identity.} GET \path{/api/me} returns the Member's id, name, Team, and roles. The client builds its menu from the roles; the server never relies on that menu.
-  \item \textbf{Session cookie.} \code{HttpOnly; Secure; SameSite=Lax}. Sessions live in the memory of the one process and expire after 12 hours without a request. A restart signs everyone out, which is acceptable because restarts happen outside business hours (\req{QA-available}). \code{deactivate}, \code{grantRole}, and \code{revokeRole} expire the Member's sessions through Spring Security's session registry, so changed roles apply from the next sign-in.
+  \item \textbf{Session cookie.} \code{HttpOnly; Secure; SameSite=Lax}. Sessions live in the memory of the one process and expire after 12 hours without a request. A restart signs everyone out, which is acceptable because restarts happen outside business hours (\req{QA-available}). \code{deactivate}, \code{moveToTeam}, \code{grantRole}, and \code{revokeRole} expire the Member's sessions through Spring Security's session registry, once the change commits, on the \code{MemberAccessChanged} event that \module{Members} publishes, so changed roles and Teams apply from the next sign-in.
   \item \textbf{CSRF.} Cookie to header: the token travels in the cookie \code{XSRF-TOKEN}, which script may read, and the client copies it into the header \code{X-XSRF-TOKEN} on every POST, PUT, and DELETE, the login included. A missing or wrong token gets 403.
   \item \textbf{Passwords and transport.} bcrypt through Spring's delegating password encoder, which stores the algorithm with the hash so it can be upgraded without a reset; no password is logged or returned. HTTPS only (\req{CI-https}): TLS ends at nginx or the embedded Tomcat, plain HTTP only redirects, responses carry Strict-Transport-Security, and behind nginx the forwarded headers are trusted so redirects and the \code{Secure} cookie use the external scheme.
   \item \textbf{Sign-in log.} Every authentication attempt, successful or not, is logged with username, remote address, and outcome (\req{SE-password}).
@@ -95,19 +95,22 @@ GET & \path{/teams} & \code{MEMBER} & \code{teams} & active Teams \\
 GET & \path{/teams/{id}/members} & \code{MANAGER}, \code{PLANNER}, \code{ADMIN} & \code{roster} & Manager: own Team; paged \\
 POST & \path{/admin/members} & \code{ADMIN} & \code{createMember} & Team required \\
 POST & \path{/admin/members/{id}/deactivate} & \code{ADMIN} & \code{deactivate} & ends the Member's sessions \\
-POST & \path{/admin/members/{id}/move} & \code{ADMIN} & \code{moveToTeam} & body \code{teamId} \\
+POST & \path{/admin/members/{id}/move} & \code{ADMIN} & \code{moveToTeam} & body \code{teamId}; ends the Member's sessions \\
 POST & \path{/admin/roles} & \code{ADMIN} & \code{grantRole} & a new Manager replaces the old \\
 DELETE & \path{/admin/roles/{memberId}/{role}} & \code{ADMIN} & \code{revokeRole} & 422 if a Team loses its Manager \\
 POST & \path{/admin/teams} & \code{ADMIN} & \code{createTeam} &  \\
 PUT & \path{/admin/teams/{id}} & \code{ADMIN} & \code{renameTeam} & body \code{name} \\
 POST & \path{/admin/teams/{id}/retire} & \code{ADMIN} & \code{retireTeam} & 422 while Members remain \\
+GET & \path{/admin/teams} & \code{ADMIN} & \code{teamOverview} & every Team with retired flag, Manager, active-Member count \\
+GET & \path{/admin/changes} & \code{ADMIN} & \code{changes} & the Administrator change record, newest first; paged \\
 GET & \path{/skills} & \code{MEMBER} & \code{skills} & the skill list \\
 POST & \path{/admin/skills} & \code{ADMIN} & \code{addSkill} &  \\
 POST & \path{/admin/skills/{id}/retire} & \code{ADMIN} & \code{retireSkill} &  \\
 GET & \path{/members/{id}/profile} & \code{MEMBER} & \code{profile} & self, own Manager, \code{PLANNER}, \code{ADMIN} \\
 PUT & \path{/members/me/skills} & \code{MEMBER} & \code{updateSkills} & self \\
 PUT & \path{/members/{id}/availability} & \code{MEMBER} & \code{updateAvailability} & self, or the Member's Manager \\
-GET & \path{/members/{id}/loans} & \code{MEMBER} & \code{AllocationQueries.\allowbreak loansOf} & by \module{Allocation}; scope as profile \\
+GET & \path{/members/lendable} & \code{MANAGER} & \code{lendable} & active Members of other Teams, for a Person line \\
+GET & \path{/members/{id}/loans} & \code{MEMBER} & \code{LoanService.\allowbreak loansOf} & by \module{Allocation}; the Person and the Managers of both Teams (\req{Matched.Loan.Visible}); also \path{/members/me/loans} \\
 \midrule
 \multicolumn{5}{@{}l}{\textbf{Inventory} (\module{Inventory}: \code{ResourceTypeService}, \code{ResourceService}, \code{InventoryQueries}; UC-1, UC-2)}\\
 GET & \path{/inventory/types} & \code{MEMBER} & \code{types} & flag \code{includeRetired} \\
@@ -116,23 +119,28 @@ POST & \path{/inventory/types} & \code{ADMIN} & \code{define} & no code change \
 PUT & \path{/inventory/types/{id}} & \code{ADMIN} & \code{change} & class fixed once a Resource exists \\
 POST & \path{/inventory/types/{id}/retire} & \code{ADMIN} & \code{ResourceTypeService.\allowbreak retire} & refused for Person \\
 GET & \path{/inventory/resources} & \code{MEMBER} & \code{search} & by type and attributes; paged \\
-GET & \path{/inventory/resources/free} & \code{MEMBER} & \code{search}, then \code{AllocationQueries.\allowbreak holders} & by \module{Allocation}; \code{type}, \code{from}, \code{to} \\
+GET & \path{/inventory/resources/{id}} & \code{MEMBER} & \code{resource} & one Resource \\
+GET & \path{/inventory/resources/free} & \code{MEMBER} & \code{HolderService.\allowbreak free} & by \module{Allocation}; Exclusive types; \code{type}, \code{from}, \code{to}, at most 31 days \\
 POST & \path{/inventory/resources} & \code{RESOURCE\_\allowbreak OWNER} & \code{add} & caller becomes the owner \\
 PUT & \path{/inventory/resources/{id}} & \code{RESOURCE\_\allowbreak OWNER} & \code{edit} & own Resource \\
 PUT & \path{/inventory/resources/{id}/units} & \code{RESOURCE\_\allowbreak OWNER} & \code{setUnits} & 422 names the earliest failing hour \\
 POST & \path{/inventory/resources/{id}/retire} & \code{RESOURCE\_\allowbreak OWNER} & \code{ResourceService.\allowbreak retire} & same guard with units 0 \\
-GET & \path{/inventory/resources/{id}/holders} & \code{MEMBER} & \code{AllocationQueries.\allowbreak holders} & by \module{Allocation}; Team and Request per scope \\
+GET & \path{/inventory/resources/{id}/holders} & \code{MEMBER} & \code{HolderService.\allowbreak holders} & by \module{Allocation}; Exclusive Resources; Team and Request per scope \\
 \midrule
 \multicolumn{5}{@{}l}{\textbf{Settings} (\module{Settings}: \code{SettingsService}; UC-11)}\\
 GET & \path{/settings} & \code{PLANNER} & \code{current} & every setting, typed \\
 PUT & \path{/settings/{key}} & \code{PLANNER} & \code{update} & logged; keys below \\
 GET & \path{/settings/periods} & \code{MEMBER} & \code{periods} & for the Period selector \\
+GET & \path{/settings/changes} & \code{PLANNER} & \code{changes} & the change log, newest first; paged \\
+GET & \path{/settings/grants/{periodId}} & \code{PLANNER} & \code{plannedGrants} & each Team's Grant for that Period \\
+GET & \path{/settings/tiers/{typeId}} & \code{MEMBER} & \code{tiers} & a Metered type's service tiers, for the Draft editor \\
 \midrule
 \multicolumn{5}{@{}l}{\textbf{Requests} (\module{Requests}: \code{RequestService} for Drafts, \code{RequestLifecycleService} for transitions; UC-4, UC-5, UC-8 to UC-10)}\\
 GET & \path{/requests} & \code{MANAGER}, \code{PLANNER} & \code{list} & own Team, all for \code{PLANNER}; paged \\
 POST & \path{/requests} & \code{MANAGER} & \code{create} & for the caller's Team \\
 GET & \path{/requests/{id}} & \code{MANAGER}, \code{PLANNER} & \code{detail} & lines, Holds, Waitlist positions, history \\
-GET & \path{/requests/{id}/draft} & \code{MANAGER} & \code{view} & Quotes, sums, Available Balance \\
+GET & \path{/requests/lines} & \code{MANAGER}, \code{PLANNER} & \code{lines} & \code{ids}, at most 500; the lines the caller may see \\
+GET & \path{/requests/{id}/draft} & \code{MANAGER}, \code{PLANNER} & \code{view} & Quotes, sums, Available Balance \\
 POST & \path{/requests/{id}/lines} & \code{MANAGER} & \code{addLine} & window in the future \\
 PUT & \path{/requests/{id}/lines/{lineId}} & \code{MANAGER} & \code{editLine} & Draft only \\
 DELETE & \path{/requests/{id}/lines/{lineId}} & \code{MANAGER} & \code{removeLine} & Draft only \\
@@ -144,8 +152,9 @@ POST & \path{/requests/{id}/withdraw} & \code{MANAGER} & \code{withdraw} & from 
 POST & \path{/requests/{id}/reopen} & \code{MANAGER} & \code{reopenForEdit} & Waiting to Draft \\
 GET & \path{/requests/{id}/lines/{lineId}/shortlist} & \code{MANAGER}, \code{PLANNER} & \code{shortlist} via \code{ApprovalDriven.\allowbreak buildShortlist} & Shortlist order (\req{PE-shortlist}) \\
 POST & \path{/requests/{id}/lines/{lineId}/candidates} & \code{MANAGER} & \code{selectCandidates} & exactly the line's quantity \\
-POST & \path{/requests/{id}/lines/{lineId}/release} & \code{MANAGER} & \code{releaseLine} & whole, or window, occurrences, units \\
-POST & \path{/loans/{id}/end} & \code{MANAGER} & \code{endLoanEarly} & borrowing Manager; \code{newEnd} \\
+POST & \path{/requests/{id}/lines/{lineId}/release} & \code{MANAGER} & \code{releaseLine} & body below; answers the line and the Refund \\
+GET & \path{/requests/{id}/lines/{lineId}/release-preview} & \code{MANAGER} & \code{previewRelease} & the Release body as query parameters; the Refund it would post \\
+POST & \path{/loans/{id}/end} & \code{MANAGER} & \code{endLoanEarly} & borrowing Manager; \code{newEnd}; answers the Loan \\
 \midrule
 \multicolumn{5}{@{}l}{\textbf{Suggestions} (\module{Requests}: \code{SuggestionService}; UC-3)}\\
 POST & \path{/suggestions} & \code{MEMBER} & \code{create} & to the caller's own Manager \\
@@ -153,9 +162,11 @@ GET & \path{/suggestions/mine} & \code{MEMBER} & \code{mine} & paged \\
 GET & \path{/suggestions/team} & \code{MANAGER} & \code{forManager} & own Team, Open first; paged \\
 POST & \path{/suggestions/{id}/accept} & \code{MANAGER} & \code{acceptIntoNewLine}, \code{acceptIntoLine} & \code{requestId} or \code{lineId} \\
 POST & \path{/suggestions/{id}/decline} & \code{MANAGER} & \code{decline} & optional \code{reason} \\
+GET & \path{/suggestions/{id}} & \code{MEMBER} & \code{get} & its Member or addressed Manager \\
+GET & \path{/suggestions/request/{id}} & \code{MANAGER} & \code{forRequest} & accepted into the Draft's lines; own Team \\
 \midrule
 \multicolumn{5}{@{}l}{\textbf{Approvals and escalations} (\module{Requests}: \code{RequestLifecycleService} unless named; UC-6, UC-7)}\\
-GET & \path{/approvals} & \code{MANAGER}, \code{PLANNER} & \code{AllocationQueries.\allowbreak approvalsAwaiting} & addressed to the caller, with time left \\
+GET & \path{/approvals} & \code{MANAGER}, \code{PLANNER} & \code{approvals} & addressed to the caller, with time left; for a Manager also the escalated ones a Capacity Planner decided for them; for a Planner every escalated Outstanding one \\
 POST & \path{/approvals/{id}/decision} & \code{MANAGER}, \code{PLANNER} & \code{decideApproval} & \code{PLANNER} once escalated \\
 GET & \path{/escalations} & \code{PLANNER} & \code{escalations} & with outstanding approvals \\
 \midrule
@@ -164,12 +175,17 @@ GET & \path{/ledger/account} & \code{MANAGER}, \code{PLANNER} & \code{account} &
 GET & \path{/ledger/statements/{teamId}/{periodId}} & \code{MANAGER}, \code{PLANNER} & \code{statement} & own Team; \code{PLANNER} any \\
 POST & \path{/ledger/grants} & \code{PLANNER} & \code{postGrant} & mid-Period, with a reason \\
 \midrule
-\multicolumn{5}{@{}l}{\textbf{Dashboard} (\module{Dashboard}: \code{DashboardQueries}; UC-12)}\\
-GET & \path{/dashboard/utilization} & \code{MANAGER}, \code{RESOURCE\_\allowbreak OWNER}, \code{PLANNER} & \code{utilization} & Resource Owner: own types \\
-GET & \path{/dashboard/idle} & as above & \code{idleNextDays} & \code{days}, default 7 \\
-GET & \path{/dashboard/waiting} & as above & \code{waitingCount} & lines waiting per type \\
-GET & \path{/dashboard/credits} & \code{MANAGER}, \code{PLANNER} & \code{credits} & own Team; \code{PLANNER} any \\
+\multicolumn{5}{@{}l}{\textbf{Dashboard} (\module{Dashboard}: \code{DashboardQueries}; UC-12; each answers a list of the types or Teams in scope)}\\
+GET & \path{/dashboard/utilization} & \code{MANAGER}, \code{RESOURCE\_\allowbreak OWNER}, \code{PLANNER} & \code{utilization} & Resource Owner: own types; \code{periodId}, \code{typeId} \\
+GET & \path{/dashboard/idle} & as above & \code{idleNextDays} & \code{days}, default 7; \code{typeId} \\
+GET & \path{/dashboard/waiting} & as above & \code{waitingCount} & lines waiting per type; \code{typeId} \\
+GET & \path{/dashboard/credits} & \code{MANAGER}, \code{PLANNER} & \code{credits} & own Team; \code{PLANNER} any; \code{periodId}, \code{teamId} \\
 GET & \path{/dashboard/person-days} & \code{MANAGER}, \code{PLANNER} & \code{personDays} & lent and borrowed; same scope \\
+GET & \path{/dashboard/usage} & \code{MANAGER}, \code{RESOURCE\_\allowbreak OWNER}, \code{PLANNER} & \code{usage} & Stretch; requested and used unit-hours; \code{periodId} \\
+\midrule
+\multicolumn{5}{@{}l}{\textbf{Usage} (\module{Allocation}: \code{UsageService}; Stretch, \req{Metered.Usage.Record})}\\
+GET & \path{/usage} & \code{RESOURCE\_\allowbreak OWNER} & \code{usage} & \code{periodId}; Allocated Metered rows of the caller's types \\
+PUT & \path{/usage/{id}} & \code{RESOURCE\_\allowbreak OWNER} & \code{recordUsage} & body \code{usedUnits}; once the Period has ended \\
 \midrule
 \multicolumn{5}{@{}l}{\textbf{Notifications} (\module{Notifications}: \code{NotificationQueries}; every use case)}\\
 GET & \path{/notifications} & \code{MEMBER} & \code{unread} & own, newest first; paged \\
@@ -177,4 +193,6 @@ POST & \path{/notifications/{id}/read} & \code{MEMBER} & \code{markRead} & own \
 \end{longtable}
 }
 
-{\sloppy The key of PUT \path{/api/settings/{key}} names one setting and the body carries its new value: \path{day_rate}, \path{priority_premium}, \path{objection_window_working_days}, \path{period_months}, \path{grant.{teamId}.{periodId}}, \path{quota.{teamId}.{typeId}}, \path{unit_price.{typeId}}, \path{bump_cutoff.{typeId}}, \path{price_bands.{typeId}}, or \path{refund_steps.{typeId}}. Each call is one \code{SettingChange} and one change-log row, and affects only Quotes not yet locked and events after the change (\req{Planner.Settings}). UC-10, filling a freed slot from the Waitlist, has no endpoint of its own: it runs inside \code{releaseLine}, \code{withdraw}, \code{decideApproval}, and the jobs, wherever capacity frees.\par}
+{\sloppy The key of PUT \path{/api/settings/{key}} names one setting and the body carries its new value: \path{day_rate}, \path{priority_premium}, \path{objection_window_working_days}, \path{period_months}, \path{grant.{teamId}.{periodId}}, \path{quota.{teamId}.{typeId}}, \path{unit_price.{typeId}}, \path{bump_cutoff.{typeId}} (Exclusive or Metered), \path{price_bands.{typeId}}, \path{refund_steps.{typeId}}, \path{tiers.{typeId}} (the whole list of a Metered type's tiers: one with an id is edited, one without is added, one left out is removed), or \path{surcharge.{typeId}} (the rate, 0 for off). Each call is one \code{SettingChange} and one change-log row, answers the new settings, and affects only Quotes not yet locked and events after the change (\req{Planner.Settings}).
+
+The body of a Release names its kind, so an empty body never releases a whole line: \code{\{"kind": "WHOLE"\}}, \code{\{"kind": "EARLIER\_END", "newEnd": ...\}}, \code{\{"kind": "OCCURRENCES", "occurrences": [...]\}}, or \code{\{"kind": "FEWER\_UNITS", "newUnits": n\}}, where \code{newUnits} is the number kept; a kind without its field is \code{VALIDATION\_FAILED}. A weekly recurrence on a line is \code{\{"occurrences": n\}}, $2 \le n \le 52$. UC-10, filling a freed slot from the Waitlist, has no endpoint of its own: it runs inside \code{releaseLine}, \code{withdraw}, \code{decideApproval}, and the jobs, wherever capacity frees.\par}

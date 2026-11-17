@@ -48,7 +48,7 @@ note over Lock, Ledger
 end note
 RLS -> Lock : lockTypes(types)
 RLS -> MA : decide(a, REFUSE, reason, actor)
-MA --> RLS : ApprovalOutcome (refused)
+MA --> RLS : Approval (refused)
 opt the refused line is Required
   RLS -> Alloc : cancel(line), each held line
   RLS -> Ledger : releaseCredits(team, line)

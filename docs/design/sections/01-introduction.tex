@@ -5,11 +5,11 @@
 
 This document specifies the design of Release~1 of \SRSproduct{}, the internal marketplace in which a Manager posts one Request for people, Exclusive resources, and Metered capacity, and the system allocates each Request Line under the policy of its Allocation Class and settles it in credits. It is the bridge from the requirements to the code: the team implements from it, the tests are derived from its interfaces and scenarios, and reviewers check it against the SRS.
 
-The design covers every Release~1 requirement of the SRS: the 41 functional requirements, the design and implementation constraints, the interface requirements, and the performance, security, and quality requirements. It divides the system into nine back-end modules and a web client (Section~\ref{sec:arch}), gives every responsibility to exactly one owning module (Section~\ref{sec:decomp}), and specifies each module down to Java signatures, owned tables, invariants, and failure behavior (Section~\ref{sec:modules}). The six Stretch requirements are designed only as extension points, and the Future items are named only so that the design leaves room for them (Section~\ref{sec:evo}). The code itself, a separate test plan, and the project schedule are outside this document.
+The design covers every Release~1 requirement of the SRS: the 41 functional requirements, the design and implementation constraints, the interface requirements, and the performance, security, and quality requirements. It divides the system into nine back-end modules and a web client (Section~\ref{sec:arch}), gives every responsibility to exactly one owning module (Section~\ref{sec:decomp}), and specifies each module down to Java signatures, owned tables, invariants, and failure behavior (Section~\ref{sec:modules}). The six Stretch requirements, built after Release~1, are specified with the modules they extend and summarized with the other extension points; the Future items are named only so that the design leaves room for them (Section~\ref{sec:evo}). The code itself, a separate test plan, and the project schedule are outside this document.
 
 \subsection{Requirements Baseline and Changes}
 
-The baseline is the \SRSproduct{} Software Requirements Specification, version~\SRSversion{} of \SRSdate{}. Identifiers are those of its short edition: 41 Release~1 and 6 Stretch functional requirements in dot notation (for example \req{Lifecycle.Hold.Place}), twelve use cases UC-1 to UC-12, and the CO, UI, SI, CI, PE, SE, QA, UD, AS, and DE identifiers. The full edition uses the same functional identifiers. Version~\SRSversion{} differs from version~0.2, the edition that was graded, by the five requirements changes below. Each is recorded in the revision history of the SRS.
+The baseline is the \SRSproduct{} Software Requirements Specification, version~\SRSversion{} of \SRSdate{}. Identifiers are those of its short edition: 41 Release~1 and 6 Stretch functional requirements in dot notation (for example \req{Lifecycle.Hold.Place}), twelve use cases UC-1 to UC-12, and the CO, UI, SI, CI, PE, SE, QA, UD, AS, and DE identifiers. The full edition uses the same functional identifiers. Version~\SRSversion{} differs from version~0.2, the edition that was graded, by the six requirements changes below. Each is recorded in the revision history of the SRS.
 
 {\small\renewcommand{\arraystretch}{1.1}
 \begin{tabularx}{\textwidth}{@{}L{2.3cm}YYL{3.4cm}@{}}
@@ -40,6 +40,11 @@ Version~0.3 contradicted itself: allocation dropped ``unapproved'' Optional line
 A Refund's lead time is measured to the start of the occurrence the released part belongs to, so giving back the rest of an occurrence already under way returns nothing (\req{Release.Refund}). &
 Version~0.3 measured it to the released part's own start, which never lies in the past, so its 0\% step could not apply. The design already priced by occurrence. &
 \code{releaseLine} and \code{Pricing.refund} (Section~\ref{mod:requests}). \\
+\addlinespace
+\rc{6} Rules the build settled &
+Version~0.5 states rules the build had to settle: a weekly recurrence is the window repeated for 2 to 52 weeks in all (\req{Draft.Line.Exclusive}, \req{Draft.Line.Validate}); the lines ahead of a waiting line are those of its type whose windows overlap its own (\req{Exclusive.Waitlist.View}); Managers are told of a rollover, and the Person of an early Loan end (\req{Ledger.Grant.Period}, \req{Release.Loan.End}); and the Stretch rules: tiers rank by premium, the demand surcharge is $1 + \textit{rate} \times$ the peak hourly fill on the whole line, and usage is recorded by an owner of any Resource of the type once the Period ends. &
+Version~0.4 was silent or loose on each point, and the code had to choose. &
+\code{LineRules}, \code{Waitlist}, \code{MeteredAllocator}, \code{Pricing}, \code{UsageService} (Section~\ref{sec:modules}); notifications (Section~\ref{sec:cross}). \\
 \bottomrule
 \end{tabularx}
 }
@@ -98,7 +103,7 @@ The figures are UML~2 diagrams drawn with PlantUML from sources kept with this d
   \item \textbf{Vocabulary.} Capitalized words such as Request, Hold, Loan, Shortlist, Waitlist, and Refund have the meaning given in the glossary (Appendix~\ref{app:glossary}), taken from the project vocabulary file. Credits are for showback only, so no money words are used.
   \item \textbf{Requirement identifiers} are set in bold. Functional requirements keep their dot notation, for example \req{Matched.Shortlist.Build}. Other identifiers print with the numbers the SRS gives them, for example \req{QA-correct}; the table below gives the key each number stands for in the sources (\req{QA-correct} is \code{QA-correct}).
   \item \textbf{Design identifiers.} Responsibilities are \rid{1} to \rid{34} (Section~\ref{sec:decomp}), requirements changes \rc{1} to \rc{5} (above), architecture decisions D-A to D-L and their records \adr{0001} to \adr{0007} (Section~\ref{sec:arch}).
-  \item \textbf{Code.} Identifiers are set in \code{monospace}, module names in \module{bold sans-serif}. Each module is one Java package \code{edu.cwru.openbench.<module>}; signatures are Java~17; every application-service method runs in one transaction unless marked \emph{(read-only)}. Tables and columns are \code{snake\_case}.
+  \item \textbf{Code.} Identifiers are set in \code{monospace}, module names in \module{bold sans-serif}. Each module is one Java package \code{edu.cwru.openbench.<module>}; signatures are Java~25; every application-service method runs in one transaction unless marked \emph{(read-only)}. Tables and columns are \code{snake\_case}.
   \item \textbf{Time.} Instants are \code{timestamptz}; windows are half-open, $[\mathit{start}, \mathit{end})$; Loan days and availability ranges are inclusive dates. All windows, Price Bands, and Periods are in the company's one time zone.
 \end{itemize}
 

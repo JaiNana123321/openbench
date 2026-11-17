@@ -33,7 +33,7 @@ node "User workstation" as WS {
 
 node "On-site server" as Server {
   node "nginx <<optional>>\nTLS termination" as Nginx
-  node "Docker container (Java 17 runtime)" as Container {
+  node "Docker container (Java 25 runtime)" as Container {
     artifact "openbench.jar (Spring Boot 3)" as Jar {
       component "embedded Tomcat\n:8080" as Tomcat
       component "REST API /api\n(nine modules)" as Api

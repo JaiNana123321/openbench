@@ -59,6 +59,13 @@ package "members" {
     member_id FK
     from_date, to_date
   }
+  entity admin_change {
+    id PK
+    --
+    member_id FK, team_id FK
+    kind, old_value, new_value
+    actor_id FK, at
+  }
 }
 
 package "notifications" {
@@ -78,5 +85,7 @@ member ||--|{ member_role
 member ||--o{ member_skill
 skill ||--o{ member_skill
 member ||--o{ availability_range
+member |o--o{ admin_change
+team |o--o{ admin_change
 member ||--o{ notification
 @enduml

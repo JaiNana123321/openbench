@@ -41,6 +41,8 @@ package "members" as P_mem {
     managerOf(TeamId): MemberId
     teams(): List<Team>
     summary(MemberId): MemberSummary
+    summaries(), skillsOf(), lendable()
+    teamOverview(), changes()
   }
   class Team <<entity>> {
     id: TeamId
@@ -70,6 +72,13 @@ package "members" as P_mem {
   class AvailabilityRange <<entity>> {
     from, to: LocalDate
   }
+  class AdminChange <<entity>> {
+    kind, oldValue, newValue
+    member: MemberId
+    team: TeamId
+    actor: MemberId
+    at: Instant
+  }
 }
 
 package "inventory" as P_inv {
@@ -85,6 +94,8 @@ package "inventory" as P_inv {
     type(), types(), instancesOf()
     poolCapacity(ResourceTypeId): int
     search(ResourceFilter): List<Resource>
+    resource(ResourceId): Resource
+    typesOwnedBy(MemberId): Set<ResourceTypeId>
   }
   interface ReductionGuard <<port>> {
     earliestHourExceeding(ResourceTypeId,
@@ -122,23 +133,33 @@ package "inventory" as P_inv {
 package "settings" as P_set {
   interface SettingsService <<interface>> {
     current(): PlannerSettings
-    update(SettingChange)
+    update(SettingChange): PlannerSettings
     periods(): List<Period>
+    changes(), plannedGrants(PeriodId)
+    tiers(ResourceTypeId): List<ServiceTier>
   }
   class PlannerSettings <<record>> {
     currentPeriod: Period
-    objectionWindow: Duration
+    objectionWindowWorkingDays: int
     dayRate: Credits
     priorityPremium: BigDecimal
     pricing: Map<ResourceTypeId, TypePricing>
     quotas: Map<TeamTypeKey, Integer>
     grants: Map<TeamId, Credits>
+    periodMonths: int
   }
   class TypePricing <<record>> {
     unitPrice: Credits
     bands: List<PriceBand>
     refundSchedule: RefundSchedule
     bumpCutoff: Duration
+    tiers: List<ServiceTier>
+    surchargeRate: BigDecimal
+  }
+  class ServiceTier <<entity>> {
+    id: ServiceTierId
+    name
+    premium: BigDecimal
   }
   class Period <<entity>> {
     id: PeriodId
@@ -163,6 +184,7 @@ Team "1" -- "1..*" Member
 Team "1" --> "manager 1" Member
 MemberService ..> Team
 MemberService ..> Member
+MemberService ..> AdminChange : logs
 Member "*" -- "*" Skill
 Member "1" *-- "*" AvailabilityRange
 Member "*" --> "1..*" Role
@@ -183,6 +205,7 @@ PlannerSettings --> Period
 PlannerSettings *-- "*" TypePricing
 TypePricing *-- "*" PriceBand
 TypePricing *-- "1" RefundSchedule
+TypePricing *-- "*" ServiceTier
 
 AvailabilityRange -[hidden]down- ResourceTypeService
 MemberService -[hidden]right- SettingsService

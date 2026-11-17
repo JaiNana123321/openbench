@@ -78,7 +78,7 @@ else no Required approval needed, a Required line UNSATISFIABLE
 end
 RLS -> RLS : record(event)
 RLS -> Notifier : notify(Manager, outcome)
-RLS --> Web : SubmitOutcome
+RLS --> Web : Request
 deactivate RLS
 note over Alloc, Notifier
   Any line needing approval starts the Objection Window. For a skill-based Matched line,

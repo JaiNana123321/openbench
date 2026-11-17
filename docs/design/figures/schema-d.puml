@@ -43,7 +43,8 @@ package "allocation" {
     request_id FK
     resource_id FK
     starts_at, ends_at
-    state
+    state, priority
+    submitted_at
   }
   entity metered_allocation {
     id PK
@@ -54,7 +55,11 @@ package "allocation" {
     type_id FK
     units
     starts_at, ends_at
-    state
+    state, tier_premium
+    submitted_at
+    used_units
+    usage_recorded_at
+    usage_recorded_by FK
   }
   entity waitlist_entry {
     id PK
@@ -69,8 +74,11 @@ package "allocation" {
     id PK
     --
     line_id FK
+    request_id FK, team_id FK
     member_id FK
     position
+    starts_on, ends_on
+    retired
   }
   entity approval {
     id PK

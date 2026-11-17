@@ -3,7 +3,7 @@
 % (03-overall-description.tex, 05-external-interfaces.tex, 06-nonfunctional-requirements.tex).
 \section{Traceability}\label{app:trace}
 
-Each row traces one identifier of the SRS version~\SRSversion{} short edition to the module or modules that satisfy it, the first named owning the requirement and any others contributing to it, and to the sections of this document that design it; functional requirements appear in SRS order, Stretch requirements point at their extension point in Section~\ref{sec:evo}, and the remaining identifiers follow by class. Every Release~1 requirement maps to at least one module.
+Each row traces one identifier of the SRS version~\SRSversion{} short edition to the module or modules that satisfy it, the first named owning the requirement and any others contributing to it, and to the sections of this document that design it; functional requirements appear in SRS order, Stretch requirements, built after Release~1, point at the modules that build them and at their row in Section~\ref{sec:evo}, and the remaining identifiers follow by class. Every Release~1 requirement maps to at least one module.
 
 {\footnotesize\renewcommand{\arraystretch}{1.05}\setlength{\tabcolsep}{4pt}
 \begin{longtable}{@{}L{4.75cm}L{\dimexpr\textwidth-10.05cm-6\tabcolsep\relax}L{3.6cm}L{1.7cm}@{}}
@@ -62,12 +62,12 @@ Each row traces one identifier of the SRS version~\SRSversion{} short edition to
 \req{Planner.Settings} & Capacity Planner sets every policy as data & \module{Settings}, \module{Requests} & \ref{mod:settings}, \ref{mod:requests} \\
 \midrule
 \multicolumn{4}{@{}l}{\itshape Functional requirements, Stretch}\\
-\req{Metered.Tier.Define} & Service tiers with premiums on Metered types & \module{Settings}, \module{Ledger} (tier premium in \code{Pricing}) & \ref{sec:evo}, service tiers \\
-\req{Metered.Tier.Bump} & Higher-tier Metered lines Bump lower tiers & \module{Allocation} (\code{Bumpable} on \code{MeteredAllocator}) & \ref{sec:evo}, service tiers \\
-\req{Metered.Usage.Record} & Resource Owner records units actually consumed & \module{Allocation} (usage beside \code{metered\_allocation}) & \ref{sec:evo} \\
-\req{Metered.Usage.Compare} & Requested versus used units per Team & \module{Dashboard} (one more view) & \ref{sec:evo} \\
-\req{Ledger.Surcharge} & Demand surcharge multiplier on the Unit Price & \module{Ledger} (multiplier in \code{Pricing}), \module{Settings} & \ref{sec:evo}, demand surcharge \\
-\req{Dashboard.Usage} & Dashboard shows requested versus used units & \module{Dashboard} (one more view) & \ref{sec:evo} \\
+\req{Metered.Tier.Define} & Service tiers with premiums on Metered types & \module{Settings}, \module{Ledger} (tier premium in \code{Pricing}), \module{Requests} & \ref{mod:settings}, \ref{mod:ledger}, \ref{sec:evo} \\
+\req{Metered.Tier.Bump} & Higher-tier Metered lines Bump lower tiers & \module{Allocation} (\code{Bumpable} on \code{MeteredAllocator}), \module{Requests} & \ref{mod:allocation}, \ref{sec:runtime} S5, \ref{sec:evo} \\
+\req{Metered.Usage.Record} & Resource Owner records units actually consumed & \module{Allocation} (\code{UsageService}, usage on \code{metered\_allocation}) & \ref{mod:allocation}, \ref{sec:evo} \\
+\req{Metered.Usage.Compare} & Requested versus used units per Team & \module{Dashboard} (\code{v\_metered\_usage}) & \ref{mod:dashboard}, \ref{sec:evo} \\
+\req{Ledger.Surcharge} & Demand surcharge multiplier on the Unit Price & \module{Ledger} (multiplier in \code{Pricing}), \module{Settings}, \module{Allocation} (\code{peakFill}) & \ref{mod:ledger}, \ref{sec:evo} \\
+\req{Dashboard.Usage} & Dashboard shows requested versus used units & \module{Dashboard} (\code{usage}) & \ref{mod:dashboard}, \ref{sec:evo} \\
 \midrule
 \multicolumn{4}{@{}l}{\itshape Constraints, interfaces, and nonfunctional requirements}\\
 \req{CO-1} & Java and Spring Boot; React and Vite & All modules & \ref{sec:arch}, \ref{mod:web} \\
