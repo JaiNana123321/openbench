@@ -22,7 +22,7 @@
 <p class="lede">0:00–12:00 · Functional testing, 40 points. You run five acts on one fresh world, each a test case from the document.</p>
 <p class="legend"><span class="say">Purple italics</span> is what to say. <span style="color:var(--accent)">Blue</span> is what should be on screen. Every act says three things the rubric asks for: the <b>requirement</b>, the <b>expected</b> result, and what we <b>observe</b>.</p>
 
-<div class="note"><strong>Rehearsed.</strong> On 17 Nov this exact sequence ran against a fresh demo world, and every number below is what the app showed. Day D is <b>Wednesday 2 December</b> (the first Wednesday at least 14 days after the demo). The Request numbers assume a fresh world, so reset after any rehearsal.</div>
+<div class="note"><strong>Rehearsed twice on 17 Nov</strong>, each time on a fresh demo world: once through the API, once click by click in a browser, started with the same <code>mvn spring-boot:run</code> command. Every label, message, and number below is what the screen showed. Day D is <b>Wednesday 2 December</b> (the first Wednesday at least 14 days after the demo). The Request numbers assume a fresh world, so reset after any rehearsal.</div>
 
 <h2>Setup <span class="when">15 min before</span></h2>
 <ol>
@@ -38,6 +38,7 @@
       </tbody>
     </table></div>
   </li>
+  <li><b>Date fields</b> are date-and-time pickers. Click the field and type the digits: in Chrome (US) <kbd>12 02 2026 10 00 AM</kbd> fills "12/02/2026, 10:00 AM". Start and End keep the previous line's values, so often you only change the hour.</li>
   <li>Prices to remember: room 10.00 per hour, GPU 5.00 per unit-hour, microscope 40.00 per hour. Weekdays 09:00–17:00 cost ×1.5, other hours ×1.0, and Priority costs ×2.</li>
 </ol>
 
@@ -58,7 +59,7 @@
   <li>Add a line: Resource Type <b>Meeting room</b>, Quantity 1, Start <b>Dec 2, 10:00</b>, End <b>12:00</b> → <b>Add line</b>.
     <span class="see">Line 1, Quote 30.00, Required.</span>
     <span class="say"><b>Expected:</b> 2 hours × 10.00 × 1.5 for a weekday daytime hour is 30.00. <b>Observed:</b> 30.00.</span></li>
-  <li>Add a line: <b>GPU</b>, Quantity 4, Dec 2 <b>16:00–18:00</b> → Add line.
+  <li>Add a line: <b>GPU</b>, <b>Units</b> 4 (the field is called Units for GPU), Dec 2 <b>16:00–18:00</b> → Add line.
     <span class="see">Quote 50.00. No Priority box on this row.</span>
     <span class="say">16:00 to 17:00 is a daytime hour: 4 × 5.00 × 1.5 = 30. 17:00 to 18:00 is not: 4 × 5.00 = 20. Total 50.00. Priority is offered only on Exclusive lines, so the GPU row has no Priority box.</span></li>
   <li>Point at <b>Totals</b>.
@@ -80,7 +81,7 @@
     <span class="see">Refused: "Refused: short by 60.00 credits", with "This needs 660.00 credits; the Available Balance is 600.00." The Request stays a Draft.</span>
     <span class="say"><b>Expected</b> in the test case: refused with the shortfall, 60.00. <b>Observed:</b> exactly that, and nothing was charged.</span></li>
   <li>Untick <b>Required</b> on line 2 (it becomes Optional) → <b>Submit</b>.
-    <span class="see">Request #2 Allocated. Line 1 Allocated; line 2 Dropped (no longer affordable once line 1 was charged).</span></li>
+    <span class="see">Request #2 Allocated. Line 1 Allocated on Microscope 1; line 2 Dropped, reason "Insufficient balance: The Optional line's Quote of 180.00 credits no longer fits the Available Balance."</span></li>
   <li>Open <b>Statement</b>.
     <span class="see">One Charge of 480.00; Balance 120.00.</span></li>
 </ol>
@@ -94,16 +95,17 @@
   <li><b>Tab 1, alice:</b> New Request → Meeting room, Specific Resource <b>Room A</b>, Dec 2 <b>10:00–12:00</b> → Submit.
     <span class="see">Request #3 Allocated; Charge 30.00.</span></li>
   <li><b>Tab 2, bob:</b> New Request → Meeting room, <b>Room A</b>, Dec 2 <b>11:00–13:00</b> → Submit.
-    <span class="see">Request #4 <b>Waiting</b>; the line is Waiting, Waitlist "Position 1".</span>
+    <span class="see">Request #4 <b>Waiting</b>. The line: Waiting, reason "No free instance: Room A is not free from Wed 2 Dec 2026, 11:00 to Wed 2 Dec 2026, 13:00.", Waitlist "Position 1".</span>
     <span class="say"><b>Expected:</b> Room A is taken from 10:00 to 12:00, so bob's 11:00 to 13:00 can't have it and he waits at position 1. <b>Observed:</b> Waiting, position 1, and nothing charged.</span></li>
-  <li><b>Tab 4, erin:</b> Inventory → <b>Room A</b> → set Dec 2, 08:00–18:00 → <b>Show timeline</b>.
-    <span class="see">08:00–10:00 Free · 10:00–12:00 Allocated, Platform, Request 3 · 12:00–18:00 Free. Bob holds nothing.</span></li>
+  <li><b>Tab 4, erin:</b> Inventory → <b>Room A</b>. Under Timeline, From and To start at today; set From <b>Dec 2, 08:00</b> and To <b>Dec 2, 18:00</b> → <b>Show timeline</b>.
+    <span class="see">"Wed Dec 2, 08:00 to 10:00 Free" · "10:00 to 12:00 Allocated, Platform, Request #3" · "12:00 to 18:00 Free". Bob holds nothing.</span></li>
   <li><b>Tab 1, alice:</b> open Request #3 → line 1 → <b>Release…</b> → Give back "The whole line".
-    <span class="see">Expected Refund 22.50: lead time 354 h, at least seven days ahead, so 75%.</span>
+    <span class="see">The form shows "Expected Refund: 22.50 credits of 30.00" and "75% of 30.00 = 22.50".</span>
     → <b>Release</b>.
+    <span class="see">"The line is now Released. A Refund of 22.50 credits was posted." The line's state is Released.</span>
     <span class="say"><b>Expected:</b> a Release seven or more days ahead refunds 75% of 30.00, which is 22.50. <b>Observed:</b> 22.50, and the Statement shows the Balance back at 4,992.50.</span></li>
   <li><b>Tab 2, bob:</b> refresh.
-    <span class="see">Notification: "Request 4 is Allocated from the waitlist: capacity freed and every Required line fits." Request #4 Allocated on Room A; Research's Balance is 90.00.</span>
+    <span class="see">Notifications, top row "Waitlist filled": "Request 4 is Allocated from the waitlist: capacity freed and every Required line fits." Request #4: Allocated, assigned Room A.</span>
     <span class="say">Nobody clicked anything for bob. The freed room went to the first waiting line it fits.</span></li>
 </ol>
 
@@ -117,7 +119,7 @@
     <span class="see">Request #5 Allocated; Operations 910.00.</span>
     <span class="say">Now both rooms are taken at 10:00: Room A by bob's earlier Request, Room B by oscar's newer one.</span></li>
   <li><b>Tab 1, alice:</b> New Request → Meeting room (Any), Dec 2 10:00–12:00 → tick <b>Priority</b> on the line.
-    <span class="see">Quote goes from 30.00 to 60.00.</span>
+    <span class="see">The box's label changes from Standard to Priority, the Quote from 30.00 to 60.00, and Totals show Available Balance 4,992.50 (alice's Refund is already back).</span>
     → Submit.
     <span class="see">Request #6 Allocated, on Room B.</span>
     <span class="say"><b>Expected:</b> each room needs one Bump, and oscar's line was submitted later, so oscar is bumped, not bob. <b>Observed:</b> alice got Room B.</span></li>
@@ -126,7 +128,8 @@
   <li>Open Request #5.
     <span class="see">Request Waiting. Room line "Waiting, Bumped by a Priority line", Waitlist Position 1. GPU line still Allocated. History: "Alice Chen: Line 1 Allocated to Bumped … full Refund of 30.00 credits".</span></li>
   <li>Statement.
-    <span class="see">Refund 30.00; the GPU Charge 60.00 untouched; Balance 940.00.</span></li>
+    <span class="see">Transactions: Charge 30.00 and Charge 60.00 (Oscar Reed), then Refund 30.00 on "Request #5, Meeting room", by Alice Chen. Balance 940.00.</span>
+    <span class="say">The Refund is recorded under alice, because her Priority line caused it.</span></li>
   <li>Back on Request #5, click <b>Withdraw</b>.
     <span class="see">"Action unavailable in this state: Release its allocated lines first." Nothing changes.</span>
     <span class="say">This refusal was a real bug, issue #27: withdrawing used to leave the GPU charged and its units blocked. Yerassyl will show how we tracked it.</span></li>
@@ -144,7 +147,7 @@
   <li><b>Tab 4, erin:</b> <b>Dashboard</b> (Period Nov 1 to Nov 30, 2026).
     <span class="see">GPU: Allocated hours 8.00, Available hours 11,520.00, Utilization 0.07%, Idle next 7 days 2,680.00. Meeting room: Waiting lines 1 (oscar's Bumped line).</span>
     <span class="say"><b>Expected:</b> 4 units × 2 hours = 8 unit-hours over 16 units × 720 hours, which is 0.07%. Idle for the next seven days is 16 × 168 − 8 = 2,680. <b>Observed:</b> those figures.</span></li>
-  <li>Point at "Idle, Period to date".
+  <li>Point at "Idle, Period to date" (GPU about 16 × the hours since 1 November: around 6,750 on the afternoon of the 18th).
     <span class="say">This column counts from November 1st to right now, so it grows every hour. We added it yesterday. It was the last step of this test case that wasn't automated.</span></li>
 </ol>
 <p class="key">Skip this act if the clock passes 11:30 and hand straight to Brian.</p>
