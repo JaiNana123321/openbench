@@ -24,7 +24,7 @@ What `mvn verify` writes:
 | Server coverage (JaCoCo) | `target/site/jacoco/index.html`, plus `jacoco.xml` and `jacoco.csv` |
 | Functional test case run report | `target/test-cases/report.md` |
 
-**Coverage gate.** JaCoCo's `check` fails `mvn verify` when the whole bundle falls below **90% of lines** or **80% of branches** (properties `coverage.line.minimum` and `coverage.branch.minimum` in `pom.xml`). Only `OpenBenchApplication` is excluded: it holds nothing but `main()`, which the tests never call because `@SpringBootTest` starts the context itself. Baseline on 2026-11-07: 97.2% of lines, 84.8% of branches. To see the gate fail, raise a minimum on the command line, for example `mvn jacoco:check@check -Dcoverage.branch.minimum=0.85` after a `mvn verify`; it prints `Rule violated for bundle openbench: branches covered ratio is 0.84, but expected minimum is 0.85`.
+**Coverage gate.** JaCoCo's `check` fails `mvn verify` when the whole bundle falls below **90% of lines** or **80% of branches** (properties `coverage.line.minimum` and `coverage.branch.minimum` in `pom.xml`). Only `OpenBenchApplication` is excluded: it holds nothing but `main()`, which the tests never call because `@SpringBootTest` starts the context itself. Measured on 2026-11-16 at b3b36f9: 97.1% of lines and 87.0% of branches (97.2% and 84.8% on 2026-11-07). To see the gate fail, run `mvn verify`, then raise a minimum on the command line, for example `mvn jacoco:check@check -Dcoverage.branch.minimum=0.90`. It prints `Rule violated for bundle openbench: branches covered ratio is 0.86, but expected minimum is 0.90`; JaCoCo truncates the ratio, so 86.98% shows as 0.86.
 
 ### Client (Vitest, React Testing Library)
 
@@ -33,7 +33,7 @@ What `mvn verify` writes:
 | `npm --prefix web test` | Runs every client test once. |
 | `npm --prefix web run coverage` | The same with V8 coverage: writes `web/coverage/index.html` (and `lcov.info`, `coverage-summary.json`) and fails below the thresholds. |
 
-The thresholds in `web/vite.config.ts` sit a few points below the baseline of 2026-11-07 (statements 95.0%, branches 83.1%, functions 96.8%, lines 97.4%): statements 90, branches 78, functions 92, lines 92. `src/main.tsx` (which only mounts `<App>`) and the test helpers in `src/test/` are excluded. `web/coverage/` is not committed.
+The thresholds in `web/vite.config.ts` are statements 90, branches 78, functions 92 and lines 92, a few points below the baseline of 2026-11-07 (statements 95.0%, branches 83.1%, functions 96.8%, lines 97.4%). On 2026-11-16 at b3b36f9 the client measured statements 95.5%, branches 83.7%, functions 96.6% and lines 98.0%. `src/main.tsx` (which only mounts `<App>`) and the test helpers in `src/test/` are excluded. `web/coverage/` is not committed.
 
 ## The functional test case run report
 
@@ -84,7 +84,7 @@ Copy this into the run's notes (or a comment on the Release's tracking issue), o
 |---|---|---|---|
 | TC-DRF-08 | drf-balance-boundary | Passed | |
 | TC-EXC-03 | exc-recurrence-quantity | Failed at step 1 | #<issue> |
-| TC-MAT-01 | mat-shortlist-build | Blocked | Matched lines not built |
+| TC-MET-07 | met-usage-record | Blocked | Needs a Period that has ended; automated by `UsageCasesTest` |
 ```
 
 Outcome is one of Passed, Failed at step *n*, Blocked (cannot be run on this build, with the reason), or Not run.

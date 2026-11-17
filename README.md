@@ -35,7 +35,12 @@ mvn spring-boot:run -Dspring-boot.run.profiles=demo
 
 Spring Boot starts the database from `compose.yaml`, Flyway migrates it, and the `demo` profile adds the demo world's seed data (`src/main/resources/db/demo`). The application listens on [http://localhost:8080](http://localhost:8080); the API is under `/api`, and its OpenAPI document is at `/api/docs` (browsable at `/api/docs/ui` once signed in). Stopping the application stops the database container and keeps its data; `docker compose down` removes it.
 
-The seed posts each Team's Grant for the Period containing the day the database is created. When a Period (a calendar month) ends, the rollover job expires each Team's unspent granted credits, keeps earned credits, and posts the next Period's planned Grant. It runs at 00:05 company time, and at start-up for a boundary the application missed while stopped. A database created before 2026-11-07 also needs `docker compose down` once: the seed changed, and Flyway refuses to start on a migration whose checksum differs from the one it applied.
+The seed posts each Team's Grant for the Period containing the day the database is created. When a Period (a calendar month) ends, the rollover job expires each Team's unspent granted credits, keeps earned credits, and posts the next Period's planned Grant. It runs at 00:05 company time, and at start-up for a boundary the application missed while stopped.
+
+If Flyway refuses to start, run `docker compose down -v` and start again, which recreates the database. Flyway refuses in two cases:
+
+- a migration's checksum differs from the one it applied, as happened when the seed changed on 2026-11-07;
+- a migration is numbered below the last one it applied. Branches are merged in the order they finish, so a migration can land after a higher-numbered one.
 
 A quick check from the command line:
 
@@ -70,6 +75,8 @@ Settings come from `src/main/resources/application.yaml` and can be overridden w
 | `SPRING_DATASOURCE_URL`, `SPRING_DATASOURCE_USERNAME`, `SPRING_DATASOURCE_PASSWORD` | The database. In production the application connects as `openbench_app` and Flyway as the schema owner (`SPRING_FLYWAY_USER`, `SPRING_FLYWAY_PASSWORD`). | from `compose.yaml` |
 | `OPENBENCH_ZONE`                                                                        | The company time zone                                                                                                                                          | `America/New_York`  |
 | `SERVER_SERVLET_SESSION_COOKIE_SECURE`                                                  | Mark the session cookie `Secure`; set it to `true` behind HTTPS                                                                                            | `false`             |
-| `OPENBENCH_JOBS_ENABLED`                                                                | Run the scheduled jobs (waitlist expiry every minute, the Period rollover daily) and the rollover catch-up at start-up                                         | `true`              |
+| `OPENBENCH_JOBS_ENABLED`                                                                  | Run the scheduled jobs (every minute, lapsed Objection Windows and then waitlist expiry; daily, the Period rollover) and the rollover catch-up at start-up     | `true`                |
 
 ## Web client
+
+The React client is in `web/` and is served by the same process. `mvn verify` builds it into the jar. To work on it with hot reload, run `npm run dev` in `web/` against the running back end. [`web/README.md`](web/README.md) covers its layout, how to add a screen, how to call the API, and how to test it.

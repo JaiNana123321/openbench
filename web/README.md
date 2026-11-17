@@ -71,7 +71,8 @@ Imports go downward only: `features` may use `shell`, `auth`, `ui`, and `api`; `
 ## Show things
 
 - Start each page with `PageHeader`. While its data loads, show `Loading`; if the read fails, return `<ErrorPage error={query.error} />` from `src/shell/ErrorPage.tsx` (403 shows Not allowed, 404 Page not found, anything else the problem).
-- Show a failed write next to the action with `<ProblemMessage error={mutation.error} />` (it renders nothing while there is no error), and the server's per-field messages with `<Field label="Units" error={fieldError(mutation.error, 'units')}>`.
+- Show a failed write next to the action with `<ProblemMessage error={mutation.error} />`; it renders nothing while there is no error. Show the server's per-field messages with `<Field label="Units" error={fieldError(mutation.error, 'units')}>`.
+- `ProblemMessage` takes its title from the problem's `code` in `src/ui/problemMessages.ts` ("Not done" for an unknown code) and shows the server's `detail` beneath it. When the server gains a refusal code, add a short title for it there.
 - Lists use `Table` with `Column`s; mark credits and counts `numeric`. Use `EmptyState` when a list is empty and `StatusBadge` for upper-case states.
 - Format with `formatCredits` (two decimals), `formatInstant` and `formatWindow` (company time zone, America/New_York, such as "Tue Oct 27, 14:00 to 16:00"), and `formatEnum`. Turn an `<input type="datetime-local">` value into an instant with `toInstant`, and back with `toPickerValue`.
 - Use the CSS variables and classes in `styles.css` rather than new colors, sizes, or inline styles. Desktop browsers only.
@@ -94,7 +95,7 @@ expect(server.callsTo('POST /api/requests/:id/submit')).toHaveLength(1);
 
 - `mockApi(routes)` (`src/test/mockApi.ts`) replaces `fetch`; routes are `'METHOD /path'` with `:name` segments, and each reply is a `Response` or a function of the request. It records every call in `calls`; `callsTo(route)` filters them. A request no route matches gets a 404 problem that names it. `json`, `noContent`, `problem`, and `session` build replies; `session(me)` answers `GET /api/me` and sets the CSRF cookie as the server does.
 - `renderApp(path, { features })` (`src/test/renderApp.tsx`) renders the application at a path with the real routes, guard, and query client, without read retries. Pass `features` to add stand-in features.
-- `src/test/members.ts` has demo Members (`alice`, `ben`, `carol`, `dave`) as `/api/me` returns them.
+- `src/test/members.ts` has the demo Members `alice`, `ben`, `bob`, `carol`, `dave` and `erin`, as `/api/me` returns them.
 - Query by role and accessible name (`getByRole('button', { name: 'Submit' })`, `getByLabelText('Username')`), as a user would.
 
 ## Gotchas
