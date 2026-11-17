@@ -18,7 +18,7 @@ These cases establish that the Administrator manages Members, Teams, skills, and
 \tcstep{As \code{alice}, submit a line for Statistics, days D to D+1, and open its Shortlist.}{None}{Dave Kim, Nina Lowe, Rita Gomez.}
 \tcstep{As \code{carol}, deactivate Nina; as \code{alice}, submit the same line again.}{None}{Nina cannot sign in (refused as a wrong login), and she is not on the new Shortlist; her history is kept.}
 \tcfield{Pass criteria}{Nina's account works only while active.}
-\tcfield{Automated by}{\code{SessionTest}: ``CO-auth, SE-password: session login with CSRF'' (sign-in part)}
+\tcfield{Automated by}{\code{SessionTest}: ``signsInReadsMeAndSignsOut()'' (in part), ``refusesAWrongPasswordAnUnknownUsernameAndADeactivatedMemberAlike()'' (in part); \code{AdminCasesTest}: ``adm-member: create a Member who can sign in; a deactivated Member cannot''}
 \end{testcase}
 
 \begin{testcase}{adm-teams-roles}{Teams, moves between Teams, and roles keep exactly one Manager per Team}{Admin.Member.Create}
@@ -34,7 +34,7 @@ These cases establish that the Administrator manages Members, Teams, skills, and
 \tcstep{Retire Product Design while Ben is still in it.}{None}{Refused with \code{TEAM\_NOT\_EMPTY}: only a Team without active Members is retired.}
 \tcstep{Move Ben back to Platform, then retire Product Design.}{Ben, Platform}{Ben is a Member of Platform with the role Member only, and Product Design has no Manager. Product Design is retired; its history is kept.}
 \tcfield{Pass criteria}{After each step, every Team with an active Member has exactly one Manager, and a Team with none has no Manager.}
-\tcfield{Automated by}{None yet}
+\tcfield{Automated by}{\code{AdminCasesTest}: ``adm-teams-roles: Teams, moves between Teams, and roles keep exactly one Manager per Team''}
 \end{testcase}
 
 \begin{testcase}{adm-skills-no-policy}{The Administrator maintains the skill list and has no policy settings}{Admin.Member.Create, Profile.Skills}
@@ -47,7 +47,7 @@ These cases establish that the Administrator manages Members, Teams, skills, and
 \tcstep{Look through every Administrator screen.}{None}{No Unit Price, Price Band, Grant, Quota, Day Rate, Refund Schedule, or window setting is offered.}
 \tcstep{Call the API to change the Day Rate.}{PUT \path{/api/settings/day_rate}}{Refused with \code{FORBIDDEN}.}
 \tcfield{Pass criteria}{The skill list changed and no setting did.}
-\tcfield{Automated by}{\code{ProfilesTest}: ``adm-skills-no-policy: the Administrator adds a skill, which Members can then choose''; \code{SkillsPage.test.tsx}; \code{InventorySecurityTest} and \code{MembersControllerTest} (role refusals) (the settings step: none yet)}
+\tcfield{Automated by}{\code{SettingsUpdateTest}: ``adm-skills-no-policy: the Administrator adds a skill but is refused the settings and a Day Rate change''; \code{InventorySecurityTest}: ``SE-roles: a write without its role is refused with 403 FORBIDDEN and changes nothing'' (in part); \code{ProfilesTest}: ``adm-skills-no-policy: the Administrator adds a skill, which Members can then choose'' (in part); \code{MembersControllerTest}: ``SE-roles: a caller without the role a service needs gets 403 FORBIDDEN'' (in part)}
 \end{testcase}
 
 \begin{testcase}{adm-roles-server}{Roles are enforced by the server, not only by the client}{Admin.Member.Create}
@@ -63,7 +63,7 @@ These cases establish that the Administrator manages Members, Teams, skills, and
 \tcstep{Repeat step 1 without the CSRF header.}{No \code{X-XSRF-TOKEN}}{\code{CSRF\_REJECTED}.}
 \tcstep{Sign out and call \path{/api/me}.}{None}{\code{UNAUTHENTICATED}.}
 \tcfield{Pass criteria}{Nothing was created.}
-\tcfield{Automated by}{\code{InventorySecurityTest}: ``SE-roles: a write without its role is refused with 403 FORBIDDEN and changes nothing''; \code{MembersControllerTest}; \code{SessionTest}}
+\tcfield{Automated by}{\code{RolesServerTest}: ``adm-roles-server: roles are enforced by the server, not only by the client''; \code{InventorySecurityTest}: ``SE-roles: a write without its role is refused with 403 FORBIDDEN and changes nothing'' (in part)}
 \end{testcase}
 
 \begin{testcase}{adm-planner-settings}{The Capacity Planner sets each policy value as data, and each change is recorded}{Planner.Settings, Admin.Member.Create}
@@ -78,7 +78,7 @@ These cases establish that the Administrator manages Members, Teams, skills, and
 \tcstep{Set a Refund Schedule step of 100\%.}{Meeting room, 100\% at 336 hours}{Refused with \code{REFUND\_STEP\_TOO\_HIGH} and nothing saved: no step may be 100\% or more.}
 \tcstep{Set a negative Day Rate.}{$-1.00$}{Refused with \code{VALUE\_OUT\_OF\_RANGE} and nothing saved; a Day Rate of 0.00 is allowed.}
 \tcfield{Pass criteria}{Only valid values were saved, and every saved change is in the history.}
-\tcfield{Automated by}{None yet}
+\tcfield{Automated by}{\code{SettingsCasesTest}: ``adm-planner-settings: each policy value is saved as data, shown at once, and logged; refused values save nothing''}
 \end{testcase}
 
 \begin{testcase}{adm-settings-effect}{A changed setting affects only what comes after the change}{Planner.Settings, Release.Refund}
@@ -92,5 +92,5 @@ These cases establish that the Administrator manages Members, Teams, skills, and
 \tcstep{Change Platform's planned Grant, first for the current Period, then from the next Period.}{6000.00}{For the current Period: refused with \code{PERIOD\_STARTED}. From the next Period: saved; the current Period's posted Grant of 5000.00 is unchanged (a mid-Period Grant would be needed to add credits now).}
 \tcstep{Change the Unit Price of Meeting room to 20.00 and open A2.}{20.00}{A2's Quote is 60.00; A1's locked Quote is still 30.00.}
 \tcfield{Pass criteria}{No posted Transaction or locked Quote changed.}
-\tcfield{Automated by}{\code{RequestLifecycleTest}: ``Draft.Submit.Lock: \ldots'' (price part)}
+\tcfield{Automated by}{\code{SettingsCasesTest}: ``adm-settings-effect: a changed Refund Schedule, Grant plan, and Unit Price affect only what comes after; no posted Transaction or locked Quote changes''}
 \end{testcase}

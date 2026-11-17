@@ -20,7 +20,7 @@ These cases establish that only a Manager drafts, submits, and withdraws their o
 \tcstep{Sign in as \code{ben} and look for Requests.}{None}{The menu has no Requests entry, and opening \code{/requests} shows the not-allowed page.}
 \tcstep{As \code{ben}, create a Request through the API.}{POST \path{/api/requests}}{Refused with \code{FORBIDDEN}; no Request is created.}
 \tcfield{Pass criteria}{Exactly one Request exists, a Draft of Platform created by Alice.}
-\tcfield{Automated by}{\code{DraftRequestTest}: ``Draft.Create: a Manager's new Draft belongs to their Team and is recorded in its history''; \code{MembersControllerTest}: ``SE-roles: a caller without the role a service needs gets 403 FORBIDDEN''}
+\tcfield{Automated by}{\code{DraftRequestTest}: ``Draft.Create: a Manager's new Draft belongs to their Team and is recorded in its history''; \code{MembersControllerTest}: ``SE-roles: a caller without the role a service needs gets 403 FORBIDDEN'' (in part)}
 \end{testcase}
 
 \begin{testcase}{drf-scope}{Another Team's Request is not found}{Draft.Create}
@@ -47,7 +47,7 @@ These cases establish that only a Manager drafts, submits, and withdraws their o
 \tcstep{Add L3.}{L3}{L3 listed as Required, Matched, with no Quote.}
 \tcstep{Read the totals panel.}{None}{Required lines 80.00; Optional lines 0.00; Available Balance 5000.00; no shortfall.}
 \tcfield{Pass criteria}{Each Quote equals its reference Quote, and Matched lines cost nothing.}
-\tcfield{Automated by}{\code{DraftRequestTest}: ``Draft.Quote.Line and Draft.Quote.Totals: \ldots''; \code{RequestPage.test.tsx}}
+\tcfield{Automated by}{\code{DraftRequestTest}: ``Draft.Quote.Line and Draft.Quote.Totals: Room A 30.00, 4 GPU units 1120.00, Required 1150.00 of 5000.00''}
 \end{testcase}
 
 \begin{testcase}{drf-line-options}{Line options by Allocation Class}{Draft.Line.Add}
@@ -63,7 +63,7 @@ These cases establish that only a Manager drafts, submits, and withdraws their o
 \tcstep{Add L3 again with quantity 2.}{Dave Kim, quantity 2}{Refused with \code{QUANTITY\_INVALID}.}
 \tcstep{Try to mark a GPU line or a Person line as Priority through the API.}{GPU, 4 units, Priority}{Refused with \code{PRIORITY\_NOT\_OFFERED}: Priority is offered for Exclusive lines only.}
 \tcfield{Pass criteria}{The Draft holds L1, L2, and L3 only.}
-\tcfield{Automated by}{\code{DraftCasesTest}: ``drf-line-options, steps 1 and 2: \ldots''; \code{DraftRequestTest}: ``A line naming one Resource asks for 1 instance, else 422 QUANTITY\_INVALID'' (steps 3 and 6: \code{DraftCasesTest} ``drf-line-options, steps 3 and 6: \ldots'', disabled until the Priority mark and weekly recurrence are built; steps 4 and 5: none yet)}
+\tcfield{Automated by}{\code{MatchedCasesTest}: ``drf-line-options, steps 4 and 5: a named-Person line has quantity 1 and no Quote; quantity 2 is QUANTITY\_INVALID'' (in part); \code{DraftRequestTest}: ``A line naming one Resource asks for 1 instance, else 422 QUANTITY\_INVALID'' (in part); \code{DraftCasesTest}: ``drf-line-options, steps 3 and 6: a weekly Priority room line has three occurrences, Quote 180.00 (3 $\times$ Q4); Priority on a GPU line is PRIORITY\_NOT\_OFFERED'' (in part), ``drf-line-options, steps 1 and 2: an Exclusive line names Room B (Q1 = 30.00); quantity 2 on it is QUANTITY\_INVALID'' (in part)}
 \end{testcase}
 
 \begin{testcase}{drf-line-refusals}{Invalid lines are refused as they are added}{Draft.Line.Add}
@@ -79,7 +79,7 @@ These cases establish that only a Manager drafts, submits, and withdraws their o
 \tcstep{Add a Metered line naming a Resource.}{GPU, gpu-node-a, 4 units}{Refused with \code{NAMED\_RESOURCE\_NOT\_OFFERED}.}
 \tcstep{Add an Exclusive line naming a Resource of another type.}{Meeting room, Microscope 1}{Refused with \code{TYPE\_MISMATCH}.}
 \tcfield{Pass criteria}{The Draft is still empty, and each refusal shows its message beside the field it concerns.}
-\tcfield{Automated by}{\code{DraftRequestTest}: the ``Draft.Line.Validate'' tests, ``A window that ends before it starts \ldots WINDOW\_INVALID'', ``A named Resource of another type \ldots TYPE\_MISMATCH'', ``A Metered line cannot name a Resource \ldots''}
+\tcfield{Automated by}{\code{DraftRequestTest}: ``A Metered line cannot name a Resource: 422 NAMED\_RESOURCE\_NOT\_OFFERED'', ``A named Resource of another type is refused with 422 TYPE\_MISMATCH'', ``Draft.Line.Validate: a retired Resource Type is refused with 422 TYPE\_RETIRED'', ``Draft.Line.Validate: a quantity below 1 is refused with 422 QUANTITY\_INVALID'', ``Draft.Line.Validate: a window that does not start in the future is refused with 422 WINDOW\_NOT\_FUTURE'', ``A window that ends before it starts, or off the whole hour, is refused with 422 WINDOW\_INVALID''}
 \end{testcase}
 
 \begin{testcase}{drf-required-optional}{Lines are Required by default and may be split to make a part Optional}{Draft.Line.Required, Draft.Quote.Line}
@@ -94,7 +94,7 @@ These cases establish that only a Manager drafts, submits, and withdraws their o
 \tcstep{Try to split L1 again, moving its only room.}{1 of 1}{Refused with \code{LINE\_NOT\_ATOMIC}: both parts must keep at least one.}
 \tcstep{Mark L1b Required.}{Required}{Required 120.00; Optional 30.00.}
 \tcfield{Pass criteria}{No line offers a partial-acceptance setting; only whole lines are Required or Optional.}
-\tcfield{Automated by}{\code{DraftCasesTest}: ``drf-required-optional: Required by default; a split moves a part to an Optional line; marking it Required again''; \code{DraftRequestTest}: ``Draft.Line.Split: \ldots'' (both), ``Split refuses with 422 LINE\_NOT\_ATOMIC unless both parts keep at least 1''}
+\tcfield{Automated by}{\code{DraftRequestTest}: ``Draft.Line.Split: part of a line moves to a new Optional line of the same type and window'' (in part), ``Draft.Line.Split: a Metered line splits its units'' (in part), ``Split refuses with 422 LINE\_NOT\_ATOMIC unless both parts keep at least 1'' (in part); \code{DraftCasesTest}: ``drf-required-optional: Required by default; a split moves a part to an Optional line; marking it Required again''}
 \end{testcase}
 
 \begin{testcase}{drf-shortfall}{Submission refused while the Required sum exceeds the Available Balance}{Draft.Quote.Line, Ledger.Account}
@@ -108,7 +108,7 @@ These cases establish that only a Manager drafts, submits, and withdraws their o
 \tcstep{Mark L2 Optional and submit R1.}{L2 Optional}{Required 480.00 is within 600.00, so submission is accepted; the Optional line does not count toward the refusal.}
 \tcstep{Open the Statement of Research.}{None}{One Charge of 480.00 for L1. L2 was not affordable after L1 was charged, so it is Dropped and charged nothing (\TC{lif-optional-drop}).}
 \tcfield{Pass criteria}{After step 2 the Statement and Inventory were unchanged; after step 4 Research's Balance is 120.00.}
-\tcfield{Automated by}{\code{RequestLifecycleTest}: ``INSUFFICIENT\_BALANCE: a Request costing more than the Available Balance is refused with the shortfall \ldots''; \code{DraftRequestTest}: ``Draft.Quote.Totals: the shortfall is the Required sum above the Available Balance; Optional lines do not count''}
+\tcfield{Automated by}{\code{DraftRequestTest}: ``Draft.Quote.Totals: the shortfall is the Required sum above the Available Balance; Optional lines do not count''; \code{RequestLifecycleTest}: ``INSUFFICIENT\_BALANCE: a Request costing more than the Available Balance is refused with the shortfall and stays a Draft''}
 \end{testcase}
 
 \begin{testcase}{drf-balance-boundary}{A Required sum equal to the Available Balance is accepted}{Draft.Quote.Line, Ledger.Grant.Period}
@@ -150,7 +150,7 @@ These cases establish that only a Manager drafts, submits, and withdraws their o
 \tcstep{Open Microscope 1's timeline for D.}{D 09:00--17:00}{Free: the Hold has been released.}
 \tcstep{Try to withdraw \code{alice}'s Allocated Request through the API as \code{alice}.}{Its id}{Refused with \code{WRONG\_STATE}: an Allocated Request is released line by line, not withdrawn.}
 \tcfield{Pass criteria}{No Hold, held credit, or waitlist entry of B1 to B3 remains.}
-\tcfield{Automated by}{\code{RequestLifecycleTest}: ``Draft.Create: withdrawing a Waiting Request cancels its lines \ldots'', ``Draft.Create: a Draft can be withdrawn \ldots'', ``WRONG\_STATE: \ldots an Allocated one cannot be withdrawn'' (Pending part: none yet)}
+\tcfield{Automated by}{\code{PendingCasesTest}: ``drf-withdraw, the Pending part: withdrawing releases the Holds and held credits and cancels the approvals'' (in part); \code{RequestLifecycleTest}: ``Draft.Create: withdrawing a Waiting Request cancels its lines and takes them off the waitlist'' (in part), ``Draft.Create: a Draft can be withdrawn, after which it can be neither edited nor submitted'' (in part), ``WRONG\_STATE: a Request that is not a Draft cannot be submitted again, and an Allocated one cannot be withdrawn'' (in part)}
 \end{testcase}
 
 \begin{testcase}{drf-edit-waiting}{Editing a Waiting Request returns it to Draft and requotes it}{Draft.Create, Exclusive.Waitlist.Join}
@@ -164,5 +164,5 @@ These cases establish that only a Manager drafts, submits, and withdraws their o
 \tcstep{Change L1's window.}{D 14:00--16:00}{L1's Quote is recomputed at the current price: 60.00.}
 \tcstep{Submit B1.}{None}{B1 is Allocated with L1's Quote locked at 60.00.}
 \tcfield{Pass criteria}{B1's earlier waitlist entry is gone and the Charge is 60.00.}
-\tcfield{Automated by}{None yet}
+\tcfield{Automated by}{\code{ReopenRequestTest}: ``editingWaitingReturnsToDraftAndRequotesAtCurrentPrices()''}
 \end{testcase}

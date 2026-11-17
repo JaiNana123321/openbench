@@ -21,7 +21,7 @@ These cases establish that a submitted Request moves to Allocated, Pending, or W
 \tcstep{Open the Statement of Platform.}{None}{Charges of 30.00 and 60.00, each equal to its locked Quote; Balance 4910.00.}
 \tcstep{Open the notifications.}{None}{A notification that A1 was Allocated.}
 \tcfield{Pass criteria}{A1 and both lines are Allocated and charged exactly once.}
-\tcfield{Automated by}{\code{RequestLifecycleTest}: ``Lifecycle.Allocate: every Required line fits, so the lines are allocated and charged their locked Quotes''; \code{SubmitEndToEndTest}}
+\tcfield{Automated by}{\code{RequestLifecycleTest}: ``Lifecycle.Allocate: every Required line fits, so the lines are allocated and charged their locked Quotes''}
 \end{testcase}
 
 \begin{testcase}{lif-atomic-waiting}{If one Required line cannot be satisfied, nothing is held, allocated, or charged}{Lifecycle.Evaluate, Lifecycle.States}
@@ -46,7 +46,7 @@ These cases establish that a submitted Request moves to Allocated, Pending, or W
 \tcstep{Open the Statement and Account of Platform.}{None}{No Charge; held credits 90.00; Balance 5000.00; Available Balance 4910.00.}
 \tcstep{Open Room A's timeline for D.}{None}{10:00--12:00 on Hold for Platform, A1.}
 \tcfield{Pass criteria}{The Holds exist and nothing is charged.}
-\tcfield{Automated by}{\code{LedgerServiceTest}: ``Ledger.Account: Balance is granted plus earned, Available Balance is Balance minus held'' (credits part)}
+\tcfield{Automated by}{\code{LedgerServiceTest}: ``Ledger.Account: Balance is granted plus earned, Available Balance is Balance minus held'' (in part); \code{PendingCasesTest}: ``lif-pending-holds: a Request that needs an approval is Pending with Holds and held credits''}
 \end{testcase}
 
 \begin{testcase}{lif-hold-blocks}{A Hold blocks other Requests exactly as an allocation does}{Lifecycle.Hold.Place, Metered.Pool.Check}
@@ -58,7 +58,7 @@ These cases establish that a submitted Request moves to Allocated, Pending, or W
 \tcstep{Submit a Request with O1.}{O1}{Waiting: Room A is on Hold.}
 \tcstep{Submit a Request with O2.}{O2}{Waiting with \code{POOL\_FULL}: $4 + 13 = 17$ units exceed 16.}
 \tcfield{Pass criteria}{Neither line was allocated against the held capacity.}
-\tcfield{Automated by}{\code{ExclusiveAllocatorTest}: ``A Hold blocks like an allocation \ldots''; \code{MeteredAllocatorTest}: ``A Hold blocks exactly like an allocation; cancel frees it''}
+\tcfield{Automated by}{\code{MeteredAllocatorTest}: ``A Hold blocks exactly like an allocation; cancel frees it''; \code{ExclusiveAllocatorTest}: ``A Hold blocks like an allocation, and cancel turns it EXPIRED, which frees the room''}
 \end{testcase}
 
 \begin{testcase}{lif-held-credits}{Held credits stop concurrent Pending Requests from exceeding the Balance}{Lifecycle.Hold.Place, Draft.Quote.Line}
@@ -70,7 +70,7 @@ These cases establish that a submitted Request moves to Allocated, Pending, or W
 \tcstep{Submit B1.}{B1}{B1 is Pending; 480.00 held; Available Balance 120.00.}
 \tcstep{Create B2 and submit it.}{B2}{The Draft shows a shortfall of 60.00; submission is refused with \code{INSUFFICIENT\_BALANCE}.}
 \tcfield{Pass criteria}{The Research Account never commits more than its Balance.}
-\tcfield{Automated by}{\code{LedgerServiceTest}: ``Two concurrent Holds on one Account cannot together exceed the Available Balance'', ``INSUFFICIENT\_BALANCE: a Hold above the Available Balance is refused and holds nothing''}
+\tcfield{Automated by}{\code{LedgerServiceTest}: ``INSUFFICIENT\_BALANCE: a Hold above the Available Balance is refused and holds nothing'', ``Two concurrent Holds on one Account cannot together exceed the Available Balance''; \code{PendingCasesTest}: ``lif-held-credits: held credits stop a second submission from exceeding the Balance''; \code{PendingConcurrencyTest}: ``exactly one is Pending holding 480.00; the other is refused, and the Account folds'' (in part)}
 \end{testcase}
 
 \begin{testcase}{lif-window-start}{The Objection Window starts at submission and lasts two working days}{Lifecycle.Window.Start}
@@ -82,7 +82,7 @@ These cases establish that a submitted Request moves to Allocated, Pending, or W
 \tcstep{Submit A1 and open it.}{A1}{A1 is Pending and shows its Objection Window ending on the following Monday at $t$: two working days, skipping Saturday and Sunday.}
 \tcstep{Select Dave Kim; have \code{oscar} refuse; select Rita Gomez (\TC{mat-refuse-replace}).}{None}{A1 re-enters Pending; the window still ends on Monday at $t$.}
 \tcfield{Pass criteria}{The window did not restart.}
-\tcfield{Automated by}{None yet}
+\tcfield{Automated by}{\code{PendingCasesTest}: ``lif-window-start: submitted on Thursday at t, the Objection Window ends on Monday at t, and never restarts''}
 \end{testcase}
 
 \begin{testcase}{lif-window-lapse}{On lapse, every Hold is released and no Hold is placed afterwards}{Lifecycle.Window.Start, Lifecycle.Hold.Place}
@@ -95,7 +95,7 @@ These cases establish that a submitted Request moves to Allocated, Pending, or W
 \tcstep{As \code{oscar}, submit a Request with O1.}{O1}{Allocated: the released Hold no longer blocks Room A.}
 \tcstep{Open A1.}{None}{A1 is Waiting and holds nothing; Room A's timeline shows O1 only. No Hold was placed for A1 after the lapse.}
 \tcfield{Pass criteria}{No Hold of A1 outlived its Objection Window.}
-\tcfield{Automated by}{None yet}
+\tcfield{Automated by}{\code{PendingCasesTest}: ``lif-window-lapse: on lapse every Hold is released, the approval escalated, and no Hold is placed again'', ``Lifecycle.Window.Start: DueWorkJob lapses an Objection Window that ended, within its run'' (in part)}
 \end{testcase}
 
 \begin{testcase}{lif-allocate}{When the last approval arrives, everything commits in one step}{Lifecycle.Allocate, Matched.Loan.Form, Draft.Submit.Lock}
@@ -108,7 +108,7 @@ These cases establish that a submitted Request moves to Allocated, Pending, or W
 \tcstep{As \code{alice}, open A1 and the Statement.}{None}{L1 and L2 Allocated; Charges 30.00 and 60.00; held credits 0.00; Balance 4910.00; Alice notified.}
 \tcstep{Open the Statement of Operations.}{None}{An Earning of 800.00; Dave's Loan to Platform for D to D+1 exists.}
 \tcfield{Pass criteria}{The Holds, Charges, Loan, Earning, and state change all appear together; none is missing.}
-\tcfield{Automated by}{None yet (the Exclusive and Metered part: \code{RequestLifecycleTest})}
+\tcfield{Automated by}{\code{LoanCasesTest}: ``lif-allocate: when the last approval arrives, everything commits in one step''}
 \end{testcase}
 
 \begin{testcase}{lif-optional-drop}{At allocation, Optional lines that cannot be met are dropped with their reason}{Lifecycle.Allocate, Draft.Line.Required}
@@ -135,7 +135,7 @@ These cases establish that a submitted Request moves to Allocated, Pending, or W
 \tcstep{[clock] Let the Objection Window lapse with Alice silent.}{Two working days}{Within five minutes M6's approval is escalated and Erin is notified. B1 stays Allocated and L1 keeps its allocation.}
 \tcstep{As \code{erin}, approve Ben from Escalations.}{Approve}{Ben's Loan to Research for D to D+1 forms now; Platform earns 800.00; Ben and Bob are notified.}
 \tcfield{Pass criteria}{L1 was never held or delayed, and M6 was neither dropped at allocation nor lost at the lapse.}
-\tcfield{Automated by}{None yet}
+\tcfield{Automated by}{\code{LoanCasesTest}: ``lif-optional-open: an Optional line's approval never holds a Request in Pending, nor is lost at the lapse''}
 \end{testcase}
 
 \begin{testcase}{lif-reevaluate}{A Waiting Request is allocated only when every Required line fits at once}{Lifecycle.Waiting.Reevaluate, Exclusive.Waitlist.Join}
@@ -148,7 +148,7 @@ These cases establish that a submitted Request moves to Allocated, Pending, or W
 \tcstep{Open B1.}{None}{B1 Waiting; L1 still at position 1 for Room A; L2 still waiting.}
 \tcstep{As \code{oscar}, Release O1's line and then O2's line.}{None}{After O1: L2 would fit, but Room A is O2's, so B1 waits. After O2: both fit, and B1 is Allocated at its locked Quotes (30.00 and 90.00).}
 \tcfield{Pass criteria}{B1 was never partly allocated.}
-\tcfield{Automated by}{None yet}
+\tcfield{Automated by}{\code{ReleaseCasesTest}: ``lif-reevaluate: a Waiting Request is allocated only when every Required line fits at once, never in part''}
 \end{testcase}
 
 \begin{testcase}{lif-states-rules}{Only the transitions of the state machine are allowed, and each is recorded}{Lifecycle.States}
@@ -162,7 +162,7 @@ These cases establish that a submitted Request moves to Allocated, Pending, or W
 \tcstep{Submit A3.}{A3}{Refused with \code{EMPTY\_REQUEST}.}
 \tcstep{Open the history of A1 and A2.}{None}{Every state change is listed with its actor (a Member, or the system for timed events) and a timestamp.}
 \tcfield{Pass criteria}{No Request changed state in steps 1 to 3.}
-\tcfield{Automated by}{\code{RequestStateTest}; \code{RequestLifecycleTest}: ``WRONG\_STATE: \ldots'', ``EMPTY\_REQUEST: a Draft without lines cannot be submitted''}
+\tcfield{Automated by}{\code{RequestLifecycleTest}: ``EMPTY\_REQUEST: a Draft without lines cannot be submitted'', ``WRONG\_STATE: a Request that is not a Draft cannot be submitted again, and an Allocated one cannot be withdrawn'' (in part); \code{RequestStateTest} (all 3 tests)}
 \end{testcase}
 
 \begin{testcase}{lif-race}{Two Managers submitting for the last room at once: exactly one is allocated}{Lifecycle.Evaluate, Exclusive.Conflict}
@@ -174,5 +174,5 @@ These cases establish that a submitted Request moves to Allocated, Pending, or W
 \tcstep{Submit both Requests at the same moment.}{Both Requests}{Exactly one is Allocated on Room A; the other is Waiting at position 1.}
 \tcstep{Open both Statements.}{None}{One Charge of 30.00 in total; each Account equals the sum of its Transactions.}
 \tcfield{Pass criteria}{Room A is never allocated twice.}
-\tcfield{Automated by}{\code{SubmitConcurrencyTest}: ``exactly one Request is Allocated, the other Waiting at position 1, and both Accounts fold''; \code{AllocationConcurrencyTest}}
+\tcfield{Automated by}{\code{SubmitConcurrencyTest}: ``exactly one Request is Allocated, the other Waiting at position 1, and both Accounts fold''; \code{AllocationConcurrencyTest} (all 10 tests)}
 \end{testcase}

@@ -18,7 +18,7 @@ These cases establish that a Manager can give back an allocated Exclusive or Met
 \tcstep{Open Room A's timeline for D.}{None}{10:00--12:00 is free.}
 \tcstep{As \code{bob}, call the API to Release L1.}{L1's id}{Refused with \code{NOT\_FOUND}: only the owning Team's Manager may Release.}
 \tcfield{Pass criteria}{One Refund of 22.50 and Room A free.}
-\tcfield{Automated by}{\code{PricingTest}: ``Release.Refund: the step function'' (fraction only)}
+\tcfield{Automated by}{\code{PricingTest.Refunds}: ``returnsTheZeroStepBelowSevenDays()'' (in part), ``returnsNothingOnceThePartHasStarted()'' (in part), ``returnsTheSevenDayStepAtOrAboveSevenDays()'' (in part), ``roundsDown()'' (in part), ``Release.Refund: the attributable part rounds half-up, the Refund down'' (in part), ``neverReturnsTheWholeCharge()'' (in part), ``returnsNothingBelowEveryStep()'' (in part); \code{ReleaseCasesTest}: ``rel-whole: a whole line released seven or more days ahead returns 75\%, 22.50 of 30.00, and frees Room A''}
 \end{testcase}
 
 \begin{testcase}{rel-partial}{Partial Release shortens the window, reduces units, or removes occurrences}{Release.Line, Release.Refund}
@@ -32,7 +32,7 @@ These cases establish that a Manager can give back an allocated Exclusive or Met
 \tcstep{Release L2's occurrence on D+14.}{Occurrence D+14}{L2 keeps D and D+7 on Room B. Refund 22.50.}
 \tcstep{Open the GPU and Room B timelines.}{None}{GPU: 2 units for Platform on D 10:00--12:00. Room B: Platform on D and D+7 only.}
 \tcfield{Pass criteria}{Three Refunds totaling 90.00; every remaining part kept its instance and prices.}
-\tcfield{Automated by}{None yet}
+\tcfield{Automated by}{\code{PricingTest.Refunds}: ``Release.Refund: GPU 4 units, Wednesday 10:00 to 14:00 (120.00): the hours from 12:00 are 60.00, 2 units of 10:00 to 12:00 are 30.00'' (in part), ``Release.Refund: the worked example returns 11.25 + 33.75 = 45.00 over three occurrences'' (in part); \code{ReleaseCasesTest}: ``rel-partial: an earlier end returns 45.00, 2 fewer units 22.50, and one weekly occurrence 22.50; the rest keeps its instances and prices''; \code{ReleaseRulesTest}: ``A partial Release never moves the rest: an earlier end keeps Room A, which another line then gets for the freed hours'' (in part); \code{ReleasePartsTest}: ``rel-partial, step 3: giving back the occurrence on D+14 keeps D and D+7 on Room B'' (in part)}
 \end{testcase}
 
 \begin{testcase}{rel-schedule}{The Refund fraction follows the lead time: 25\% under seven days, 0\% once started}{Release.Refund}
@@ -44,7 +44,7 @@ These cases establish that a Manager can give back an allocated Exclusive or Met
 \tcstep{Release L1 in whole.}{L1}{Refund 7.50 ($30.00 \times 0.25$): the lead time is under seven days.}
 \tcstep{[clock] After H, Release L2's remaining hours.}{Hours from H+1}{The released hours free on Room B. No credits return: the window has started, so the fraction is 0\%.}
 \tcfield{Pass criteria}{The Statement shows a Refund of 7.50 and no other credit for L2.}
-\tcfield{Automated by}{\code{PricingTest}: ``Release.Refund: the step function''}
+\tcfield{Automated by}{\code{PricingTest.Refunds} (all 10 tests); \code{ReleaseCasesTest}: ``rel-schedule, step 1: a whole line released under seven days ahead returns 25\%, 7.50 of 30.00'' (in part); \code{ReleaseStartedTest}: ``rel-schedule: 7.50 of 30.00 under seven days ahead; after H the remaining hours free with no credit back''}
 \end{testcase}
 
 \begin{testcase}{rel-bucket}{A Refund returns to the granted and earned parts in the Charge's proportions}{Release.Refund, Ledger.Grant.Period}
@@ -57,7 +57,7 @@ These cases establish that a Manager can give back an allocated Exclusive or Met
 \tcstep{Release L2 in whole.}{L2}{One Refund of 360.00 ($480.00 \times 0.75$), split 90.00 granted and 270.00 earned.}
 \tcstep{Open the Account.}{None}{Granted 90.00, earned 710.00, Balance 800.00.}
 \tcfield{Pass criteria}{The Refund's split has the Charge's proportions (25\% granted, 75\% earned).}
-\tcfield{Automated by}{\code{LedgerServiceTest}: ``Ledger.SpendOrder: a Charge draws granted credits first, then earned, and records the split'' (Charge part)}
+\tcfield{Automated by}{\code{LedgerServiceTest}: ``Ledger.SpendOrder: a Charge draws granted credits first, then earned, and records the split'' (in part); \code{LedgerRefundTest}: ``rel-bucket: a Refund of 360.00 on a Charge of 120.00 granted and 360.00 earned returns 90.00 and 270.00'' (in part); \code{ReleaseCasesTest}: ``rel-bucket: a Refund of 360.00 returns 90.00 granted and 270.00 earned, the Charge's proportions''}
 \end{testcase}
 
 \begin{testcase}{rel-loan-prorate}{Ending a Loan early corrects the lending Team's Earning}{Release.Loan.Prorate, Ledger.Transaction.Kinds}
@@ -70,7 +70,7 @@ These cases establish that a Manager can give back an allocated Exclusive or Met
 \tcstep{As \code{oscar}, open the Statement.}{None}{An Earning correction of $-800.00$ (2 person-days no longer lent) referencing the original Earning; net Earning for the Loan 400.00. The original Earning is unchanged.}
 \tcstep{As \code{bob}, open the Statement.}{None}{No Refund or Charge was posted to Research for the Loan.}
 \tcfield{Pass criteria}{Operations' Earning for the Loan equals 400.00, the Day Rate times one day lent.}
-\tcfield{Automated by}{None yet}
+\tcfield{Automated by}{\code{LedgerCorrectionTest}: ``A correction is a negative Earning naming the original, which stays unchanged'' (in part); \code{LoanEndCasesTest}: ``rel-loan-prorate: ending a Loan early corrects the lending Team's Earning''}
 \end{testcase}
 
 \begin{testcase}{rel-loan-negative}{An Earning correction may take a Balance below zero, and then blocks Exclusive and Metered Requests}{Release.Loan.Prorate, Ledger.Grant.Period}
@@ -85,5 +85,5 @@ These cases establish that a Manager can give back an allocated Exclusive or Met
 \tcstep{As \code{erin}, post a mid-Period Grant to Operations.}{100.00 and reason}{Balance 60.00.}
 \tcstep{Submit a Request with O1.}{O1}{Allocated; Balance 30.00.}
 \tcfield{Pass criteria}{Only the Earning correction took the Balance below zero.}
-\tcfield{Automated by}{None yet}
+\tcfield{Automated by}{\code{LedgerCorrectionTest}: ``Only the correction takes the Balance below zero; then no positive sum is affordable, nothing is'' (in part); \code{LoanEndCasesTest}: ``A Request of Person lines only is allocated, and its Loan formed, while the Balance is below zero'' (in part), ``rel-loan-negative: an Earning correction may take a Balance below zero, and then blocks Exclusive and Metered Requests''}
 \end{testcase}

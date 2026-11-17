@@ -17,7 +17,7 @@ These cases establish that a Member can propose one line to their Manager, that 
 \tcstep{As \code{alice}, open the Statement and the Suggestions list.}{None}{Available Balance still 5000.00 and no new Transaction; S1 is listed first as Open, with Ben as its author.}
 \tcstep{As \code{ben}, try to create a Suggestion with two lines through the API.}{Two lines}{Refused with \code{VALIDATION\_FAILED}.}
 \tcfield{Pass criteria}{S1 exists as Open and the Inventory, Holds, and Ledger are unchanged.}
-\tcfield{Automated by}{None yet}
+\tcfield{Automated by}{\code{SuggestionTest}: ``createsOneAskToOwnManagerWithoutHoldsQuotesOrTransactions()''}
 \end{testcase}
 
 \begin{testcase}{sug-accept}{The Manager accepts Suggestions as a new line and into an existing line}{Suggest.Accept.Existing}
@@ -33,7 +33,7 @@ These cases establish that a Member can propose one line to their Manager, that 
 \tcstep{Try to accept S1 again.}{S1}{Refused with \code{SUGGESTION\_CLOSED}: only Open Suggestions change state.}
 \tcstep{As \code{ben}, open Suggestions.}{None}{S1 and S2 Accepted, S3 Open.}
 \tcfield{Pass criteria}{Every Accepted Suggestion records its line, and the original asks are unchanged.}
-\tcfield{Automated by}{None yet}
+\tcfield{Automated by}{\code{SuggestionTest}: ``acceptsNewAndExistingLinesKeepsOriginalAsksAndQuotesNormally()''}
 \end{testcase}
 
 \begin{testcase}{sug-decline}{The Manager declines a Suggestion with a reason; it is kept}{Suggest.Accept.Existing}
@@ -46,5 +46,5 @@ These cases establish that a Member can propose one line to their Manager, that 
 \tcstep{As \code{ben}, open the notifications and Suggestions.}{None}{A notification that S3 was declined, with the reason; S3 listed as Declined.}
 \tcstep{As \code{alice}, try to accept S3, and try to delete it through the API.}{S3}{Accept refused with \code{SUGGESTION\_CLOSED}. No delete action is offered, and a DELETE call answers 405 Method Not Allowed. S3 is still listed.}
 \tcfield{Pass criteria}{S3 remains, Declined, with its original ask and the reason.}
-\tcfield{Automated by}{None yet}
+\tcfield{Automated by}{\code{SuggestionTest}: ``declinesWithAuditNotifiesTheMemberAndNeverDeletes()''}
 \end{testcase}

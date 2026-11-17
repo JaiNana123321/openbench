@@ -20,7 +20,7 @@ These cases establish that a Metered line is satisfied with all its units for ev
 \tcstep{Submit a Request with L1.}{None}{Allocated; the GPU timeline shows 4 units for Operations, D 16:00--18:00.}
 \tcstep{Submit a Request with L2.}{L2}{Waiting with \code{POOL\_FULL}: 20 units exceed the Pool Capacity of 16; no part of the 20 units is allocated or held.}
 \tcfield{Pass criteria}{Only L1's 4 units are allocated.}
-\tcfield{Automated by}{\code{MeteredAllocatorTest}: ``Metered.Line.Form, Metered.Pool.Check: MeteredAllocator''; \code{PricingTest}}
+\tcfield{Automated by}{\code{PricingTest} (all 28 tests); \code{MeteredAllocatorTest} (all 9 tests)}
 \end{testcase}
 
 \begin{testcase}{met-pool-hourly}{Pool Capacity is checked for every hour of the window}{Metered.Pool.Check}
@@ -33,7 +33,7 @@ These cases establish that a Metered line is satisfied with all its units for ev
 \tcstep{Submit a Request with O2.}{O2}{Allocated: at 13:00, $12 + 4 = 16$ units, exactly the Pool Capacity.}
 \tcstep{Submit a Request with O3.}{O3}{Allocated: A1 ends at 14:00, so 14:00 and 15:00 carry $4 + 6 = 10$ units.}
 \tcfield{Pass criteria}{No hour of D carries more than 16 allocated or held GPU units.}
-\tcfield{Automated by}{\code{MeteredAllocatorTest}: ``is POOL\_FULL at 14:00, one unit short'', ``fits from 15:00, after A ends''; \code{AllocationConcurrencyTest}: ``the last units of a pool go to exactly one line \ldots''}
+\tcfield{Automated by}{\code{MeteredAllocatorTest.WorkedExample}: ``is POOL\_FULL at 14:00, one unit short'', ``fits from 15:00, after A ends''; \code{AllocationConcurrencyTest}: ``the last units of a pool go to exactly one line, and no hour exceeds the Pool Capacity''}
 \end{testcase}
 
 \begin{testcase}{met-quota}{A Team's Quota is checked for every hour; other Teams' units do not count}{Metered.Pool.Check}
@@ -47,7 +47,7 @@ These cases establish that a Metered line is satisfied with all its units for ev
 \tcstep{Submit a Request with B2.}{B2}{Waiting with \code{QUOTA\_EXCEEDED} at D 11:00: Research would hold $6 + 4 = 10$ units, over its Quota, although the pool has room ($2 + 6 + 4 = 12$).}
 \tcstep{Submit a Request with B3.}{B3}{Allocated: Research holds $6 + 2 = 8$ units at 11:00; Platform's 2 units do not count toward it.}
 \tcfield{Pass criteria}{Research never holds more than 8 units in any hour.}
-\tcfield{Automated by}{\code{RequestLifecycleTest}: ``Metered.Pool.Check: 10 GPU units exceed Research's Quota of 8 \ldots''; \code{MeteredAllocatorTest}: ``Only the requesting Team's own units count toward its Quota''}
+\tcfield{Automated by}{\code{RequestLifecycleTest}: ``Metered.Pool.Check: 10 GPU units exceed Research's Quota of 8, so the line waits with QUOTA\_EXCEEDED''; \code{MeteredAllocatorTest}: ``Only the requesting Team's own units count toward its Quota''}
 \end{testcase}
 
 \begin{testcase}{met-waitlist-fill}{A waiting Metered line is satisfied when its units fit in every hour}{Metered.Pool.Check, Lifecycle.Waiting.Reevaluate}
@@ -59,7 +59,7 @@ These cases establish that a Metered line is satisfied with all its units for ev
 \tcstep{Release B1's line in whole.}{None}{B1's line is Released with its Refund.}
 \tcstep{Open B2.}{None}{B2 is Allocated: Research now holds $2 + 4 = 6$ units at 11:00 and 12:00, within the Quota. Bob is notified that the line was satisfied from the waitlist.}
 \tcfield{Pass criteria}{B2's Charge equals the Quote locked when B2 was submitted.}
-\tcfield{Automated by}{None yet}
+\tcfield{Automated by}{\code{ReleaseCasesTest}: ``met-waitlist-fill: B2 is allocated when its 4 units fit in every hour, at its locked Quote, and Bob is notified''}
 \end{testcase}
 
 \begin{testcase}{met-tier-define}{[Stretch] The Capacity Planner defines service tiers for a Metered type}{Metered.Tier.Define}
@@ -71,7 +71,7 @@ These cases establish that a Metered line is satisfied with all its units for ev
 \tcstep{In Settings, define the two tiers for GPU.}{The tiers}{Saved and recorded with actor, old and new value, and timestamp.}
 \tcstep{As \code{alice}, add L1 to a Draft.}{L1}{The line offers a tier choice; with Express the Quote is $60.00 \times 1.5 = 90.00$.}
 \tcfield{Pass criteria}{The tier's premium multiplies the Unit Price.}
-\tcfield{Automated by}{None yet}
+\tcfield{Automated by}{\code{TierCasesTest}: ``met-tier-define: the Planner defines GPU's tiers, logged; with Express, L1's Quote is 60.00 $\times$ 1.5 = 90.00''}
 \end{testcase}
 
 \begin{testcase}{met-tier-bump}{[Stretch] A higher-tier Metered line Bumps a lower-tier one}{Metered.Tier.Bump}
@@ -83,7 +83,7 @@ These cases establish that a Metered line is satisfied with all its units for ev
 \tcstep{Submit a Request with L1.}{L1}{Allocated: O1 is Bumped to make room.}
 \tcstep{As \code{oscar}, open O1 and the Statement.}{None}{O1's line is Bumped, at the head of the GPU waitlist, with a notification; a Refund of 240.00, the full Charge.}
 \tcfield{Pass criteria}{No hour exceeds the Pool Capacity, and the Bumped line is refunded in full.}
-\tcfield{Automated by}{None yet}
+\tcfield{Automated by}{\code{TierCasesTest}: ``met-tier-bump: Express L1 Bumps Standard O1 (16 units, 240.00): a 240.00 Refund, head of the GPU waitlist, a notice''}
 \end{testcase}
 
 \begin{testcase}{met-usage-record}{[Stretch] The Resource Owner records the units consumed, with no Ledger effect}{Metered.Usage.Record, Metered.Usage.Compare}
@@ -96,5 +96,5 @@ These cases establish that a Metered line is satisfied with all its units for ev
 \tcstep{Record the units consumed.}{3 units}{Saved for that allocation.}
 \tcstep{As \code{alice}, open the Statement for that Period.}{None}{The Charge is still 60.00 and no Transaction was added.}
 \tcfield{Pass criteria}{Usage is recorded and the Ledger is unchanged.}
-\tcfield{Automated by}{None yet}
+\tcfield{Automated by}{\code{UsageCasesTest}: ``met-usage-record: Dave records 3 of Alice's 4 GPU units after the Period; the Charge stays 60.00 and no Transaction is added''}
 \end{testcase}

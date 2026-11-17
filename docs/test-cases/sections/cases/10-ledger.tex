@@ -19,7 +19,7 @@ These cases establish that each Team's Account and Statement add up from its Tra
 \tcstep{Open the Statement for the current Period.}{None}{Granted 4970.00 (5000.00 less the Charge, drawn from granted credits first), earned 0.00, held 60.00; Balance 4970.00; Available Balance 4910.00. A2 has no Charge yet.}
 \tcstep{Have \code{oscar} approve Dave Kim for A2.}{None}{A2 is Allocated; a Charge of 60.00 posts; held 0.00; Balance and Available Balance 4910.00.}
 \tcfield{Pass criteria}{Balance = granted + earned and Available Balance = Balance $-$ held after each step.}
-\tcfield{Automated by}{\code{LedgerServiceTest}: ``Ledger.Account: \ldots'', ``The account row equals the fold of the Team's Transactions and Period closes''}
+\tcfield{Automated by}{\code{LedgerServiceTest}: ``The account row equals the fold of the Team's Transactions and Period closes'', ``Ledger.Account: Balance is granted plus earned, Available Balance is Balance minus held'' (in part)}
 \end{testcase}
 
 \begin{testcase}{led-statement}{The Statement lists the Period's Transactions, and each Team sees only its own}{Ledger.Account, Ledger.Transaction.Kinds}
@@ -33,7 +33,7 @@ These cases establish that each Team's Account and Statement add up from its Tra
 \tcstep{As \code{ben}, call the API for Platform's Statement.}{Platform's Team id}{\code{FORBIDDEN}: a Member who is not a Manager or the Capacity Planner sees no Statement.}
 \tcstep{As \code{erin}, open the Statement of each Team.}{Platform, Research, Operations}{All three are shown.}
 \tcfield{Pass criteria}{The Statement's closing balances equal its opening balances plus its Transactions.}
-\tcfield{Automated by}{\code{LedgerControllerTest}: ``Ledger.Statement: opening, totals, closing, the Account, and every Transaction of the Period'', ``A Manager asking for another Team's Statement gets 404 NOT\_FOUND'', ``A Member who is neither Manager nor Planner gets 403 FORBIDDEN \ldots''}
+\tcfield{Automated by}{\code{LedgerControllerTest}: ``Ledger.Statement: opening, totals, closing, the Account, and every Transaction of the Period'', ``A Member who is neither Manager nor Planner gets 403 FORBIDDEN for the Account and the Statement'', ``A Manager asking for another Team's Statement gets 404 NOT\_FOUND''}
 \end{testcase}
 
 \begin{testcase}{led-immutable}{Transactions are never updated or deleted; a correction is a new Transaction}{Ledger.Transaction.Kinds}
@@ -46,7 +46,7 @@ These cases establish that each Team's Account and Statement add up from its Tra
 \tcstep{Look for an edit or delete action on any Transaction, in the client and in the API document at \path{/api/docs/ui}.}{None}{None exists.}
 \tcstep{Run the automated test that updates and deletes a Transaction row as the application's database role.}{\code{mvn verify}}{Both statements are refused by the database.}
 \tcfield{Pass criteria}{The Charge still reads 30.00 and the Refund 22.50.}
-\tcfield{Automated by}{\code{AppRoleGrantsTest}: ``Ledger.Transaction.Kinds, QA-audit: the application role cannot change history''}
+\tcfield{Automated by}{\code{AppRoleGrantsTest} (all 14 tests)}
 \end{testcase}
 
 \begin{testcase}{led-grant-mid}{The Capacity Planner posts a mid-Period Grant with a reason}{Ledger.Grant.Period, Planner.Settings}
@@ -73,7 +73,7 @@ These cases establish that each Team's Account and Statement add up from its Tra
 \tcstep{Open the Statement of the ended Period.}{None}{Expired 970.00; closing granted 0.00, earned 800.00.}
 \tcstep{Open the Statement of the new Period.}{None}{Opening granted 0.00, earned 800.00; a Grant of 1000.00 posted by the job; Balance 1800.00.}
 \tcfield{Pass criteria}{Earned credits survived the boundary and only granted credits expired.}
-\tcfield{Automated by}{None yet}
+\tcfield{Automated by}{\code{PeriodRolloverTest}: ``led-period-boundary: granted credits expire, earned credits stay, and the new Grant posts''}
 \end{testcase}
 
 \begin{testcase}{led-price-bands}{Quotes follow the price formula with its bands and the priority premium}{Ledger.Price.Formula}
@@ -90,7 +90,7 @@ These cases establish that each Team's Account and Statement add up from its Tra
 \tcstep{Add a weekly line.}{Meeting room, 1, D 10:00--12:00 on D, D+7, D+14}{90.00 (Q5).}
 \tcstep{Add a Metered line across the band's end.}{GPU, 4 units, D 16:00--18:00}{50.00 (Q8).}
 \tcfield{Pass criteria}{Every Quote equals the stated value to the cent.}
-\tcfield{Automated by}{\code{PricingTest}: ``Ledger.Price.Formula: the demo story's Quotes'', ``Ledger.Price.Band: which band an hour falls in'', ``Ledger.Price.Premium and rounding''}
+\tcfield{Automated by}{\code{PricingTest.PremiumAndRounding} (all 5 tests); \code{PricingTest.Bands} (all 7 tests); \code{PricingTest.DemoStory} (all 3 tests)}
 \end{testcase}
 
 \begin{testcase}{led-earning}{An Earning counts only Monday-to-Friday days of the Loan}{Ledger.Earning.Post, Matched.Loan.Form}
@@ -102,7 +102,7 @@ These cases establish that each Team's Account and Statement add up from its Tra
 \tcstep{Submit a Request with M1 and select Dave Kim; as \code{oscar}, approve.}{M1, Dave Kim}{Allocated; a Loan for D+2 to D+5.}
 \tcstep{As \code{oscar}, open the Statement.}{None}{An Earning of 800.00: 2 person-days (Friday and Monday) $\times$ 400.00; Saturday and Sunday do not count.}
 \tcfield{Pass criteria}{The Earning is 800.00, not 1600.00.}
-\tcfield{Automated by}{None yet}
+\tcfield{Automated by}{\code{LoanCasesTest}: ``led-earning: an Earning counts only Monday-to-Friday days of the Loan''}
 \end{testcase}
 
 \begin{testcase}{led-surcharge}{[Stretch] A demand surcharge raises the Quote with the share of capacity taken and is locked}{Ledger.Surcharge}
@@ -116,5 +116,5 @@ These cases establish that each Team's Account and Statement add up from its Tra
 \tcstep{As \code{oscar}, submit O1. As \code{alice}, reopen the Draft.}{O1}{L1's Quote is now above 60.00: half of the pool is taken in the window.}
 \tcstep{As \code{alice}, submit, then have \code{oscar} Release O1.}{None}{L1's locked Quote and Charge do not change.}
 \tcfield{Pass criteria}{The surcharge depends on the share taken at quote time and is fixed once locked.}
-\tcfield{Automated by}{None yet}
+\tcfield{Automated by}{\code{SurchargeCasesTest}: ``led-surcharge: L1 quotes 60.00 in an empty window, 90.00 with the pool half full, and its locked Quote and Charge stay 90.00 after O1's Release''}
 \end{testcase}

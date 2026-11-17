@@ -19,7 +19,7 @@ These cases establish that the Shortlist contains exactly the Members of other T
 \tcstep{Open M1's Shortlist.}{None}{Dave Kim (Operations, Statistics, 0 person-days lent), then Rita Gomez (Research, Statistics and Microscopy, 0). Ben Ortiz is absent: he is in Platform and lacks Statistics. No Candidate is selected yet.}
 \tcstep{Check what each row shows.}{None}{Name, Team, skills, and person-days lent only; no link to the Candidate's other Requests or Statements.}
 \tcfield{Pass criteria}{The Shortlist has exactly two Candidates in the stated order, and nothing was selected automatically.}
-\tcfield{Automated by}{None yet}
+\tcfield{Automated by}{\code{MatchedCasesTest}: ``mat-shortlist-build: the Shortlist holds the qualified Members of other Teams, and no one is selected''}
 \end{testcase}
 
 \begin{testcase}{mat-shortlist-order}{The Shortlist is ordered by person-days lent in the current Period, then by name}{Matched.Shortlist.Build}
@@ -30,7 +30,7 @@ These cases establish that the Shortlist contains exactly the Members of other T
 \tcsteps
 \tcstep{Submit a Request with M1 and open its Shortlist.}{M1}{Rita Gomez (0 person-days lent) first, then Dave Kim (2 person-days lent).}
 \tcfield{Pass criteria}{The Candidate with fewer person-days lent comes first, overriding the order by name.}
-\tcfield{Automated by}{None yet}
+\tcfield{Automated by}{\code{MatchedCasesTest}: ``mat-shortlist-order: fewer person-days lent in the current Period come first, before the name''}
 \end{testcase}
 
 \begin{testcase}{mat-select}{The Manager selects exactly the line's quantity; a short Shortlist leaves the Request Waiting}{Matched.Shortlist.Build, Matched.Approve.Route}
@@ -44,7 +44,7 @@ These cases establish that the Shortlist contains exactly the Members of other T
 \tcstep{As \code{alice}, try to select a Member who is not on the Shortlist through the API.}{Carol Davis (Operations, no skills)}{Refused with \code{NOT\_A\_CANDIDATE}.}
 \tcstep{As \code{alice}, select one Candidate.}{Dave Kim}{Dave is selected and an approval request is sent; Dave receives a notification that he was selected.}
 \tcfield{Pass criteria}{No Candidate was selected without the Manager's action.}
-\tcfield{Automated by}{None yet}
+\tcfield{Automated by}{\code{MatchedCasesTest}: ``mat-select: exactly the line's quantity is selected; a short Shortlist leaves the Request Waiting''}
 \end{testcase}
 
 \begin{testcase}{mat-approve-route}{The approval request goes to the Candidate's Manager, who decides}{Matched.Approve.Route}
@@ -58,7 +58,7 @@ These cases establish that the Shortlist contains exactly the Members of other T
 \tcstep{Approve with a reason.}{Reason}{The decision is recorded with actor Oscar Reed, the reason, and the timestamp. A1 becomes Allocated (its only line is approved).}
 \tcstep{Try to decide it again.}{Refuse}{Refused with \code{ALREADY\_DECIDED}.}
 \tcfield{Pass criteria}{Exactly one approval request was sent, to Oscar, and only his decision counted.}
-\tcfield{Automated by}{None yet}
+\tcfield{Automated by}{\code{MatchedCasesTest}: ``mat-approve-route: the approval request goes to the Candidate's Manager, who decides''}
 \end{testcase}
 
 \begin{testcase}{mat-own-team}{No approval is routed to the requesting Manager for their own Team}{Matched.Approve.Route}
@@ -70,7 +70,7 @@ These cases establish that the Shortlist contains exactly the Members of other T
 \tcstep{Add M3 to a Draft.}{M3}{Refused with \code{OWN\_TEAM}: a Member of the requesting Team cannot be lent to it.}
 \tcstep{Open Approvals.}{None}{No approval request exists.}
 \tcfield{Pass criteria}{No line, approval request, or Loan of Ben for Platform exists.}
-\tcfield{Automated by}{None yet}
+\tcfield{Automated by}{\code{MatchedCasesTest}: ``mat-own-team: a named Person of the requesting Team is refused with OWN\_TEAM; no approval exists''}
 \end{testcase}
 
 \begin{testcase}{mat-refuse-replace}{A refusal asks for a replacement without restarting the Objection Window}{Matched.Refuse.Replace, Lifecycle.Waiting.Reevaluate, Lifecycle.Window.Start}
@@ -84,7 +84,7 @@ These cases establish that the Shortlist contains exactly the Members of other T
 \tcstep{Open M1's Shortlist and select a replacement.}{Rita Gomez}{A1 returns to Pending; L1 is on Hold again; an approval request goes to Bob Patel; the deadline is still W.}
 \tcstep{As \code{bob}, approve.}{None}{A1 is Allocated; Rita has a Loan to Platform for D to D+1.}
 \tcfield{Pass criteria}{The Objection Window never restarted, and Dave Kim has no Loan.}
-\tcfield{Automated by}{None yet}
+\tcfield{Automated by}{\code{EscalationCasesTest}: ``mat-refuse-replace: a refusal asks for a replacement without restarting the Objection Window''}
 \end{testcase}
 
 \begin{testcase}{mat-refuse-none}{A refusal with no Candidate left refuses a Required line and drops an Optional one}{Matched.Refuse.Replace, Lifecycle.States, Lifecycle.Evaluate}
@@ -98,7 +98,7 @@ These cases establish that the Shortlist contains exactly the Members of other T
 \tcstep{Select Dave Kim for M5. As \code{oscar}, refuse.}{Dave Kim}{The Shortlist has no other Candidate, so M5 is Dropped with its reason; B2 stays Allocated with L2 only.}
 \tcstep{Open Research's Statement.}{None}{One Charge of 30.00 for L2; nothing for B1.}
 \tcfield{Pass criteria}{B1 is final in Refused; B2 was Allocated at submission, and M5 was Dropped only when it was refused with no Candidate left.}
-\tcfield{Automated by}{None yet}
+\tcfield{Automated by}{\code{EscalationCasesTest}: ``mat-refuse-none: a refusal with no Candidate left refuses a Required line and drops an Optional one''}
 \end{testcase}
 
 \begin{testcase}{mat-escalate}{A silent Manager's approval escalates to the Capacity Planner}{Matched.Escalate, Lifecycle.Window.Start, Planner.Settings}
@@ -112,7 +112,7 @@ These cases establish that the Shortlist contains exactly the Members of other T
 \tcstep{Approve on Oscar's behalf.}{Approve}{Recorded with actor Erin Walsh. A1 is re-evaluated: Room A is still free, so A1 is Allocated at its locked Quotes. Oscar is notified of the outcome.}
 \tcstep{As \code{oscar}, open Approvals.}{None}{The request is no longer open there; it shows as decided by the Capacity Planner.}
 \tcfield{Pass criteria}{Exactly one decision was recorded, by Erin, and A1 is Allocated.}
-\tcfield{Automated by}{None yet}
+\tcfield{Automated by}{\code{EscalationCasesTest}: ``mat-escalate: a silent Manager's approval escalates to the Capacity Planner''}
 \end{testcase}
 
 \begin{testcase}{mat-escalate-later}{After the lapse, a later approval goes straight to the Capacity Planner}{Matched.Escalate}
@@ -124,7 +124,7 @@ These cases establish that the Shortlist contains exactly the Members of other T
 \tcstep{Select a replacement for M1.}{Rita Gomez}{An approval request is created and sent to Erin Walsh, not to Bob Patel. No Hold is placed: the window has lapsed.}
 \tcstep{As \code{erin}, approve it from Escalations.}{Approve}{Room A is still free, so A1 is Allocated at its locked Quotes; Rita has a Loan to Platform.}
 \tcfield{Pass criteria}{Bob never received an approval request for A1.}
-\tcfield{Automated by}{None yet}
+\tcfield{Automated by}{\code{EscalationCasesTest}: ``mat-escalate-later: after the lapse, a later approval goes straight to the Capacity Planner''}
 \end{testcase}
 
 \begin{testcase}{mat-loan-form}{An approved Candidate becomes a Loan and the lending Team earns}{Matched.Loan.Form, Ledger.Earning.Post}
@@ -138,7 +138,7 @@ These cases establish that the Shortlist contains exactly the Members of other T
 \tcstep{Open the Statements of Operations (as \code{oscar}) and Research (as \code{bob}).}{None}{Operations: an Earning of 800.00 (2 person-days $\times$ 400.00) for B1's line, earned credits 800.00. Research: no Charge for M1.}
 \tcstep{As \code{dave}, open the notifications and My profile.}{None}{A notification that the Loan formed; the Loan to Research for D to D+1 is listed; there is no action to accept or decline it.}
 \tcfield{Pass criteria}{One Loan and one Earning of 800.00 exist for B1.}
-\tcfield{Automated by}{None yet}
+\tcfield{Automated by}{\code{LoanCasesTest}: ``mat-loan-form: an approved Candidate becomes a Loan and the lending Team earns''}
 \end{testcase}
 
 \begin{testcase}{mat-loan-optional-later}{An Optional Matched line approved after allocation forms its Loan then}{Matched.Loan.Form, Lifecycle.Allocate}
@@ -151,5 +151,5 @@ These cases establish that the Shortlist contains exactly the Members of other T
 \tcstep{As \code{oscar}, approve Dave.}{None}{Every Required line is satisfied: B1 is Allocated, Dave's Loan forms, and Operations earns 800.00. M6 is still awaiting approval.}
 \tcstep{As \code{alice}, approve Ben.}{None}{Ben's Loan to Research for D to D+1 forms now, and Platform earns 800.00.}
 \tcfield{Pass criteria}{Each Earning posted when its Loan formed, not before.}
-\tcfield{Automated by}{None yet}
+\tcfield{Automated by}{\code{LoanCasesTest}: ``mat-loan-optional-later: an Optional Matched line approved after allocation forms its Loan then''}
 \end{testcase}

@@ -18,7 +18,7 @@ These cases establish that an Exclusive instance is never given to two overlappi
 \tcstep{Submit a Request B2 with L2.}{L2}{B2 is Allocated: a window starting when another ends does not overlap.}
 \tcstep{Open Room A's timeline for D.}{D 08:00--18:00}{10:00--12:00 Platform (A1); 12:00--14:00 Research (B2); nothing for B1.}
 \tcfield{Pass criteria}{No two allocations or Holds of Room A overlap.}
-\tcfield{Automated by}{\code{ExclusiveAllocatorTest}: ``An overlapping window finds no free instance; back-to-back windows both fit''; \code{ExclusionConstraintTest}; \code{RequestLifecycleTest}: ``Exclusive.Waitlist.Join: Room A at an overlapping time waits at position 1 \ldots''}
+\tcfield{Automated by}{\code{ExclusionConstraintTest} (all 4 tests); \code{RequestLifecycleTest}: ``Exclusive.Waitlist.Join: Room A at an overlapping time waits at position 1, with the reason, and nothing is held''; \code{ExclusiveAllocatorTest}: ``An overlapping window finds no free instance; back-to-back windows both fit''}
 \end{testcase}
 
 \begin{testcase}{exc-pick-instance}{Without a named Resource, the free instance with the fewest allocated hours is chosen}{Exclusive.Conflict}
@@ -43,7 +43,7 @@ These cases establish that an Exclusive instance is never given to two overlappi
 \tcstep{Submit a Request with L2.}{L2}{Allocated, every occurrence on the same instance.}
 \tcstep{Submit a Request with L3.}{L3}{Waiting: L2 holds one of the two rooms on D+14, and the line takes both or none.}
 \tcfield{Pass criteria}{No occurrence of any line was allocated alone.}
-\tcfield{Automated by}{\code{ExclusiveCasesTest}: ``exc-recurrence-quantity, step 3: \ldots''; \code{ExclusiveAllocatorTest}: ``A line for two rooms takes both or none'' (steps 1 and 2: none yet, weekly recurrence is not built)}
+\tcfield{Automated by}{\code{ExclusiveCasesTest}: ``exc-recurrence-quantity: a weekly or two-room line needs the same free instances for every occurrence, all or none''; \code{ExclusiveAllocatorTest}: ``A line for two rooms takes both or none'' (in part)}
 \end{testcase}
 
 \begin{testcase}{exc-waitlist-order}{Waitlist order: Bumped first, then Priority, then submission time}{Exclusive.Waitlist.Join}
@@ -58,7 +58,7 @@ These cases establish that an Exclusive instance is never given to two overlappi
 \tcstep{As \code{bob}, submit B2 with the room line Optional and a Required line GPU, 4 units, D 10:00--12:00.}{Optional room line}{B2 is Allocated with its GPU line; the room line is Dropped with its reason, not waitlisted.}
 \tcstep{Open B1 as \code{bob}.}{None}{B1's line shows position 2.}
 \tcfield{Pass criteria}{Positions are A2, B1, A1; no Optional line is on the waitlist.}
-\tcfield{Automated by}{\code{WaitlistTest}: ``Positions follow submission time among overlapping windows \ldots'', ``Bumped lines come first, then Priority lines, then by submission time'', ``\ldots Optional lines never join''}
+\tcfield{Automated by}{\code{WaitlistTest}: ``Bumped lines come first, then Priority lines, then by submission time'', ``Joining twice keeps one entry; leaving and cancel take the line off; Optional lines never join'', ``Positions follow submission time among overlapping windows, not the moment of joining''}
 \end{testcase}
 
 \begin{testcase}{exc-waitlist-fill}{Freed capacity goes to the first waiting line whose window fits}{Exclusive.Waitlist.Join, Lifecycle.Waiting.Reevaluate, Release.Line}
@@ -70,7 +70,7 @@ These cases establish that an Exclusive instance is never given to two overlappi
 \tcstep{Release A1's line in whole.}{None}{The line is Released and a Refund is posted (\TC{rel-whole}).}
 \tcstep{Open B1 as \code{bob} and O2 as \code{oscar}.}{None}{B1 is still Waiting at position 1: its window needs 12:00--13:00, which O1 still holds. O2, the next line, fits and is Allocated on Room A for D 10:00--11:00; Oscar is notified that it was satisfied from the waitlist.}
 \tcfield{Pass criteria}{The freed slot was offered in waitlist order and given to the first line whose window fits.}
-\tcfield{Automated by}{None yet}
+\tcfield{Automated by}{\code{ReleaseCasesTest}: ``exc-waitlist-fill: the freed slot goes to the first waiting line whose window fits, and its Manager is notified''}
 \end{testcase}
 
 \begin{testcase}{exc-waitlist-expire}{A waiting line leaves the waitlist when its window starts}{Exclusive.Waitlist.Join}
@@ -82,7 +82,7 @@ These cases establish that an Exclusive instance is never given to two overlappi
 \tcstep{[clock] Let E 10:00 pass.}{Time E 10:00}{B1's line has left the waitlist; B1 stays Waiting.}
 \tcstep{Open Room A's waitlist.}{None}{No line waits for E 10:00--12:00.}
 \tcfield{Pass criteria}{The line was never allocated after its window began.}
-\tcfield{Automated by}{None yet}
+\tcfield{Automated by}{\code{WaitlistExpiryTest}: ``exc-waitlist-expire: the waiting line leaves the waitlist at E 10:00 and its Request stays Waiting''}
 \end{testcase}
 
 \begin{testcase}{exc-bump}{A Priority line Bumps the latest-submitted blocking standard line}{Exclusive.Priority.Bump, Ledger.Price.Formula}
@@ -95,7 +95,7 @@ These cases establish that an Exclusive instance is never given to two overlappi
 \tcstep{Submit.}{None}{The Request is Allocated with L1 on Room B. O1's line is Bumped: each room needed one Bump, and O1 was submitted later.}
 \tcstep{Open Room A's and Room B's timelines for D.}{None}{Room A: B1 unchanged. Room B: Platform, Priority line L1.}
 \tcfield{Pass criteria}{Exactly one line was Bumped, the latest-submitted one; the Charge for L1 is 60.00.}
-\tcfield{Automated by}{None yet}
+\tcfield{Automated by}{\code{BumpCasesTest}: ``exc-bump: a Priority line Bumps the latest-submitted blocking standard line, and its Charge is Q4 = 60.00''}
 \end{testcase}
 
 \begin{testcase}{exc-bump-effect}{A Bumped line is refunded in full, heads its waitlist, and returns its Request to Waiting}{Exclusive.Bump.Effect, Lifecycle.States}
@@ -108,7 +108,7 @@ These cases establish that an Exclusive instance is never given to two overlappi
 \tcstep{Open O1.}{None}{O1 is Waiting; the room line is Bumped and at position 1 of the waitlist for Meeting room, D 10:00--12:00; O1b is still allocated. The history records the Bump with both lines, the actor, and the timestamp.}
 \tcstep{Open the Statement of Operations.}{None}{A Refund of 30.00 referencing the room line's Charge; the GPU Charge of 60.00 is untouched; Balance 940.00 (1000.00 $-$ 30.00 $-$ 60.00 $+$ 30.00).}
 \tcfield{Pass criteria}{The Refund, the waitlist head, the state change, and the record were all made together.}
-\tcfield{Automated by}{None yet}
+\tcfield{Automated by}{\code{BumpCasesTest}: ``exc-bump-effect: the Bumped line is refunded in full, heads its waitlist, and its Request is Waiting''}
 \end{testcase}
 
 \begin{testcase}{exc-bump-cutoff}{No Bump inside the bump cutoff; the Priority line waits ahead of standard lines}{Exclusive.Priority.Bump}
@@ -119,7 +119,7 @@ These cases establish that an Exclusive instance is never given to two overlappi
 \tcsteps
 \tcstep{Submit a Request with L1.}{L1}{No Bump: both blocking lines start within 24 hours. The Request is Waiting and L1 is at position 1, ahead of Bob's waiting standard line.}
 \tcfield{Pass criteria}{Both blocking lines are still allocated.}
-\tcfield{Automated by}{None yet}
+\tcfield{Automated by}{\code{BumpCasesTest}: ``exc-bump-cutoff: no Bump inside the bump cutoff; the Priority line waits ahead of standard lines''}
 \end{testcase}
 
 \begin{testcase}{exc-priority-protected}{A Priority line is never Bumped and never Bumps another Priority line}{Exclusive.Priority.Bump}
@@ -130,5 +130,5 @@ These cases establish that an Exclusive instance is never given to two overlappi
 \tcsteps
 \tcstep{Submit a Request with L1.}{L1}{No Bump; the Request is Waiting with L1 on the waitlist.}
 \tcfield{Pass criteria}{Alice's and Oscar's lines are still allocated and no Refund was posted.}
-\tcfield{Automated by}{None yet}
+\tcfield{Automated by}{\code{BumpCasesTest}: ``exc-priority-protected: a Priority line is never Bumped and never Bumps another Priority line''}
 \end{testcase}

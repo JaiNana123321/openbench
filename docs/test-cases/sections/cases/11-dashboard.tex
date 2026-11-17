@@ -17,7 +17,7 @@ These cases establish that the dashboard reports utilization, idle capacity, and
 \tcstep{Read idle capacity for the coming seven days.}{None}{Meeting room $2 \times 168 - 4 = 332$ instance-hours; GPU $16 \times 168 - 8 = 2680$ unit-hours; Confocal microscope 168.}
 \tcstep{Have \code{alice} Release the GPU line, then reload the dashboard.}{None}{GPU utilization 0\% and idle capacity 2688 unit-hours: the Release completed before the page was requested.}
 \tcfield{Pass criteria}{Every figure matches the formula to the stated rounding; the room allocated but not Released stays counted as allocated.}
-\tcfield{Automated by}{None yet}
+\tcfield{Automated by}{\code{DashboardCasesTest}: ``dsh-utilization: utilization, idle capacity for seven days, and waiting lines per type; a Release shows at once''}
 \end{testcase}
 
 \begin{testcase}{dsh-credits}{Credits and Loans per Team and Period}{Dashboard.Credits}
@@ -29,7 +29,7 @@ These cases establish that the dashboard reports utilization, idle capacity, and
 \tcstep{Open the dashboard's Team figures for the current Period.}{None}{Platform: Grants 5000.00, Charges 30.00, Earnings 0.00, Refunds 22.50, expired 0.00, Balance and Available Balance 4992.50. Research: Grants 600.00; Charges, Earnings, Refunds, and expired 0.00; Balance and Available Balance 600.00; person-days borrowed 2. Operations: Grants 1000.00, Earnings 800.00, Balance and Available Balance 1800.00, person-days lent 2.}
 \tcstep{Follow Platform's link to its Statement.}{None}{The Statement of Platform for the Period opens and agrees with the figures.}
 \tcfield{Pass criteria}{Each Team's figures equal the sums of its Transactions and Loans in the Period.}
-\tcfield{Automated by}{None yet}
+\tcfield{Automated by}{\code{DashboardCasesTest}: ``dsh-credits: each Team's credits and person-days for the Period agree with its Transactions, Loans, and Statement''}
 \end{testcase}
 
 \begin{testcase}{dsh-scope}{Each role sees the dashboard in its own scope}{Dashboard.Credits, Dashboard.Utilization}
@@ -42,7 +42,7 @@ These cases establish that the dashboard reports utilization, idle capacity, and
 \tcstep{As \code{dave}, open the dashboard.}{None}{Utilization and idle capacity of the Resources he owns; no Team credit figures.}
 \tcstep{As \code{ben}, open the dashboard.}{None}{No dashboard: a Member without another role has none, and the API answers \code{FORBIDDEN}.}
 \tcfield{Pass criteria}{No viewer saw another Team's credits except the Capacity Planner.}
-\tcfield{Automated by}{None yet}
+\tcfield{Automated by}{\code{DashboardCasesTest}: ``dsh-scope: a Manager sees every type and only their Team's credits; a Resource Owner their types and no credits; a Member no dashboard''}
 \end{testcase}
 
 \begin{testcase}{dsh-usage}{[Stretch] Requested versus used units per Team and Metered type}{Dashboard.Usage, Metered.Usage.Compare}
@@ -54,5 +54,5 @@ These cases establish that the dashboard reports utilization, idle capacity, and
 \tcstep{Open the dashboard for the ended Period.}{The Period}{GPU, Platform: requested 8 unit-hours, used 6 unit-hours.}
 \tcstep{Open Platform's Statement for the Period.}{None}{Unchanged: the Charge is 60.00.}
 \tcfield{Pass criteria}{Usage is shown and has no Ledger effect.}
-\tcfield{Automated by}{None yet}
+\tcfield{Automated by}{\code{UsageCasesTest}: ``dsh-usage: the Planner sees GPU / Platform requested 8 unit-hours and used 6; the Statement is unchanged''}
 \end{testcase}
