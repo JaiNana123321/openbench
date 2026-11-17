@@ -166,8 +166,8 @@ public class RequestLifecycleService {
      * charged, and the Request is Allocated; an Optional line that does not fit, or no longer fits
      * the Balance, is Dropped. Otherwise the Request is Waiting: unfit Required lines join their
      * type's waitlist, unfit Optional lines are Dropped, and nothing is held. Returns the Request in
-     * its new state. A Priority line that does not fit counts as a fit when it can Bump standard
-     * lines; the Bump is applied where its line is held, in this transaction (design scenario S5).
+     * its new state. A Priority line, or a tiered Metered line, that does not fit counts as a fit when
+     * it can Bump lower-ranked lines; the Bump is applied where its line is held, in this transaction (design scenario S5).
      *
      * @throws RuleViolation {@code INSUFFICIENT_BALANCE} with {@code shortfall}, {@code required},
      *     and {@code available}, while the Request stays a Draft; {@code WRONG_STATE} unless it is a
@@ -197,6 +197,7 @@ public class RequestLifecycleService {
             rules.checkRecurrence(new ResourceTypeId(row.typeId()), row.startsAt(), row.endsAt(), row.recurrence());
             rules.checkPriority(new ResourceTypeId(row.typeId()), row.priority());
             row.lockQuote(views.currentQuote(row, current).map(Credits::amount).orElse(null));
+            row.lockTierPremium(views.currentTierPremium(row, current).orElse(null));
         }
         request.submit(now);
         record(request, null, RequestState.DRAFT.name(), RequestState.SUBMITTED.name(), actor, now, "Quotes locked.");
@@ -506,7 +507,8 @@ public class RequestLifecycleService {
                 row.bumped(),
                 row.occurrences(clock.getZone()),
                 Optional.ofNullable(row.namedMemberId()).map(MemberId::new),
-                row.skills().stream().map(SkillId::new).collect(Collectors.toSet()));
+                row.skills().stream().map(SkillId::new).collect(Collectors.toSet()),
+                row.tierPremium());
     }
 
     private Allocator allocatorOf(RequestLineRow row) {
@@ -1789,14 +1791,15 @@ public class RequestLifecycleService {
 
     /**
      * The step {@code evaluateAll} of the design for one submitted line: {@link Allocator#evaluate}
-     * under the type locks, and for a Priority line that does not fit, {@link Bumpable#planBump}; a
-     * plan counts as a fit (SRS Exclusive.Priority.Bump). The plan is made again just before it is
-     * applied ({@link #planBumpAgain}), so that the Request's own earlier Holds count.
+     * under the type locks, and for a line that does not fit, {@link Bumpable#planBump} if its class
+     * Bumps; a plan counts as a fit (SRS Exclusive.Priority.Bump, Metered.Tier.Bump). Only a Priority
+     * line or a tiered Metered line gets a plan. The plan is made again just before it is applied
+     * ({@link #planBumpAgain}), so that the Request's own earlier Holds count.
      */
     private Evaluated evaluateOrPlanBump(RequestRow request, RequestLineRow row) {
         LineSnapshot snapshot = snapshot(request, row);
         Evaluation evaluation = allocatorOf(row).evaluate(snapshot);
-        if (evaluation.fits() || !row.priority()) {
+        if (evaluation.fits()) {
             return new Evaluated(row, snapshot, evaluation);
         }
         Optional<BumpPlan> plan = bumpableOf(row).flatMap(bumpable -> bumpable.planBump(snapshot));
@@ -1888,7 +1891,9 @@ public class RequestLifecycleService {
             ledger.refund(bumped.team(), bumped.line(), fullRefund);
             settled = "full Refund of " + fullRefund + " credits";
         }
-        String by = "Priority line " + priorityLine.id() + " of Request " + priorityRequest.id();
+        String kind = bumperKind(priorityLine);
+        String by = Character.toUpperCase(kind.charAt(0)) + kind.substring(1) + " " + priorityLine.id()
+                + " of Request " + priorityRequest.id();
         changeLine(request, row, RequestLineState.BUMPED, actor, now, "Bumped by " + by + "; " + settled + ".");
 
         List<RequestLineRow> freed = List.of();
@@ -1898,33 +1903,38 @@ public class RequestLifecycleService {
             waitlistOf(row).join(snapshot(request, row));
             int position = allocation.waitlistPosition(bumped.line()).orElseThrow();
             outcome = "position " + position + " on the waitlist";
-            changeLine(request, row, RequestLineState.WAITING, actor, now, "BUMPED: Bumped by a Priority line (" + by
+            changeLine(request, row, RequestLineState.WAITING, actor, now, "BUMPED: Bumped by a " + kind + " (" + by
                     + "); " + outcome + ".");
             RequestState from = request.state();
             if (from == RequestState.PENDING) {
                 freed = releaseHolds(request, lines.findByRequestIdOrderById(request.id()), actor, now,
-                        "Hold released: line " + row.id() + " was Bumped by a Priority line.");
+                        "Hold released: line " + row.id() + " was Bumped by a " + kind + ".");
             }
             if (from == RequestState.PENDING || from == RequestState.ALLOCATED) {
                 request.moveTo(RequestState.WAITING);
                 record(request, null, from.name(), RequestState.WAITING.name(), actor, now, "Line " + row.id()
-                        + " was Bumped by a Priority line and waits at the head of its waitlist; "
+                        + " was Bumped by a " + kind + " and waits at the head of its waitlist; "
                         + (from == RequestState.PENDING ? "every other Hold was released."
                                 : "the other lines stay allocated."));
             }
         } else {
             outcome = "it was Optional, so it was Dropped";
-            changeLine(request, row, RequestLineState.DROPPED, actor, now, "BUMPED: Bumped by a Priority line (" + by
+            changeLine(request, row, RequestLineState.DROPPED, actor, now, "BUMPED: Bumped by a " + kind + " (" + by
                     + "); an Optional line does not wait, so it was Dropped.");
         }
         members.findManagerOf(new TeamId(request.teamId())).ifPresent(manager -> notifier.notify(manager,
-                NotificationKind.BUMPED, described + " of Request " + request.id() + " was Bumped by a Priority line. "
+                NotificationKind.BUMPED, described + " of Request " + request.id() + " was Bumped by a " + kind + ". "
                         + Character.toUpperCase(settled.charAt(0)) + settled.substring(1) + "; " + outcome + ".",
                 "/requests/" + request.id()));
         log.info("event=line_bumped request={} line={} team={} by_request={} by_line={} held={} refund={}",
                 request.id(), row.id(), request.teamId(), priorityRequest.id(), priorityLine.id(), bumped.held(),
                 fullRefund);
         return freed;
+    }
+
+    /** What Bumps: "Priority line" for an Exclusive line, "higher-tier line" for a tiered Metered one. */
+    private static String bumperKind(RequestLineRow line) {
+        return line.priority() ? "Priority line" : "higher-tier line";
     }
 
     /**

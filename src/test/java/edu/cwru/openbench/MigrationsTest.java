@@ -49,7 +49,8 @@ class MigrationsTest extends PostgresTest {
                         "exclusive_occurrence", "metered_allocation", "waitlist_entry",
                         "notification",
                         "candidate", "approval", "loan",
-                        "admin_change");
+                        "admin_change",
+                        "service_tier");
     }
 
     @Test

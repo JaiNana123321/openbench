@@ -10,6 +10,7 @@ import edu.cwru.openbench.common.TeamId;
 import edu.cwru.openbench.common.TimeWindow;
 import edu.cwru.openbench.members.MemberService;
 import edu.cwru.openbench.members.TeamSummary;
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -148,5 +149,10 @@ class LiveRowQueries implements AllocationQueries {
     @Override
     public List<Approval> decidedOnEscalation(MemberId approver) {
         return matchedAllocator.decidedOnEscalation(approver);
+    }
+
+    @Override
+    public BigDecimal peakFill(ResourceTypeId type, List<TimeWindow> occurrences) {
+        return sums.peakFill(type, occurrences);
     }
 }

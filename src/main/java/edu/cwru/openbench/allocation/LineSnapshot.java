@@ -9,6 +9,7 @@ import edu.cwru.openbench.common.SkillId;
 import edu.cwru.openbench.common.TeamId;
 import edu.cwru.openbench.common.TimeWindow;
 import edu.cwru.openbench.inventory.AllocationClass;
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
 import java.util.Objects;
@@ -32,6 +33,8 @@ import java.util.Set;
  * @param namedMember the one Person a Matched line names, if any; then the quantity is 1
  * @param skills the skills a skill-based Matched line asks for; empty otherwise. A Matched line's
  *     window runs from midnight of its first day to midnight after its last, company time
+ * @param tierPremium the premium of a Metered line's service tier, locked at submission, which ranks
+ *     it for Bumps (SRS Metered.Tier.Bump); null for a line without a tier, which ranks below every tier
  */
 public record LineSnapshot(
         RequestLineId lineId,
@@ -49,7 +52,8 @@ public record LineSnapshot(
         boolean bumped,
         List<TimeWindow> occurrences,
         Optional<MemberId> namedMember,
-        Set<SkillId> skills) {
+        Set<SkillId> skills,
+        BigDecimal tierPremium) {
 
     public LineSnapshot {
         Objects.requireNonNull(lineId, "lineId");
@@ -81,15 +85,18 @@ public record LineSnapshot(
         if (namedMember.isPresent() && (allocationClass != AllocationClass.MATCHED || quantity != 1)) {
             throw new IllegalArgumentException("Only a Matched line of quantity 1 names a Person.");
         }
+        if (tierPremium != null && allocationClass != AllocationClass.METERED) {
+            throw new IllegalArgumentException("Only a Metered line has a service tier.");
+        }
     }
 
-    /** An Exclusive or Metered line with one occurrence, its window: no recurrence, no named Person, no skills. */
+    /** An Exclusive or Metered line with one occurrence, its window: no recurrence, no named Person, no skills, no tier. */
     public LineSnapshot(RequestLineId lineId, RequestId requestId, TeamId teamId, ResourceTypeId typeId,
             AllocationClass allocationClass, int quantity, Integer units, TimeWindow window,
             Optional<ResourceId> namedResource, boolean required, boolean priority, Instant submittedAt,
             boolean bumped) {
         this(lineId, requestId, teamId, typeId, allocationClass, quantity, units, window, namedResource, required,
-                priority, submittedAt, bumped, null, Optional.empty(), Set.of());
+                priority, submittedAt, bumped, null, Optional.empty(), Set.of(), null);
     }
 
     /** From the start of the first occurrence to the end of the last: the window itself without a recurrence. */

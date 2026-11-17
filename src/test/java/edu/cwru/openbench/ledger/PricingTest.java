@@ -144,6 +144,20 @@ class PricingTest {
         }
 
         @Test
+        @DisplayName("Metered.Tier.Define: a tier premium multiplies the line, with the bands, and the attributable share ignores it")
+        void multipliesATieredLineByItsTierPremium() {
+            // GPU 4 units, Wednesday 10:00 to 12:00, in the 1.5 band: 60.00, with Express x1.5 90.00.
+            List<TimeWindow> window = List.of(new TimeWindow(at(2026, 11, 25, 10), at(2026, 11, 25, 12)));
+            LineSpec express = new LineSpec(4, window, false, ZONE, new BigDecimal("1.5"));
+            assertThat(Pricing.quote(express, GPU, PREMIUM).amount()).isEqualTo(Credits.of("90.00"));
+            assertThat(Pricing.quote(new LineSpec(4, window, false, ZONE), GPU, PREMIUM).amount())
+                    .isEqualTo(Credits.of("60.00"));
+            LineSpec firstHour = new LineSpec(4, List.of(new TimeWindow(at(2026, 11, 25, 10), at(2026, 11, 25, 11))),
+                    false, ZONE, new BigDecimal("1.5"));
+            assertThat(Pricing.attributable(Credits.of("90.00"), express, firstHour, GPU)).isEqualTo(Credits.of("45.00"));
+        }
+
+        @Test
         void leavesAStandardLineAtItsPrice() {
             LineSpec standard = new LineSpec(1, List.of(new TimeWindow(at(2026, 10, 27, 14), at(2026, 10, 27, 16))), false, ZONE);
             assertThat(Pricing.quote(standard, MEETING_ROOM, PREMIUM).amount()).isEqualTo(Credits.of("30.00"));
@@ -307,5 +321,46 @@ class PricingTest {
     /** An hour on the company clock. */
     private static Instant at(int year, int month, int day, int hour) {
         return LocalDateTime.of(year, month, day, hour, 0).atZone(ZONE).toInstant();
+    }
+
+    @Nested
+    @DisplayName("Ledger.Surcharge: the demand surcharge multiplier")
+    class Surcharge {
+
+        private final TypePricing gpuAtRate = new TypePricing(Credits.of("5.00"), DEMO_BANDS, DEMO_REFUNDS, null,
+                List.of(), new BigDecimal("1.0"));
+
+        private final List<TimeWindow> wednesday = List.of(new TimeWindow(at(2026, 11, 25, 10), at(2026, 11, 25, 12)));
+
+        @Test
+        @DisplayName("1 + rate x fill: an empty window quotes exactly the base, a half-full pool 1.5 times it")
+        void multipliesByOnePlusRateTimesFill() {
+            LineSpec line = new LineSpec(4, wednesday, false, ZONE);
+            assertThat(Pricing.surchargeMultiplier(gpuAtRate, BigDecimal.ZERO)).isEqualByComparingTo("1");
+            assertThat(Pricing.quote(line, gpuAtRate, PREMIUM, BigDecimal.ZERO).amount()).isEqualTo(Credits.of("60.00"));
+            assertThat(Pricing.quote(line, gpuAtRate, PREMIUM, new BigDecimal("0.5")).amount()).isEqualTo(Credits.of("90.00"));
+        }
+
+        @Test
+        @DisplayName("off at rate 0, whatever the fill; the fill is capped at 1 and never below 0")
+        void offAndCapped() {
+            LineSpec line = new LineSpec(4, wednesday, false, ZONE);
+            assertThat(Pricing.quote(line, GPU, PREMIUM, BigDecimal.ONE).amount()).isEqualTo(Credits.of("60.00"));
+            assertThat(Pricing.surchargeMultiplier(gpuAtRate, new BigDecimal("1.4"))).isEqualByComparingTo("2");
+            assertThat(Pricing.surchargeMultiplier(gpuAtRate, new BigDecimal("-0.2"))).isEqualByComparingTo("1");
+        }
+
+        @Test
+        @DisplayName("multiplies with the bands and the Priority or tier premium, rounded once for the line")
+        void roundsOnceWithThePremiums() {
+            TypePricing odd = new TypePricing(Credits.of("5.00"), DEMO_BANDS, DEMO_REFUNDS, null, List.of(),
+                    new BigDecimal("0.333"));
+            // 60.00 x 1.5 (tier) x (1 + 0.333 x 0.5) = 90 x 1.1665 = 104.985, rounded once to 104.99.
+            LineSpec express = new LineSpec(4, wednesday, false, ZONE, new BigDecimal("1.5"));
+            assertThat(Pricing.quote(express, odd, PREMIUM, new BigDecimal("0.5")).amount()).isEqualTo(Credits.of("104.99"));
+            LineSpec priority = new LineSpec(4, wednesday, true, ZONE);
+            assertThat(Pricing.quote(priority, gpuAtRate, PREMIUM, new BigDecimal("0.25")).amount())
+                    .isEqualTo(Credits.of("150.00"));
+        }
     }
 }

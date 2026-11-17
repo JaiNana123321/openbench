@@ -94,10 +94,12 @@ public class RequestService {
         }
         ResourceType type = rules.check(line.typeId(), line.quantity(), line.start(), line.end(), line.namedResourceId());
         rules.checkRecurrence(type.id(), line.start(), line.end(), line.recurrence());
+        rules.checkTier(type.id(), line.tierId());
         RequestLineRow row = lines.save(new RequestLineRow(request.id(), type.id().value(), type.allocationClass(),
                 line.quantity(), line.start(), line.end(), idOrNull(line.namedResourceId()), true,
                 clock.instant(), actor.memberId().value()));
         row.setRecurrence(line.recurrence());
+        row.setTier(line.tierId() == null ? null : line.tierId().value());
         return views.session().line(request, row);
     }
 
@@ -112,8 +114,10 @@ public class RequestService {
         }
         rules.check(new ResourceTypeId(row.typeId()), edit.quantity(), edit.start(), edit.end(), edit.namedResourceId());
         rules.checkRecurrence(new ResourceTypeId(row.typeId()), edit.start(), edit.end(), edit.recurrence());
+        rules.checkTier(new ResourceTypeId(row.typeId()), edit.tierId());
         row.change(edit.quantity(), edit.start(), edit.end(), idOrNull(edit.namedResourceId()));
         row.setRecurrence(edit.recurrence());
+        row.setTier(edit.tierId() == null ? null : edit.tierId().value());
         return views.session().line(request, row);
     }
 
@@ -258,6 +262,7 @@ public class RequestService {
     /** Adds a Required Person line, naming one Person or asking for skills ({@link PersonLineRules}). */
     private RequestLine addPersonLine(Actor actor, RequestRow request, NewLine line) {
         rules.checkRecurrence(line.typeId(), line.start(), line.end(), line.recurrence());
+        rules.checkTier(line.typeId(), line.tierId());
         Set<Long> skills = personRules.check(new TeamId(request.teamId()), line.typeId(), line.quantity(), line.start(),
                 line.end(), line.namedResourceId(), line.namedMemberId(), line.skills());
         RequestLineRow row = lines.save(RequestLineRow.person(request.id(), line.typeId().value(), line.quantity(),
@@ -268,6 +273,7 @@ public class RequestService {
 
     private RequestLine editPersonLine(Actor actor, RequestRow request, RequestLineRow row, LineEdit edit) {
         rules.checkRecurrence(new ResourceTypeId(row.typeId()), edit.start(), edit.end(), edit.recurrence());
+        rules.checkTier(new ResourceTypeId(row.typeId()), edit.tierId());
         Set<Long> skills = personRules.check(new TeamId(request.teamId()), new ResourceTypeId(row.typeId()),
                 edit.quantity(), edit.start(), edit.end(), edit.namedResourceId(), edit.namedMemberId(), edit.skills());
         row.changePerson(edit.quantity(), edit.start(), edit.end(),

@@ -39,6 +39,8 @@ import {
   useTeams,
   useUpdateSetting,
 } from './queries';
+import { SurchargeForm } from './SurchargeForm';
+import { TiersForm } from './TiersForm';
 
 /**
  * /settings: the Capacity Planner sets every policy value as data. Each form saves one setting
@@ -208,17 +210,21 @@ function TypePrices({ type, pricing }: { type: ResourceType; pricing: TypePricin
           toValue={number}
           hint={type.allocationClass === 'EXCLUSIVE' ? 'Credits per instance-hour.' : 'Credits per unit-hour.'}
         />
-        {type.allocationClass === 'EXCLUSIVE' && (
-          <ValueForm
-            label="Bump cutoff (hours)"
-            settingKey={`bump_cutoff.${type.id}`}
-            current={hoursOf(pricing?.bumpCutoff)}
-            toValue={hours}
-            step="1"
-            hint="A Priority line may not Bump within this many hours of the window's start."
-          />
-        )}
+        <ValueForm
+          label="Bump cutoff (hours)"
+          settingKey={`bump_cutoff.${type.id}`}
+          current={hoursOf(pricing?.bumpCutoff)}
+          toValue={hours}
+          step="1"
+          hint={
+            type.allocationClass === 'EXCLUSIVE'
+              ? "A Priority line may not Bump within this many hours of the window's start."
+              : "A higher-tier line may not Bump within this many hours of the window's start; without a cutoff, tiers never Bump."
+          }
+        />
       </div>
+      {type.allocationClass === 'METERED' && <TiersForm typeId={type.id} tiers={pricing?.tiers ?? []} />}
+      <SurchargeForm typeId={type.id} rate={pricing?.surchargeRate ?? 0} />
       <BandsForm typeId={type.id} bands={pricing?.bands ?? []} />
       <RefundScheduleForm typeId={type.id} steps={pricing?.refundSchedule.steps ?? []} />
     </>
@@ -613,6 +619,8 @@ const TYPE_SETTINGS: Record<string, string> = {
   bump_cutoff: 'Bump cutoff',
   price_bands: 'Price Bands',
   refund_steps: 'Refund Schedule',
+  tiers: 'Service tiers',
+  surcharge: 'Demand surcharge',
 };
 
 /** A setting's key in words, such as "Unit Price, Meeting room" for "unit_price.4". */

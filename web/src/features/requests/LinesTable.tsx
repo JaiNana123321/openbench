@@ -12,6 +12,7 @@ import {
   type Column,
 } from '../../ui';
 import { personAsk, personCount, whenText } from './personLineText';
+import { TierSelect } from './TierSelect';
 import { useRemoveLine, useSetPriority, useSetRequired, useSplitLine, useRequestSuggestions } from './queries';
 
 interface LinesTableProps {
@@ -23,7 +24,7 @@ interface LinesTableProps {
 
 /**
  * The Request's lines with their Quotes; in an editable Draft, the Required mark, the Priority mark
- * (Exclusive lines only), split, and remove.
+ * (Exclusive lines only), the service tier (Metered lines only), split, and remove.
  */
 export function LinesTable({ requestId, lines, editable }: LinesTableProps) {
   const setRequired = useSetRequired(requestId);
@@ -43,7 +44,7 @@ export function LinesTable({ requestId, lines, editable }: LinesTableProps) {
     },
     { header: 'Quantity', cell: (line) => amountText(line), numeric: true },
     { header: 'Window', cell: (line) => whenText(line) },
-    { header: 'Quote', cell: (line) => (line.quote === null ? 'No price' : formatCredits(line.quote)), numeric: true },
+    { header: 'Quote', cell: (line) => quoteText(line), numeric: true },
     {
       header: 'Required',
       cell: (line) =>
@@ -82,6 +83,15 @@ export function LinesTable({ requestId, lines, editable }: LinesTableProps) {
           'Priority'
         ) : (
           '—'
+        ),
+    },
+    {
+      header: 'Tier',
+      cell: (line) =>
+        editable && line.allocationClass === 'METERED' ? (
+          <TierSelect requestId={requestId} line={line} number={number.get(line.id) ?? 0} />
+        ) : (
+          (line.tierName ?? '—')
         ),
     },
   ];
@@ -140,6 +150,18 @@ export function LinesTable({ requestId, lines, editable }: LinesTableProps) {
       <ProblemMessage error={suggestions.error} />
       <ProblemMessage error={setRequired.error ?? setPriority.error ?? split.error ?? remove.error} />
     </section>
+  );
+}
+
+/** The Quote, with the demand surcharge multiplier in it when one applies: "90.00 ×1.5 demand". */
+function quoteText(line: RequestLine) {
+  if (line.quote === null) return 'No price';
+  if (!line.surcharge) return formatCredits(line.quote);
+  return (
+    <>
+      {formatCredits(line.quote)}
+      <span className="quote-note">×{line.surcharge} demand</span>
+    </>
   );
 }
 

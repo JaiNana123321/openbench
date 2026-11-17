@@ -27,6 +27,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Propagation;
@@ -66,11 +67,12 @@ class SettingWriter {
     private final RefundStepRepository refundSteps;
     private final QuotaRepository quotas;
     private final GrantPlanRepository grantPlans;
+    private final ServiceTierRepository tiers;
 
     SettingWriter(Clock clock, JdbcTemplate jdbc, InventoryQueries inventory, MemberService members,
             PeriodRepository periods, PlannerSettingRepository plannerSettings, TypePricingRepository typePricing,
             PriceBandRepository priceBands, RefundStepRepository refundSteps, QuotaRepository quotas,
-            GrantPlanRepository grantPlans) {
+            GrantPlanRepository grantPlans, ServiceTierRepository tiers) {
         this.clock = clock;
         this.jdbc = jdbc;
         this.inventory = inventory;
@@ -82,6 +84,7 @@ class SettingWriter {
         this.refundSteps = refundSteps;
         this.quotas = quotas;
         this.grantPlans = grantPlans;
+        this.tiers = tiers;
     }
 
     /** The value of a setting before and after a change, as readable text; null when not set. */
@@ -121,6 +124,8 @@ class SettingWriter {
             case SettingChange.Refunds refunds -> refunds(refunds, actorId);
             case SettingChange.BumpCutoff cutoff -> bumpCutoff(cutoff);
             case SettingChange.Quota quota -> quota(quota, actorId);
+            case SettingChange.Tiers tierChange -> tiers(tierChange, actorId);
+            case SettingChange.Surcharge surcharge -> surcharge(surcharge);
         };
     }
 
@@ -237,7 +242,7 @@ class SettingWriter {
     }
 
     private Values bumpCutoff(SettingChange.BumpCutoff cutoff) {
-        requireClass(cutoff.type(), "A bump cutoff", AllocationClass.EXCLUSIVE);
+        requireClass(cutoff.type(), "A bump cutoff", AllocationClass.EXCLUSIVE, AllocationClass.METERED);
         Duration value = cutoff.cutoff();
         if (value.isNegative() || !wholeHours(value)) {
             throw outOfRange("A bump cutoff must be a whole number of hours, 0 or more.");
@@ -298,6 +303,94 @@ class SettingWriter {
         return new Values(old, stepsText(steps));
     }
 
+    /**
+     * The service tiers of a Metered type (SRS Metered.Tier.Define): each a name and a premium of at
+     * least 1.0, unique within the type. A tier left out is removed, which a line's reference to it
+     * refuses ({@code TIER_IN_USE}, by {@code request_line}'s foreign key). A premium change affects
+     * Quotes not yet locked only.
+     */
+    private Values tiers(SettingChange.Tiers change, Long actorId) {
+        requireClass(change.type(), "A service tier", AllocationClass.METERED);
+        Long type = change.type().value();
+        if (typePricing.findById(type).isEmpty()) {
+            throw new RuleViolation("UNIT_PRICE_REQUIRED", "Set the type's Unit Price before its service tiers.");
+        }
+        Map<Long, ServiceTierRow> existing = new LinkedHashMap<>();
+        tiers.findByTypeIdOrderByPremium(type).forEach(row -> existing.put(row.id(), row));
+        String old = tiersText(existing.values().stream().map(ServiceTierRow::toServiceTier).toList());
+
+        List<ServiceTier> given = new ArrayList<>();
+        Set<String> names = new HashSet<>();
+        Set<BigDecimal> premiums = new HashSet<>();
+        Set<Long> kept = new HashSet<>();
+        for (ServiceTier tier : change.tiers()) {
+            String name = tier.name().strip();
+            BigDecimal premium = tier.premium().setScale(3, RoundingMode.HALF_UP);
+            if (name.isEmpty()) {
+                throw invalid("A service tier needs a name.");
+            }
+            if (premium.compareTo(BigDecimal.ONE) < 0 || premium.compareTo(MULTIPLIER_LIMIT) >= 0) {
+                throw invalid("The tier " + name + " has a premium of " + tier.premium().toPlainString()
+                        + "; a premium is at least 1.0 and less than 1000.");
+            }
+            if (!names.add(name.toLowerCase(Locale.ROOT))) {
+                throw invalid("Two service tiers are named " + name + "; give each tier its own name.");
+            }
+            if (!premiums.add(premium)) {
+                throw invalid("Two service tiers have the premium " + premium.stripTrailingZeros().toPlainString()
+                        + "; the premium ranks a tier, so give each tier its own.");
+            }
+            if (tier.id() != null && (!existing.containsKey(tier.id().value()) || !kept.add(tier.id().value()))) {
+                throw invalid("Service tier " + tier.id().value() + " is not a tier of this type, or is given twice.");
+            }
+            given.add(new ServiceTier(tier.id(), name, premium));
+        }
+
+        List<Long> removed = existing.keySet().stream().filter(id -> !kept.contains(id)).toList();
+        if (!removed.isEmpty()) {
+            try {
+                tiers.deleteByIds(removed);
+            } catch (DataIntegrityViolationException e) {
+                String which = removed.stream().map(id -> existing.get(id).toServiceTier().name())
+                        .collect(Collectors.joining(", "));
+                throw new RuleViolation("TIER_IN_USE", "A line refers to the tier " + which
+                        + "; it cannot be removed. Edit its premium instead, or remove it once no line refers to it.");
+            }
+        }
+        for (ServiceTier tier : given) {
+            if (tier.id() == null) {
+                tiers.save(new ServiceTierRow(type, tier.name(), tier.premium(), actorId));
+            } else {
+                existing.get(tier.id().value()).change(tier.name(), tier.premium());
+            }
+        }
+        tiers.flush();
+        return new Values(old, tiersText(given));
+    }
+
+    /**
+     * The demand surcharge rate of a priced Exclusive or Metered type (SRS Ledger.Surcharge): 0 or
+     * more, 0 for off. It affects Quotes not yet locked only.
+     */
+    private Values surcharge(SettingChange.Surcharge change) {
+        requireClass(change.type(), "A demand surcharge", AllocationClass.EXCLUSIVE, AllocationClass.METERED);
+        BigDecimal rate = change.rate().setScale(3, RoundingMode.HALF_UP);
+        if (rate.signum() < 0 || rate.compareTo(MULTIPLIER_LIMIT) >= 0) {
+            throw invalid("A demand surcharge rate is 0 or more, and less than 1000; 0 turns it off.");
+        }
+        TypePricingRow row = typePricing.findById(change.type().value())
+                .orElseThrow(() -> new RuleViolation("UNIT_PRICE_REQUIRED",
+                        "Set the type's Unit Price before its demand surcharge."));
+        String old = rateText(row.surchargeRate());
+        row.changeSurchargeRate(rate);
+        return new Values(old, rateText(rate));
+    }
+
+    /** Such as "1" or "0.5"; "off" for 0. */
+    private static String rateText(BigDecimal rate) {
+        return rate.signum() == 0 ? "off" : rate.stripTrailingZeros().toPlainString();
+    }
+
     // ---------------------------------------------------------------- rules
 
     private void requireClass(ResourceTypeId type, String what, AllocationClass... allowed) {
@@ -352,6 +445,11 @@ class SettingWriter {
         }
     }
 
+    private static RuleViolation invalid(String message) {
+        return new RuleViolation("VALIDATION_FAILED", message,
+                Map.of("errors", List.of(Map.of("field", "value", "message", message))));
+    }
+
     private static RuleViolation outOfRange(String message) {
         return new RuleViolation("VALUE_OUT_OF_RANGE", message);
     }
@@ -384,6 +482,17 @@ class SettingWriter {
                 .collect(Collectors.joining(" "));
         String end = band.end().equals(LocalTime.MIDNIGHT) ? "24:00" : band.end().toString();
         return days + " " + band.start() + "-" + end + " x" + band.multiplier().stripTrailingZeros().toPlainString();
+    }
+
+    /** Such as "Standard x1; Express x1.5", lowest premium first, or null for none. */
+    static String tiersText(List<ServiceTier> tiers) {
+        if (tiers.isEmpty()) {
+            return null;
+        }
+        return tiers.stream()
+                .sorted(Comparator.comparing(ServiceTier::premium))
+                .map(tier -> tier.name() + " x" + tier.premium().stripTrailingZeros().toPlainString())
+                .collect(Collectors.joining("; "));
     }
 
     /** Such as "50% from 168 hours; 10% from 0 hours", longest lead first, or null for none. */

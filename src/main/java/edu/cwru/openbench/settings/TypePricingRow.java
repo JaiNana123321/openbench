@@ -48,4 +48,15 @@ class TypePricingRow {
     void changeBumpCutoffHours(int hours) {
         this.bumpCutoffHours = hours;
     }
+
+    /** The demand surcharge rate; 0 when the surcharge is off. */
+    private BigDecimal surchargeRate = BigDecimal.ZERO;
+
+    BigDecimal surchargeRate() {
+        return surchargeRate;
+    }
+
+    void changeSurchargeRate(BigDecimal rate) {
+        this.surchargeRate = rate;
+    }
 }

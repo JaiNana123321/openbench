@@ -879,3 +879,48 @@ export interface TeamTypeUsage {
   recorded: number;
   unrecorded: number;
 }
+
+// ---------------------------------------------------------------- Service tiers
+
+/**
+ * A service tier of a Metered type (GET /api/settings/tiers/{typeId}): its premium, at least 1.0,
+ * multiplies the Unit Price of a line marked with it, and ranks it: a line Bumps only lower tiers.
+ */
+export interface ServiceTier {
+  id: Id;
+  name: string;
+  premium: number;
+}
+
+export interface TypePricing {
+  /** A Metered type's tiers, lowest premium first; empty for an Exclusive type. */
+  tiers?: ServiceTier[];
+}
+
+export interface RequestLine {
+  /** A Metered line's service tier, or null for none; the Quote then carries its premium. */
+  tier?: Id | null;
+  tierName?: string | null;
+}
+
+export interface NewLine {
+  /** A Metered line only; absent or null for no tier. */
+  tierId?: Id | null;
+}
+
+export interface LineEdit {
+  /** A Metered line only; absent or null for no tier. */
+  tierId?: Id | null;
+}
+
+// ---------------------------------------------------------------- Demand surcharge
+
+export interface TypePricing {
+  /** The demand surcharge rate, 0 when off: a Quote is multiplied by 1 + rate × the type's peak fill. */
+  surchargeRate?: number;
+}
+
+export interface RequestLine {
+  /** The demand surcharge multiplier in a Draft line's current Quote, such as 1.5; null when none applies or once locked. */
+  surcharge?: number | null;
+}

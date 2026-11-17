@@ -18,6 +18,7 @@ import type {
   RequestSummary,
   Resource,
   ResourceType,
+  ServiceTier,
   Shortlist,
   Skill,
   Suggestion,
@@ -270,5 +271,16 @@ export function useRequestSuggestions(requestId: Id, enabled: boolean) {
     queryKey: ['suggestions', 'request', requestId],
     queryFn: () => api.get<Suggestion[]>(`/api/suggestions/request/${requestId}`),
     enabled,
+  });
+}
+
+/**
+ * A Metered type's service tiers, lowest premium first: GET /api/settings/tiers/{typeId}. The key
+ * starts with 'settings', so a Planner's tier change refreshes it.
+ */
+export function useTypeTiers(typeId: Id) {
+  return useQuery({
+    queryKey: ['settings', 'tiers', typeId],
+    queryFn: () => api.get<ServiceTier[]>(`/api/settings/tiers/${typeId}`),
   });
 }

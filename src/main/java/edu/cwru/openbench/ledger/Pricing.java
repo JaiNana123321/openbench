@@ -27,13 +27,26 @@ public final class Pricing {
 
     /**
      * The sum, over each hour of each occurrence, of quantity times Unit Price times the multiplier
-     * of the Price Band containing that hour (1.0 if none), times the premium for a Priority line;
+     * of the Price Band containing that hour (1.0 if none), times the premium for a Priority line,
+     * times the premium of a Metered line's service tier (SRS Metered.Tier.Define);
      * rounded half-up to two decimals once, for the whole line. Hours are real elapsed hours, read in
      * the line's zone: the day daylight saving time ends has 25 of them.
      *
      * @throws IllegalArgumentException if a window does not start and end on a whole hour
      */
     public static Quote quote(LineSpec line, TypePricing pricing, BigDecimal priorityPremium) {
+        return quote(line, pricing, priorityPremium, BigDecimal.ZERO);
+    }
+
+    /**
+     * {@link #quote(LineSpec, TypePricing, BigDecimal)} times the demand surcharge multiplier for
+     * {@code peakFill} ({@link #surchargeMultiplier}; SRS Ledger.Surcharge), rounded once with the rest.
+     *
+     * @param peakFill the largest share of the type's capacity live in any hour of the line's
+     *     occurrences when it is quoted, the line's own rows not counted; 0 for an empty window
+     * @throws IllegalArgumentException if a window does not start and end on a whole hour
+     */
+    public static Quote quote(LineSpec line, TypePricing pricing, BigDecimal priorityPremium, BigDecimal peakFill) {
         BigDecimal multiplierHours = BigDecimal.ZERO;
         for (TimeWindow occurrence : line.occurrences()) {
             requireWholeHours(occurrence, line.zone());
@@ -47,7 +60,20 @@ public final class Pricing {
         if (line.priority()) {
             amount = amount.multiply(priorityPremium);
         }
+        amount = amount.multiply(line.tierPremium());
+        amount = amount.multiply(surchargeMultiplier(pricing, peakFill));
         return new Quote(new Credits(amount));
+    }
+
+    /**
+     * The demand surcharge multiplier (SRS Ledger.Surcharge): 1 + the type's surcharge rate times
+     * the peak fill, the fill taken between 0 and 1. Exactly 1 when the surcharge is off or the
+     * window is empty. It multiplies the whole line, as a premium does, so {@link #attributable}
+     * needs no fill.
+     */
+    public static BigDecimal surchargeMultiplier(TypePricing pricing, BigDecimal peakFill) {
+        BigDecimal fill = peakFill.max(BigDecimal.ZERO).min(BigDecimal.ONE);
+        return BigDecimal.ONE.add(pricing.surchargeRate().multiply(fill));
     }
 
     /**

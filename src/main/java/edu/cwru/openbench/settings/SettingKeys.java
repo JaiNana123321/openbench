@@ -27,7 +27,10 @@ import java.util.Optional;
  * <li>{@code bump_cutoff.{typeId}}: an ISO-8601 duration in whole hours, such as {@code "PT48H"};
  * <li>{@code price_bands.{typeId}}: every band of the type, {@code [{"weekdays": ["SATURDAY", "SUNDAY"],
  *     "start": "00:00", "end": "00:00", "multiplier": 0.25}]} (an end of 00:00 is midnight);
- * <li>{@code refund_steps.{typeId}}: every step of the Refund Schedule, {@code [{"minLead": "PT168H", "fraction": 0.5}]}.
+ * <li>{@code refund_steps.{typeId}}: every step of the Refund Schedule, {@code [{"minLead": "PT168H", "fraction": 0.5}]};
+ * <li>{@code tiers.{typeId}}: every service tier of a Metered type, {@code [{"id": 3, "name": "Standard", "premium": 1.0},
+ *     {"name": "Express", "premium": 1.5}]}: an entry with an id edits that tier, one without adds a tier;
+ * <li>{@code surcharge.{typeId}}: the demand surcharge rate, a number such as {@code 1.0}; 0 is off.
  * </ul>
  * An unknown key is {@code NOT_FOUND}; a body without a value of the right shape is {@code VALIDATION_FAILED}.
  */
@@ -35,6 +38,7 @@ final class SettingKeys {
 
     private static final TypeReference<List<PriceBand>> BANDS = new TypeReference<>() {};
     private static final TypeReference<List<RefundStep>> STEPS = new TypeReference<>() {};
+    private static final TypeReference<List<ServiceTier>> TIERS = new TypeReference<>() {};
 
     private SettingKeys() {}
 
@@ -59,6 +63,8 @@ final class SettingKeys {
             case "price_bands" -> new SettingChange.PriceBands(type(parts, key), convert(value, json, BANDS));
             case "refund_steps" -> new SettingChange.Refunds(type(parts, key),
                     new RefundSchedule(convert(value, json, STEPS)));
+            case "tiers" -> new SettingChange.Tiers(type(parts, key), convert(value, json, TIERS));
+            case "surcharge" -> new SettingChange.Surcharge(type(parts, key), decimal(value));
             default -> throw unknown(key);
         };
     }
