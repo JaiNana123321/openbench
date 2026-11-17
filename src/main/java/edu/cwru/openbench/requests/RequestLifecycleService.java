@@ -373,9 +373,13 @@ public class RequestLifecycleService {
     /**
      * POST /api/requests/{id}/withdraw, from Draft or Waiting (Pending in a later increment): every
      * line is Canceled, which takes it off its waitlist and expires any Hold, and held credits are
-     * released. Returns the Request, now Withdrawn.
+     * released. Returns the Request, now Withdrawn. A Waiting Request that still has an Allocated,
+     * PartlyReleased, or Loaned line, as a Bump leaves it, is refused as {@link #reopenForEdit} refuses
+     * it: cancelling would leave that line's capacity taken and its Charge standing (#27). The Manager
+     * Releases those lines first.
      *
-     * @throws RuleViolation {@code WRONG_STATE} from any other state, such as Allocated
+     * @throws RuleViolation {@code WRONG_STATE} from any other state, such as Allocated, or while a line
+     *     is still allocated
      */
     @PreAuthorize("hasAuthority('MANAGER')")
     @Transactional
@@ -383,6 +387,10 @@ public class RequestLifecycleService {
         RequestRow request = access.lockForChange(actor, id);
         requireState(request, RequestState.WITHDRAWN, "withdrawn");
         List<RequestLineRow> rows = lines.findByRequestIdOrderById(request.id());
+        if (rows.stream().anyMatch(row -> row.state() == RequestLineState.ALLOCATED
+                || row.state() == RequestLineState.PARTLY_RELEASED || row.state() == RequestLineState.LOANED)) {
+            throw new RuleViolation("WRONG_STATE", "Release its allocated lines first");
+        }
         Instant now = clock.instant();
         String from = request.state().name();
         List<RequestLineRow> held = rows.stream().filter(row -> row.state() == RequestLineState.HELD).toList();

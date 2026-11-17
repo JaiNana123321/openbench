@@ -2,6 +2,7 @@ package edu.cwru.openbench.requests;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.hamcrest.Matchers.containsString;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -23,6 +24,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.TreeSet;
 import org.junit.jupiter.api.DisplayName;
@@ -263,5 +265,50 @@ class BumpRulesTest extends BumpWorldTest {
                 refused -> assertThat(refused.code()).isEqualTo("INSIDE_BUMP_CUTOFF"));
         assertThat(rowStates(blocking[1])).containsExactly("ALLOCATED");
         assertThat(rowStates(line)).isEmpty();
+    }
+
+    @Test
+    @DisplayName("#27: a Waiting Request that keeps an Allocated line after a Bump is withdrawn only once that line is Released")
+    void refusesToWithdrawAWaitingRequestThatStillHasAnAllocatedLine() throws Exception {
+        LocalDate d = dayD();
+        // As in exc-bump-effect: O1 (oscar) has Room B (30.00) and GPU 4 units (60.00), both Allocated; Alice's
+        // Priority line Bumps the room line, so O1 is Waiting while its GPU line stays Allocated.
+        submitted(bob, room, at(d, 10), at(d, 12), roomA, false);
+        long o1 = createDraft(as(oscar));
+        long roomLine = line(as(oscar), o1, room, 1, at(d, 10), at(d, 12), roomB);
+        long gpuLine = line(as(oscar), o1, gpu, 4, at(d, 10), at(d, 12), null);
+        nextSecond();
+        submit(as(oscar), o1).andExpect(jsonPath("$.state").value("ALLOCATED"));
+        submitted(alice, room, at(d, 10), at(d, 12), null, true);
+        detail(as(oscar), o1).andExpect(jsonPath("$.request.state").value("WAITING"))
+                .andExpect(jsonPath("$.lines[1].line.state").value("ALLOCATED"));
+        Map<String, Object> before = account(operations);
+
+        // Withdrawing would cancel the GPU line while its units stay allocated and its Charge stands: refused,
+        // as reopening is, and nothing changes.
+        withdraw(as(oscar), o1).andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("WRONG_STATE"))
+                .andExpect(jsonPath("$.detail").value(containsString("Release its allocated lines first")));
+        detail(as(oscar), o1).andExpect(jsonPath("$.request.state").value("WAITING"))
+                .andExpect(jsonPath("$.lines[0].line.state").value("WAITING"))
+                .andExpect(jsonPath("$.lines[1].line.state").value("ALLOCATED"));
+        assertThat(meteredRowStates(gpuLine)).containsExactly("ALLOCATED");
+        assertThat(waitlistEntryOf(roomLine)).containsExactly("true/false");
+        assertThat(account(operations)).isEqualTo(before);
+
+        // Once the Manager Releases the GPU line, the withdrawal goes through and the room line leaves the waitlist.
+        mvc.perform(post("/api/requests/{id}/lines/{line}/release", o1, gpuLine).with(as(oscar))
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"kind\": \"WHOLE\"}"))
+                .andExpect(status().isOk());
+        withdraw(as(oscar), o1).andExpect(status().isOk()).andExpect(jsonPath("$.state").value("WITHDRAWN"));
+        assertThat(meteredRowStates(gpuLine)).doesNotContain("ALLOCATED", "HELD");
+        assertThat(waitlistEntryOf(roomLine)).isEmpty();
+        assertThat(account(operations)).isEqualTo(foldOfTransactions(operations));
+    }
+
+    /** The states of the line's Metered allocation rows, by id. */
+    private List<String> meteredRowStates(long line) {
+        return jdbc.queryForList("SELECT state FROM metered_allocation WHERE line_id = ? ORDER BY id", String.class,
+                line);
     }
 }
