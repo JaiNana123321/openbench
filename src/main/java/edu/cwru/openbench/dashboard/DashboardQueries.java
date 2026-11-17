@@ -23,8 +23,11 @@ import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.LocalTime;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -49,6 +52,7 @@ public class DashboardQueries {
 
     private static final BigDecimal HOURS_PER_DAY = BigDecimal.valueOf(24);
     private static final BigDecimal HUNDRED = BigDecimal.valueOf(100);
+    private static final BigDecimal SECONDS_PER_HOUR = BigDecimal.valueOf(3600);
 
     private final DashboardViews views;
     private final SettingsService settings;
@@ -64,7 +68,7 @@ public class DashboardQueries {
 
     /**
      * GET /api/dashboard/utilization: each type in scope over the Period (the current one if
-     * {@code null}), or only the named type.
+     * {@code null}), or only the named type, with its idle capacity for the Period to date.
      *
      * @throws NotFoundException for an unknown Period or type, or a type outside the caller's scope
      * @throws RuleViolation {@code CLASS_MISMATCH} for a Matched type
@@ -76,16 +80,43 @@ public class DashboardQueries {
         long days = ChronoUnit.DAYS.between(period.startsOn(), period.endsOn()) + 1;
         Instant from = period.startsOn().atStartOfDay(clock.getZone()).toInstant();
         Instant to = period.endsOn().plusDays(1).atStartOfDay(clock.getZone()).toInstant();
+        Instant now = clock.instant();
+        Instant toDate = now.isBefore(from) ? from : now.isAfter(to) ? to : now;
+        BigDecimal hoursToDate = hoursToDate(period, days, now, from, to);
+        Map<Long, BigDecimal> allocatedToDate = views.typeHours(typeScope(actor), type, from, toDate).stream()
+                .collect(Collectors.toMap(TypeHours::typeId, TypeHours::allocatedHours));
         List<TypeUtilization> rows = views.typeHours(typeScope(actor), type, from, to).stream()
                 .map(row -> {
                     BigDecimal available = available(row, days);
                     BigDecimal allocated = hours(row.allocatedHours());
+                    BigDecimal idleToDate = hours(BigDecimal.valueOf(row.capacity()).multiply(hoursToDate))
+                            .subtract(hours(allocatedToDate.getOrDefault(row.typeId(), BigDecimal.ZERO)));
                     return new TypeUtilization(new ResourceTypeId(row.typeId()), row.name(),
                             AllocationClass.valueOf(row.allocationClass()), period.id(), row.capacity(),
-                            available, allocated, available.subtract(allocated), percent(row.allocatedHours(), available));
+                            available, allocated, available.subtract(allocated), percent(row.allocatedHours(), available),
+                            toDate, idleToDate);
                 })
                 .toList();
         return found(rows, type);
+    }
+
+    /**
+     * The hours of the Period to date, counted as the Period's available hours are: 24 for each whole
+     * day since its start, plus today's wall-clock hours (so a change to or from daylight saving time
+     * makes no odd hour). 0 before the Period begins, and all its hours once it has ended.
+     */
+    private BigDecimal hoursToDate(Period period, long days, Instant now, Instant from, Instant to) {
+        if (!now.isAfter(from)) {
+            return BigDecimal.ZERO;
+        }
+        if (!now.isBefore(to)) {
+            return HOURS_PER_DAY.multiply(BigDecimal.valueOf(days));
+        }
+        LocalDate today = LocalDate.ofInstant(now, clock.getZone());
+        BigDecimal todayHours = BigDecimal.valueOf(LocalTime.ofInstant(now, clock.getZone()).toSecondOfDay())
+                .divide(SECONDS_PER_HOUR, 6, RoundingMode.HALF_UP);
+        return HOURS_PER_DAY.multiply(BigDecimal.valueOf(ChronoUnit.DAYS.between(period.startsOn(), today)))
+                .add(todayHours);
     }
 
     /**

@@ -37,7 +37,7 @@ import {
   useWaiting,
 } from './queries';
 
-/** One row of the utilization table: a type's Period figures with its idle week and waiting lines. */
+/** One row of the utilization table: a type's Period figures, idle to date, idle week, and waiting lines. */
 interface TypeRow {
   utilization: TypeUtilization;
   idle: TypeIdle | undefined;
@@ -171,6 +171,7 @@ const typeColumns: Column<TypeRow>[] = [
   { header: 'Utilization', cell: (row) => formatPercent(row.utilization.utilizationPercent), numeric: true },
   { header: 'Allocated hours', cell: (row) => formatHours(row.utilization.allocatedHours), numeric: true },
   { header: 'Available hours', cell: (row) => formatHours(row.utilization.availableHours), numeric: true },
+  { header: 'Idle, Period to date', cell: (row) => formatHours(row.utilization.idleHoursToDate), numeric: true },
   { header: 'Idle, next 7 days', cell: (row) => (row.idle ? formatHours(row.idle.idleHours) : '—'), numeric: true },
   { header: 'Waiting lines', cell: (row) => row.waiting?.waiting ?? 0, numeric: true },
 ];

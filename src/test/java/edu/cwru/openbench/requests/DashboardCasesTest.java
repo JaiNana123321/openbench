@@ -19,6 +19,7 @@ import java.math.RoundingMode;
 import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -72,9 +73,8 @@ class DashboardCasesTest extends LoanEndWorldTest {
     }
 
     @Test
-    @DisplayName("dsh-utilization: utilization, idle capacity for seven days, and waiting lines per type; a Release shows at once")
-    // Partial: step 2, idle capacity for the Period to date (SRS Dashboard.Utilization), is not built yet.
-    @Verifies(value = "dsh-utilization", partial = true)
+    @DisplayName("dsh-utilization: utilization, idle capacity for the Period to date and for seven days, and waiting lines per type; a Release shows at once")
+    @Verifies("dsh-utilization")
     void reportsUtilizationIdleAndWaiting() throws Exception {
         long a1 = createDraft(as(alice));
         line(as(alice), a1, room, 1, at(e, 10), at(e, 14), roomA);
@@ -102,7 +102,11 @@ class DashboardCasesTest extends LoanEndWorldTest {
         assertThat(figure(waiting, "type", gpu, "waiting")).isEqualByComparingTo("0");
         assertThat(figure(waiting, "type", microscope, "waiting")).isEqualByComparingTo("0");
 
-        // 2. Idle capacity for the Period to date: not built yet (the test is partial).
+        // 2. Idle capacity for the Period to date: the Clock is 08:00 on the Period's first day, so h0 = 8
+        // and nothing is allocated before E: 2 x 8, 16 x 8, and 8.
+        assertThat(figure(utilization, "type", room, "idleHoursToDate")).isEqualByComparingTo("16");
+        assertThat(figure(utilization, "type", gpu, "idleHoursToDate")).isEqualByComparingTo("128");
+        assertThat(figure(utilization, "type", microscope, "idleHoursToDate")).isEqualByComparingTo("8");
         // 3. Idle capacity for the coming seven days: 2 x 168 - 4, 16 x 168 - 8, and 168.
         String idle = read(erin, "/api/dashboard/idle");
         assertThat(figure(idle, "type", room, "idleHours")).isEqualByComparingTo("332");
@@ -120,6 +124,16 @@ class DashboardCasesTest extends LoanEndWorldTest {
         idle = read(erin, "/api/dashboard/idle?days=7");
         assertThat(figure(idle, "type", gpu, "idleHours")).isEqualByComparingTo("2688");
         assertThat(figure(idle, "type", room, "idleHours")).isEqualByComparingTo("332");
+
+        // Beyond the case: at 13:00 on E, the room's allocated 10:00-13:00 counts against the Period to
+        // date and its 13:00-14:00 does not; the Released GPU line counts nothing.
+        LocalDate first = jdbc.queryForObject("SELECT starts_on FROM period WHERE id = ?", LocalDate.class, period);
+        movableClock.set(e.atTime(13, 0).atZone(clock.getZone()).toInstant());
+        long h0 = 24 * ChronoUnit.DAYS.between(first, e) + 13;
+        utilization = read(erin, "/api/dashboard/utilization");
+        assertThat(figure(utilization, "type", room, "idleHoursToDate")).isEqualByComparingTo(String.valueOf(2 * h0 - 3));
+        assertThat(figure(utilization, "type", gpu, "idleHoursToDate")).isEqualByComparingTo(String.valueOf(16 * h0));
+        assertThat(figure(utilization, "type", microscope, "idleHoursToDate")).isEqualByComparingTo(String.valueOf(h0));
     }
 
     @Test
@@ -280,7 +294,17 @@ class DashboardCasesTest extends LoanEndWorldTest {
                 VALUES (?, ?, 1000.00, 4000.00, 0, now())""", platform, period);
         ledger.postGrant(new TeamId(platform), new PeriodId(next),
                 Credits.of("200.00"), null, null);
+        // Before the next Period begins, its idle capacity to date is none.
+        String future = read(erin, "/api/dashboard/utilization?periodId=" + next);
+        assertThat(figure(future, "type", room, "idleHoursToDate")).isEqualByComparingTo("0");
         movableClock.set(endsOn.plusDays(1).atTime(9, 0).atZone(clock.getZone()).toInstant());
+
+        // Once a Period has ended, its idle capacity to date is its whole idle capacity.
+        String ended = read(erin, "/api/dashboard/utilization?periodId=" + period);
+        for (long type : List.of(room, microscope, gpu)) {
+            assertThat(figure(ended, "type", type, "idleHoursToDate"))
+                    .isEqualByComparingTo(figure(ended, "type", type, "idleHours"));
+        }
 
         dashboard(erin, "/api/dashboard/credits?periodId=" + period + "&teamId=" + platform)
                 .andExpect(jsonPath("$[0].grants").value(5000.00))

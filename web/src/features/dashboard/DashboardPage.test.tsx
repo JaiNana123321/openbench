@@ -18,7 +18,7 @@ const october: Period = { id: 10, startsOn: '2026-10-01', endsOn: '2026-10-31', 
 const november: Period = { id: 11, startsOn: '2026-11-01', endsOn: '2026-11-30', previous: 10 };
 const december: Period = { id: 12, startsOn: '2026-12-01', endsOn: '2026-12-31', previous: 11 };
 
-/** dsh-utilization in a 30-day November: Room A 4 of 1440 instance-hours, the GPU 8 of 11520 unit-hours. */
+/** dsh-utilization in a 30-day November at 08:00 on Nov 1: Room A 4 of 1440 instance-hours, the GPU 8 of 11520 unit-hours. */
 const utilization: TypeUtilization[] = [
   {
     type: 2,
@@ -29,6 +29,8 @@ const utilization: TypeUtilization[] = [
     availableHours: 720,
     allocatedHours: 0,
     idleHours: 720,
+    toDate: '2026-11-01T12:00:00Z',
+    idleHoursToDate: 8,
     utilizationPercent: 0,
   },
   {
@@ -40,6 +42,8 @@ const utilization: TypeUtilization[] = [
     availableHours: 11520,
     allocatedHours: 8,
     idleHours: 11512,
+    toDate: '2026-11-01T12:00:00Z',
+    idleHoursToDate: 128,
     utilizationPercent: 0.07,
   },
   {
@@ -51,6 +55,8 @@ const utilization: TypeUtilization[] = [
     availableHours: 1440,
     allocatedHours: 4,
     idleHours: 1436,
+    toDate: '2026-11-01T12:00:00Z',
+    idleHoursToDate: 16,
     utilizationPercent: 0.28,
   },
 ];
@@ -141,7 +147,7 @@ describe('DashboardPage', () => {
     vi.useRealTimers();
   });
 
-  it('shows the Capacity Planner utilization, idle week, and waiting lines per type, and every Team’s credits', async () => {
+  it('shows the Capacity Planner utilization, idle to date and next week, and waiting lines per type, and every Team’s credits', async () => {
     const server = mockApi({ 'GET /api/me': session(erin), ...dashboardApi });
     renderApp('/dashboard');
 
@@ -150,9 +156,11 @@ describe('DashboardPage', () => {
     expect(room).toHaveTextContent('0.28%');
     expect(room).toHaveTextContent('4.00');
     expect(room).toHaveTextContent('332.00');
+    expect(within(room).getAllByRole('cell').at(-3)).toHaveTextContent('16.00');
     expect(within(room).getAllByRole('cell').at(-1)).toHaveTextContent('1');
     expect(rowOf('Utilization', 'GPU')).toHaveTextContent('0.07%');
     expect(rowOf('Utilization', 'GPU')).toHaveTextContent('2,680.00');
+    expect(within(rowOf('Utilization', 'GPU')).getAllByRole('cell').at(-3)).toHaveTextContent('128.00');
     expect(rowOf('Utilization', 'Confocal microscope')).toHaveTextContent('0.00%');
 
     await screen.findByRole('table', { name: 'Team credits' });

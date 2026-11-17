@@ -756,7 +756,8 @@ export interface LedgerTransaction {
 /**
  * GET /api/dashboard/utilization?periodId=: one Exclusive or Metered type over a Period (the
  * current one by default). Available hours are capacity x 24 x the Period's days. Hours are
- * rounded to 2 decimals and the percentage to 2 decimals of a percent.
+ * rounded to 2 decimals and the percentage to 2 decimals of a percent. The Period to date runs from
+ * its start to `toDate` (now, held within the Period); `idleHoursToDate` is idle capacity over it.
  */
 export interface TypeUtilization {
   type: Id;
@@ -768,6 +769,8 @@ export interface TypeUtilization {
   allocatedHours: number;
   idleHours: number;
   utilizationPercent: number;
+  toDate: Instant;
+  idleHoursToDate: number;
 }
 
 /** GET /api/dashboard/idle?days=7: one type's idle hours from now over the coming days. */
