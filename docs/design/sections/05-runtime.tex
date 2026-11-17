@@ -84,7 +84,7 @@ Pending & Refusal with a Candidate left; \code{onWindowLapse}; a Required held l
 Pending & \code{decideApproval} (refuse) & No Candidate left, or a named Person & Refused & \code{Allocator.cancel} on every line; capacity offered. \\
 Waiting & \code{selectCandidates}, \code{onCapacityFreed} & Objection Window not lapsed; approvals outstanding & Pending & \code{routeApprovals}; \code{placeHolds} again; unfit Required lines stay on the Waitlist; window not restarted. \\
 Waiting & \code{onCapacityFreed}, \code{decideApproval} & Every Required line fits now and is approved & Allocated & \code{allocate} at the locked Quotes, rows written as ALLOCATED directly. \\
-Waiting & \code{reopenForEdit} & None & Draft & Lines leave the Waitlist; open approvals canceled. \\
+Waiting & \code{reopenForEdit} & No line Allocated, PartlyReleased, or Loaned & Draft & Lines leave the Waitlist; open approvals canceled. \\
 Waiting & \code{decideApproval} (refuse) & No Candidate left, or a named Person & Refused & As Pending to Refused. \\
 Waiting & \code{onWindowLapse} & An Outstanding approval not yet escalated & Waiting & \code{escalate} only; nothing held or released. \\
 Allocated & \code{applyBump} (Priority or tier) & The Bumped line is Required & Waiting & Full Refund; line Bumped then Waiting at the head of the Waitlist; other lines stay allocated. \\
@@ -92,7 +92,7 @@ Allocated & \code{releaseLine}, \code{endLoanEarly} & Part not yet consumed & Al
 Allocated & \code{decideApproval}, \code{onWindowLapse} on an open Optional Matched line & None & Allocated & Last approval: Loan formed, \code{postEarning}; refusal: replacement asked, or the line Dropped if no Candidate is left; lapse: \code{escalate} only. \\
 Draft & \code{withdraw} & None & Withdrawn & Nothing to release. \\
 Pending & \code{withdraw} & None & Withdrawn & \code{Allocator.cancel} on every line; capacity offered. \\
-Waiting & \code{withdraw} & None & Withdrawn & Lines leave the Waitlist; open approvals canceled. \\
+Waiting & \code{withdraw} & No line Allocated, PartlyReleased, or Loaned; after a Bump the Manager Releases those lines first & Withdrawn & Lines leave the Waitlist; open approvals canceled. \\
 \end{longtable}}
 
 \paragraph{Request Line.} Each line has its own state (\figref{fig:state-line}). A line is Draft until submission and Evaluated at once. An Exclusive or Metered line becomes Held, Allocated, or Waiting; a Held line becomes Allocated when the Request allocates, Evaluated when a lapse releases its Hold, and Waiting if it is Required and no longer fits, and a Waiting line becomes Held or Allocated when capacity frees. An Allocated or Held line can be Bumped, and passes through Bumped to Waiting at the head of its Waitlist in the same transaction, with two events; an Allocated line can be Released or PartlyReleased. A Matched line is AwaitingApproval, then Approved, then Loaned when the Request allocates, or at its last approval if it is an open Optional line of an Allocated Request; a Refused line returns to AwaitingApproval when a replacement is selected. An Optional line can be Dropped, and every line is Canceled when its Request is withdrawn (the lines of a Refused Request likewise). Allocation rows have a smaller state: HELD, ALLOCATED, RELEASED, BUMPED, or EXPIRED, and only HELD and ALLOCATED rows count against capacity.

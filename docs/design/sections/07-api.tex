@@ -176,7 +176,7 @@ GET & \path{/ledger/statements/{teamId}/{periodId}} & \code{MANAGER}, \code{PLAN
 POST & \path{/ledger/grants} & \code{PLANNER} & \code{postGrant} & mid-Period, with a reason \\
 \midrule
 \multicolumn{5}{@{}l}{\textbf{Dashboard} (\module{Dashboard}: \code{DashboardQueries}; UC-12; each answers a list of the types or Teams in scope)}\\
-GET & \path{/dashboard/utilization} & \code{MANAGER}, \code{RESOURCE\_\allowbreak OWNER}, \code{PLANNER} & \code{utilization} & Resource Owner: own types; \code{periodId}, \code{typeId} \\
+GET & \path{/dashboard/utilization} & \code{MANAGER}, \code{RESOURCE\_\allowbreak OWNER}, \code{PLANNER} & \code{utilization} & Resource Owner: own types; with idle for the Period to date; \code{periodId}, \code{typeId} \\
 GET & \path{/dashboard/idle} & as above & \code{idleNextDays} & \code{days}, default 7; \code{typeId} \\
 GET & \path{/dashboard/waiting} & as above & \code{waitingCount} & lines waiting per type; \code{typeId} \\
 GET & \path{/dashboard/credits} & \code{MANAGER}, \code{PLANNER} & \code{credits} & own Team; \code{PLANNER} any; \code{periodId}, \code{teamId} \\
