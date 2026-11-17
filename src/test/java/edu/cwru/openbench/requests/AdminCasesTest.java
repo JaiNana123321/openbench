@@ -163,11 +163,12 @@ class AdminCasesTest extends MatchedWorldTest {
         assertRecorded(changes.get(0), "ROLE_REVOKED", ritaId, "MEMBER, MANAGER, RESOURCE_OWNER", "MEMBER, MANAGER");
         assertRecorded(changes.get(1), "ROLE_GRANTED", ritaId, "MEMBER, MANAGER", "MEMBER, MANAGER, RESOURCE_OWNER");
 
-        // 5. Retire Product Design. The design retires only a Team without active Members (TEAM_NOT_EMPTY),
-        //    so Ben, its Manager and last Member, first moves back to Platform and leaves the role behind.
+        // 5. Retire Product Design while Ben is still in it: refused, since only a Team without active
+        //    Members is retired (TEAM_NOT_EMPTY).
         mvc.perform(post("/api/admin/teams/{id}/retire", design).with(as(carol)))
                 .andExpect(status().isUnprocessableEntity())
                 .andExpect(jsonPath("$.code").value("TEAM_NOT_EMPTY"));
+        // 6. Move Ben back to Platform (he leaves the Manager role behind), then retire Product Design.
         mvc.perform(post("/api/admin/members/{id}/move", benId).with(as(carol)).contentType(MediaType.APPLICATION_JSON)
                         .content("{\"teamId\": " + platform + "}"))
                 .andExpect(status().isOk())

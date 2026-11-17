@@ -151,8 +151,8 @@ class DashboardCasesTest extends LoanEndWorldTest {
     }
 
     @Test
-    @DisplayName("dsh-scope: a Manager sees every type and only their Team's credits; a Resource Owner their types and no credits")
-    @Verifies(value = "dsh-scope", partial = true)
+    @DisplayName("dsh-scope: a Manager sees every type and only their Team's credits; a Resource Owner their types and no credits; a Member no dashboard")
+    @Verifies("dsh-scope")
     void showsEachRoleItsScope() throws Exception {
         platformChargedAndRefunded();
         loanOfDave(e, e.plusDays(1));
@@ -183,9 +183,8 @@ class DashboardCasesTest extends LoanEndWorldTest {
         dashboard(dave, "/api/dashboard/credits").andExpect(status().isForbidden());
         dashboard(dave, "/api/dashboard/person-days").andExpect(status().isForbidden());
 
-        // 3. Ben, a Member with no other role: the design gives him no dashboard (its scope table and
-        // API table), and the SRS grants utilization only to Managers, the Planner, and Resource Owners;
-        // the case expects company-wide utilization. Refused here; reported on issue #14.
+        // 3. Ben, a Member with no other role: no dashboard; the API answers FORBIDDEN (design scope table
+        // and API table; SRS grants utilization only to Managers, the Planner, and Resource Owners).
         dashboard(ben, "/api/dashboard/utilization").andExpect(status().isForbidden());
         dashboard(ben, "/api/dashboard/idle").andExpect(status().isForbidden());
 

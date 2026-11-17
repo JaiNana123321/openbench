@@ -40,7 +40,7 @@ These cases establish that the dashboard reports utilization, idle capacity, and
 \tcsteps
 \tcstep{As \code{alice}, open the dashboard.}{None}{Company-wide utilization and idle capacity; credits and Loans for Platform only. Calling the API for Research's figures answers \code{NOT\_FOUND}.}
 \tcstep{As \code{dave}, open the dashboard.}{None}{Utilization and idle capacity of the Resources he owns; no Team credit figures.}
-\tcstep{As \code{ben}, open the dashboard.}{None}{Company-wide utilization and idle capacity only.}
+\tcstep{As \code{ben}, open the dashboard.}{None}{No dashboard: a Member without another role has none, and the API answers \code{FORBIDDEN}.}
 \tcfield{Pass criteria}{No viewer saw another Team's credits except the Capacity Planner.}
 \tcfield{Automated by}{None yet}
 \end{testcase}

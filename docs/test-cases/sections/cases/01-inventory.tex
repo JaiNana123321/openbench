@@ -107,13 +107,14 @@ These cases establish that Resource Types are data an Administrator defines with
 \end{testcase}
 
 \begin{testcase}{inv-holder}{Resource timeline shows free, on Hold, and allocated parts with their holders}{Inventory.View.Holder, Lifecycle.Hold.Place}
-\tcfield{Actor}{\code{ben} (Member); \code{dave} where named}
+\tcfield{Actor}{\code{dave} (Resource Owner of Room A); \code{ben} where named}
 \tcfield{Priority}{High}
 \tcfield{Preconditions}{\code{alice} has an Allocated Request A1 with Room A, D 10:00--12:00. \code{bob} has a Pending Request B1 with a Matched line (Java, quantity 1, days D to D+1) and Room A, D 14:00--16:00, so Room A is on Hold for B1.}
 \tcfield{Test data}{Window D 08:00--18:00.}
 \tcsteps
 \tcstep{Open Room A and show its timeline for the window.}{D 08:00--18:00}{08:00--10:00 free; 10:00--12:00 allocated to Platform, Request A1; 12:00--14:00 free; 14:00--16:00 on Hold for Research, Request B1; 16:00--18:00 free.}
+\tcstep{As \code{ben}, open the same timeline.}{D 08:00--18:00}{The same free, allocated, and on Hold parts, without the holding Team or Request: a Member does not see who holds a Resource.}
 \tcstep{As \code{dave}, check the notifications and the Request screens.}{None}{\code{dave} has no approval request for A1 or B1: a Resource Owner takes no part in allocation.}
-\tcfield{Pass criteria}{Every part of the window shows the right status and, where held or allocated, the Team and Request.}
+\tcfield{Pass criteria}{Every part of the window shows the right status and, where held or allocated, the Team and Request for the Resource Owner, and no holder for a Member.}
 \tcfield{Automated by}{None yet}
 \end{testcase}

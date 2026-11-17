@@ -75,7 +75,7 @@ class HolderCasesTest extends MatchedWorldTest {
                 .andExpect(jsonPath("$[3].team.name").value(teamName(research)))
                 .andExpect(jsonPath("$[3].request").value(b1));
 
-        // 1, as Ben, a Member: the same parts; the holding Team and Request are hidden from him (design
+        // 2. As Ben, a Member: the same parts; the holding Team and Request are hidden from him (design
         // Table "What each role sees": "Inventory open, holding Team and Request hidden").
         timeline(ben, roomA, at(d, 8), at(d, 18))
                 .andExpect(status().isOk())
@@ -94,7 +94,7 @@ class HolderCasesTest extends MatchedWorldTest {
                 .andExpect(jsonPath("$[1].request").value(a1))
                 .andExpect(jsonPath("$[3].request").value(b1));
 
-        // 2. Dave, the Resource Owner, has no approval request and no notice for A1 or B1, and no Request screen.
+        // 3. Dave, the Resource Owner, has no approval request and no notice for A1 or B1, and no Request screen.
         assertThat(notificationsOf(world.dave())).isEmpty();
         assertThat(jdbc.queryForObject("SELECT count(*) FROM approval WHERE approver_member_id = ?", Integer.class,
                 world.dave().id())).isZero();

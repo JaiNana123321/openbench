@@ -31,8 +31,9 @@ These cases establish that the Administrator manages Members, Teams, skills, and
 \tcstep{Move Ben to Product Design and grant him Manager.}{Ben, Manager}{Ben is the Manager of Product Design; Platform still has Alice as Manager. The change is recorded with actor, old and new value, and timestamp.}
 \tcstep{Grant Manager to Rita (Research).}{Rita, Manager}{Rita replaces Bob as Research's Manager; Bob keeps the role Member only. Research has exactly one Manager.}
 \tcstep{Grant and revoke Resource Owner for Rita.}{Rita}{Granted, then revoked; both recorded.}
-\tcstep{Retire Product Design.}{None}{Retired; its history is kept.}
-\tcfield{Pass criteria}{Every Team has exactly one Manager after each step.}
+\tcstep{Retire Product Design while Ben is still in it.}{None}{Refused with \code{TEAM\_NOT\_EMPTY}: only a Team without active Members is retired.}
+\tcstep{Move Ben back to Platform, then retire Product Design.}{Ben, Platform}{Ben is a Member of Platform with the role Member only, and Product Design has no Manager. Product Design is retired; its history is kept.}
+\tcfield{Pass criteria}{After each step, every Team with an active Member has exactly one Manager, and a Team with none has no Manager.}
 \tcfield{Automated by}{None yet}
 \end{testcase}
 
