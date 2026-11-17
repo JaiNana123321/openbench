@@ -73,7 +73,8 @@ class DashboardCasesTest extends LoanEndWorldTest {
 
     @Test
     @DisplayName("dsh-utilization: utilization, idle capacity for seven days, and waiting lines per type; a Release shows at once")
-    @Verifies("dsh-utilization")
+    // Partial: step 2, idle capacity for the Period to date (SRS Dashboard.Utilization), is not built yet.
+    @Verifies(value = "dsh-utilization", partial = true)
     void reportsUtilizationIdleAndWaiting() throws Exception {
         long a1 = createDraft(as(alice));
         line(as(alice), a1, room, 1, at(e, 10), at(e, 14), roomA);

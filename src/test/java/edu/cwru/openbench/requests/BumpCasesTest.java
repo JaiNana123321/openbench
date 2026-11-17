@@ -12,6 +12,7 @@ import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
+import java.util.Map;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
@@ -135,6 +136,16 @@ class BumpCasesTest extends BumpWorldTest {
         assertThat(refundsOf(gpuLine)).isEmpty();
         assertThat(rowStates(roomLine)).containsExactly("BUMPED");
         assertThat(account(operations)).isEqualTo(foldOfTransactions(operations));
+
+        // 4. Withdrawing O1 is refused while the GPU line is still allocated (#27); nothing changes.
+        Map<String, Object> before = account(operations);
+        withdraw(as(oscar), o1).andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("WRONG_STATE"));
+        detail(as(oscar), o1).andExpect(jsonPath("$.request.state").value("WAITING"))
+                .andExpect(jsonPath("$.lines[0].line.state").value("WAITING"))
+                .andExpect(jsonPath("$.lines[1].line.state").value("ALLOCATED"));
+        assertThat(waitlistEntryOf(roomLine)).containsExactly("true/false");
+        assertThat(account(operations)).isEqualTo(before);
     }
 
     @Test
