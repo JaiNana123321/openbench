@@ -8,7 +8,7 @@ On 2026-11-16 everything was updated from commit `7efcf2c`, all of it pending re
 - **`CONTEXT.md`** gains Service tier, Demand surcharge, Used units and other terms.
 - **The Functional Test Case Descriptions** become version 0.4. It tests SRS 0.5. Every case names the tests that automate it, three cases are corrected, and two steps are added: the withdraw rule of #27, and idle capacity for the Period to date, which is not built yet.
 
-On 2026-11-17 the design and the test cases were updated from commit `fbe4476`, the first push of this work to `swe_csds393`, still pending review. Design 1.2 (full edition) adds the withdraw rule of #27, how lines of one Request competing for the same capacity are held, and idle capacity for the Period to date in `TypeUtilization`. The test cases (still 0.4) name the build at `3fb9c25`, where `dsh-utilization` runs in full and 89 cases pass in full. The short editions are unchanged.
+On 2026-11-17 the design and the test cases were updated from commit `654f842` of `swe_csds393`, pushed there and still pending review. Design 1.2 (full edition) adds the withdraw rule of #27, how lines of one Request competing for the same capacity are held, and idle capacity for the Period to date in `TypeUtilization`. The test cases (still 0.4) name the build at `3010cb7`, where `dsh-utilization` runs in full and 89 cases pass in full. The short editions are unchanged.
 
 They are the specification this code implements. Change a requirement, a design decision, or a term in `swe_csds393` first, then copy the changed file here; do not edit the copies in place.
 

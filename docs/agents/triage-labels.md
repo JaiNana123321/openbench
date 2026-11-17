@@ -1,6 +1,6 @@
 # Triage Labels
 
-Every open issue carries exactly one `status:` label, which follows it through the workflow (see `issue-tracker.md`):
+Every issue carries exactly one `status:` label, which follows it through the workflow (see `issue-tracker.md`):
 
 | Label | Meaning |
 | --- | --- |
@@ -9,8 +9,9 @@ Every open issue carries exactly one `status:` label, which follows it through t
 | `status: in progress` | An agent or a teammate is working on it |
 | `status: in review` | The branch is done; the coordinator is reviewing it |
 | `status: blocked` | Waiting on another issue (`Depends on #n`) or a decision |
+| `status: closed` | Done; closed after Jai discussed it |
 
-When the work is merged, the label is left as it is: Jai discusses the issue and closes it by hand.
+When the work is merged, the label is left as it is: Jai discusses the issue and closes it. A closed issue's label becomes `status: closed`.
 
 `wontfix` marks an issue that will not be actioned.
 
