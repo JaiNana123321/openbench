@@ -39,6 +39,7 @@ import {
   useTeams,
   useUpdateSetting,
 } from './queries';
+import { SurchargeForm } from './SurchargeForm';
 import { TiersForm } from './TiersForm';
 
 /**
@@ -223,6 +224,7 @@ function TypePrices({ type, pricing }: { type: ResourceType; pricing: TypePricin
         />
       </div>
       {type.allocationClass === 'METERED' && <TiersForm typeId={type.id} tiers={pricing?.tiers ?? []} />}
+      <SurchargeForm typeId={type.id} rate={pricing?.surchargeRate ?? 0} />
       <BandsForm typeId={type.id} bands={pricing?.bands ?? []} />
       <RefundScheduleForm typeId={type.id} steps={pricing?.refundSchedule.steps ?? []} />
     </>
@@ -618,6 +620,7 @@ const TYPE_SETTINGS: Record<string, string> = {
   price_bands: 'Price Bands',
   refund_steps: 'Refund Schedule',
   tiers: 'Service tiers',
+  surcharge: 'Demand surcharge',
 };
 
 /** A setting's key in words, such as "Unit Price, Meeting room" for "unit_price.4". */

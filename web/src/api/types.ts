@@ -872,3 +872,15 @@ export interface LineEdit {
   /** A Metered line only; absent or null for no tier. */
   tierId?: Id | null;
 }
+
+// ---------------------------------------------------------------- Demand surcharge
+
+export interface TypePricing {
+  /** The demand surcharge rate, 0 when off: a Quote is multiplied by 1 + rate × the type's peak fill. */
+  surchargeRate?: number;
+}
+
+export interface RequestLine {
+  /** The demand surcharge multiplier in a Draft line's current Quote, such as 1.5; null when none applies or once locked. */
+  surcharge?: number | null;
+}

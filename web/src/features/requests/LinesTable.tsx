@@ -44,7 +44,7 @@ export function LinesTable({ requestId, lines, editable }: LinesTableProps) {
     },
     { header: 'Quantity', cell: (line) => amountText(line), numeric: true },
     { header: 'Window', cell: (line) => whenText(line) },
-    { header: 'Quote', cell: (line) => (line.quote === null ? 'No price' : formatCredits(line.quote)), numeric: true },
+    { header: 'Quote', cell: (line) => quoteText(line), numeric: true },
     {
       header: 'Required',
       cell: (line) =>
@@ -150,6 +150,18 @@ export function LinesTable({ requestId, lines, editable }: LinesTableProps) {
       <ProblemMessage error={suggestions.error} />
       <ProblemMessage error={setRequired.error ?? setPriority.error ?? split.error ?? remove.error} />
     </section>
+  );
+}
+
+/** The Quote, with the demand surcharge multiplier in it when one applies: "90.00 ×1.5 demand". */
+function quoteText(line: RequestLine) {
+  if (line.quote === null) return 'No price';
+  if (!line.surcharge) return formatCredits(line.quote);
+  return (
+    <>
+      {formatCredits(line.quote)}
+      <span className="quote-note">×{line.surcharge} demand</span>
+    </>
   );
 }
 
