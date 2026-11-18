@@ -110,7 +110,7 @@ export function RequestDetailView({ id }: { id: Id }) {
         </h2>
         <Table
           label="Lines"
-          columns={[...lineColumns(number), ...releaseColumns(releasable, setReleasing)]}
+          columns={[...lineColumns(number, lines), ...releaseColumns(releasable, setReleasing)]}
           rows={lines}
           rowKey={(line) => line.line.id}
           empty={<EmptyState title="This Request has no lines." />}
@@ -149,8 +149,8 @@ export function RequestDetailView({ id }: { id: Id }) {
   );
 }
 
-function lineColumns(number: Map<Id, number>): Column<LineDetail>[] {
-  return [
+function lineColumns(number: Map<Id, number>, lines: readonly LineDetail[]): Column<LineDetail>[] {
+  const columns: Column<LineDetail>[] = [
     { header: '#', cell: ({ line }) => number.get(line.id), numeric: true },
     { header: 'Resource Type', cell: ({ line }) => `${line.typeName} (${formatEnum(line.allocationClass)})` },
     {
@@ -202,11 +202,15 @@ function lineColumns(number: Map<Id, number>): Column<LineDetail>[] {
           </>
         ),
     },
-    {
+  ];
+  // The Waitlist column shows only while some line holds a waitlist position, to keep the table narrow.
+  if (lines.some((line) => line.waitlistPosition !== null)) {
+    columns.push({
       header: 'Waitlist',
       cell: ({ waitlistPosition }) => (waitlistPosition === null ? '—' : `Position ${waitlistPosition}`),
-    },
-  ];
+    });
+  }
+  return columns;
 }
 
 function eventText(event: RequestEvent, number: Map<Id, number>): string {
@@ -240,7 +244,7 @@ function releaseColumns(
       cell: (line) =>
         releasable(line) ? (
           <Button variant="secondary" onClick={() => onRelease(line.line.id)}>
-            Release…
+            Release line
           </Button>
         ) : null,
     },

@@ -24,8 +24,12 @@ export function AddPersonLineForm({ requestId }: { requestId: Id }) {
   const personType = (types.data ?? []).find((type) => type.allocationClass === 'MATCHED');
   if (!personType) return null;
 
-  function toggle(skill: Id) {
-    setChosen((current) => (current.includes(skill) ? current.filter((id) => id !== skill) : [...current, skill]));
+  function addSkill(skill: Id) {
+    setChosen((current) => (current.includes(skill) ? current : [...current, skill]));
+  }
+
+  function removeSkill(skill: Id) {
+    setChosen((current) => current.filter((id) => id !== skill));
   }
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -69,15 +73,46 @@ export function AddPersonLineForm({ requestId }: { requestId: Id }) {
         <div className="line-form">
           {by === 'skills' ? (
             <>
-              <fieldset className="choice-group" aria-label="Skills">
-                <legend className="field__label">Skills</legend>
-                {skills.data?.map((skill) => (
-                  <label key={skill.id}>
-                    <input type="checkbox" checked={chosen.includes(skill.id)} onChange={() => toggle(skill.id)} />{' '}
-                    {skill.name}
-                  </label>
-                ))}
-              </fieldset>
+              <div>
+                <Field label="Skills" error={fieldError(add.error, 'skills')}>
+                  <select
+                    value=""
+                    disabled={skills.isPending}
+                    onChange={(event) => {
+                      if (event.target.value !== '') addSkill(Number(event.target.value));
+                    }}
+                  >
+                    <option value="">{chosen.length === 0 ? 'Choose a skill' : 'Add another skill'}</option>
+                    {skills.data
+                      ?.filter((skill) => !chosen.includes(skill.id))
+                      .map((skill) => (
+                        <option key={skill.id} value={skill.id}>
+                          {skill.name}
+                        </option>
+                      ))}
+                  </select>
+                </Field>
+                {chosen.length > 0 && (
+                  <ul className="tags skill-chosen" aria-label="Chosen skills">
+                    {chosen.map((id) => {
+                      const name = skills.data?.find((skill) => skill.id === id)?.name ?? `Skill ${id}`;
+                      return (
+                        <li key={id} className="tag">
+                          {name}
+                          <button
+                            type="button"
+                            className="tag__remove"
+                            aria-label={`Remove ${name}`}
+                            onClick={() => removeSkill(id)}
+                          >
+                            ×
+                          </button>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                )}
+              </div>
               <Field label="People" hint="How many, all with every skill." error={fieldError(add.error, 'quantity')}>
                 <input
                   type="number"

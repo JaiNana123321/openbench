@@ -218,7 +218,14 @@ describe('Person lines in the Draft editor', () => {
     const server = serveDraft();
     const { user } = renderApp('/requests/42');
 
-    await user.click(await screen.findByRole('checkbox', { name: 'Statistics' }));
+    await screen.findByRole('option', { name: 'Statistics' });
+    const skillsSelect = screen.getByRole('combobox', { name: 'Skills' });
+    await user.selectOptions(skillsSelect, 'Statistics');
+    await user.selectOptions(skillsSelect, 'Java');
+    // A chosen skill leaves the dropdown and shows as a tag that can be removed.
+    expect(screen.queryByRole('option', { name: 'Statistics' })).toBeNull();
+    await user.click(screen.getByRole('button', { name: 'Remove Java' }));
+    expect(screen.getByRole('list', { name: 'Chosen skills' })).toHaveTextContent(/^Statistics×$/);
     const people = screen.getByLabelText(/^People$/);
     await user.clear(people);
     await user.type(people, '2');

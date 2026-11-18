@@ -10,8 +10,10 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.time.ZoneId;
+import java.time.temporal.TemporalAdjusters;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.IntStream;
@@ -216,6 +218,30 @@ class DemoSeedTest {
                 connection.rollback();
             }
         }
+    }
+
+    @Test
+    void seedsTheMatchedDataOfTheTestWorld() {
+        assertThat(demo.queryForList("""
+                SELECT s.name || ' by ' || m.username FROM skill s JOIN member m ON m.id = s.created_by
+                WHERE s.retired_at IS NULL ORDER BY s.id""", String.class))
+                .containsExactly("Statistics by carol", "Java by carol", "Microscopy by carol");
+        assertThat(demo.queryForList("""
+                SELECT m.username || ' ' || string_agg(s.name, ', ' ORDER BY s.name)
+                FROM member_skill ms JOIN member m ON m.id = ms.member_id JOIN skill s ON s.id = ms.skill_id
+                WHERE ms.created_by = ms.member_id GROUP BY m.id, m.username ORDER BY m.id""", String.class))
+                .containsExactly("ben Java", "rita Microscopy, Statistics", "dave Statistics");
+        // Each from the day of creation to D+60, D being the first Wednesday at least 14 days later.
+        LocalDate today = LocalDate.now(ZONE);
+        LocalDate dayD = today.plusDays(14).with(TemporalAdjusters.nextOrSame(DayOfWeek.WEDNESDAY));
+        assertThat(demo.queryForList("""
+                SELECT m.username || ' ' || a.from_date || ' to ' || a.to_date
+                FROM availability_range a JOIN member m ON m.id = a.member_id
+                WHERE a.created_by = a.member_id ORDER BY m.id""", String.class))
+                .containsExactly(
+                        "ben " + today + " to " + dayD.plusDays(60),
+                        "rita " + today + " to " + dayD.plusDays(60),
+                        "dave " + today + " to " + dayD.plusDays(60));
     }
 
     @Test

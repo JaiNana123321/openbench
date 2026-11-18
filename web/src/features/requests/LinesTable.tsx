@@ -95,7 +95,9 @@ export function LinesTable({ requestId, lines, editable }: LinesTableProps) {
         ),
     },
   ];
-  if (editable) {
+  // Only lines linked to an accepted Suggestion fill this column, so it shows only when one does.
+  const linked = new Set(suggestions.data?.map((s) => s.acceptedLineId));
+  if (editable && lines.some((line) => linked.has(line.id))) {
     columns.push({
       header: 'Suggestions',
       cell: (line) => (
@@ -110,6 +112,8 @@ export function LinesTable({ requestId, lines, editable }: LinesTableProps) {
         </ul>
       ),
     });
+  }
+  if (editable) {
     columns.push({
       header: 'Actions',
       cell: (line) => (

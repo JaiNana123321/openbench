@@ -51,10 +51,11 @@ export function DraftEditor({ view, totalsActions }: DraftEditorProps) {
         <div>
           <AddLineForm requestId={request.id} />
           <AddPersonLineForm requestId={request.id} />
-          <LinesTable requestId={request.id} lines={view.lines} editable />
         </div>
         <TotalsPanel view={view}>{totalsActions}</TotalsPanel>
       </div>
+      {/* Full width under the forms and totals: the table has ten columns. */}
+      <LinesTable requestId={request.id} lines={view.lines} editable />
     </>
   );
 }

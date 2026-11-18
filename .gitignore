@@ -8,6 +8,7 @@ target/
 node_modules/
 web/dist/
 web/coverage/
+demo-2-reports/
 
 # Local working notes (issue tracker, briefs, handoffs); see docs/agents/issue-tracker.md
 .scratch/

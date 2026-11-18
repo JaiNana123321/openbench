@@ -77,7 +77,7 @@ describe('RequestPage, Release', () => {
     const rows = within(await screen.findByRole('table', { name: 'Lines' })).getAllByRole('row').slice(1);
     expect(rows[0]).toHaveTextContent('Tue Oct 27, 14:00 to 16:00, 1 instance');
     expect(rows[1]).toHaveTextContent('4 units');
-    await user.click(within(rows[0]).getByRole('button', { name: 'Release…' }));
+    await user.click(within(rows[0]).getByRole('button', { name: 'Release line' }));
 
     expect(await screen.findByRole('heading', { name: 'Release line 1' })).toBeInTheDocument();
     expect(await screen.findByText('Expected Refund: 22.50 credits')).toBeInTheDocument();
@@ -91,7 +91,7 @@ describe('RequestPage, Release', () => {
     expect(posted.map((call) => call.path)).toEqual(['/api/requests/42/lines/101/release']);
     expect(JSON.parse(posted[0].body ?? '')).toEqual({ kind: 'WHOLE' });
     const after = within(await screen.findByRole('table', { name: 'Lines' })).getAllByRole('row').slice(1);
-    expect(within(after[0]).queryByRole('button', { name: 'Release…' })).not.toBeInTheDocument();
+    expect(within(after[0]).queryByRole('button', { name: 'Release line' })).not.toBeInTheDocument();
   });
 
   it('releases a Metered line’s hours after an earlier end', async () => {
@@ -101,7 +101,7 @@ describe('RequestPage, Release', () => {
     const { user } = renderApp('/requests/42');
 
     const rows = within(await screen.findByRole('table', { name: 'Lines' })).getAllByRole('row').slice(1);
-    await user.click(within(rows[1]).getByRole('button', { name: 'Release…' }));
+    await user.click(within(rows[1]).getByRole('button', { name: 'Release line' }));
     await user.selectOptions(screen.getByLabelText('Give back'), 'Everything after an earlier end');
     expect(screen.queryByRole('option', { name: 'Some occurrences' })).not.toBeInTheDocument();
     await user.type(screen.getByLabelText('New end'), '2026-10-28T09:00');
@@ -123,7 +123,7 @@ describe('RequestPage, Release', () => {
     const { user } = renderApp('/requests/42');
 
     const rows = within(await screen.findByRole('table', { name: 'Lines' })).getAllByRole('row').slice(1);
-    await user.click(within(rows[1]).getByRole('button', { name: 'Release…' }));
+    await user.click(within(rows[1]).getByRole('button', { name: 'Release line' }));
     await user.selectOptions(screen.getByLabelText('Give back'), 'Some units');
     expect(screen.getByText('From 1 to 3; the others are given back.')).toBeInTheDocument();
     await user.type(screen.getByLabelText('Units to keep'), '2');
@@ -131,7 +131,7 @@ describe('RequestPage, Release', () => {
     expect(server.callsTo('GET /api/requests/:id/lines/:line/release-preview').at(-1)?.query.get('newUnits')).toBe('2');
 
     await user.click(screen.getByRole('button', { name: 'Cancel' }));
-    await user.click(within(rows[0]).getByRole('button', { name: 'Release…' }));
+    await user.click(within(rows[0]).getByRole('button', { name: 'Release line' }));
     await user.selectOptions(screen.getByLabelText('Give back'), 'Some occurrences');
     await user.click(screen.getByRole('checkbox', { name: 'Tue Oct 27, 14:00 to 16:00' }));
     await screen.findByText(/Expected Refund/);
@@ -151,7 +151,7 @@ describe('RequestPage, Release', () => {
     const { user } = renderApp('/requests/42');
 
     const rows = within(await screen.findByRole('table', { name: 'Lines' })).getAllByRole('row').slice(1);
-    await user.click(within(rows[0]).getByRole('button', { name: 'Release…' }));
+    await user.click(within(rows[0]).getByRole('button', { name: 'Release line' }));
 
     expect(await screen.findByText('Every allocated occurrence of this line has started.')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Release' })).toBeDisabled();
@@ -161,13 +161,13 @@ describe('RequestPage, Release', () => {
     serve(erin);
     renderApp('/requests/42');
     expect(await screen.findByRole('table', { name: 'Lines' })).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Release…' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Release line' })).not.toBeInTheDocument();
   });
 
   it('offers no Release on waiting lines', async () => {
     serve(bob, bobWaiting);
     renderApp('/requests/43');
     expect(await screen.findByRole('table', { name: 'Lines' })).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Release…' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Release line' })).not.toBeInTheDocument();
   });
 });
