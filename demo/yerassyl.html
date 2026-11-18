@@ -7,6 +7,10 @@
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:ital,wght@0,400;0,600;1,400&family=IBM+Plex+Sans+Condensed:wght@600&family=IBM+Plex+Mono:wght@500&display=swap">
 <link rel="stylesheet" href="demo.css">
+<style>
+  .gist { border-left: 3px solid var(--accent); background: var(--soft); border-radius: 0 6px 6px 0; padding: 8px 12px; margin: 10px 0 12px; }
+  .gist p { margin: 3px 0; }
+</style>
 </head>
 <body>
 <main>
@@ -41,42 +45,56 @@
   <li class="say">Rules we follow: a commit names its issue as "Refs #n". Nothing closes automatically. An issue is closed only after the team discusses it, with a comment naming the commit that did the work.</li>
 </ol>
 
-<h2>2. A bug found by a test case: #18 <span class="when">25:00–26:00</span></h2>
+<h2>2. A bug found by a test case: #18 <span class="when">25:00–26:15</span></h2>
+<div class="gist">
+  <p><b>The bug, in one line:</b> you couldn't mark a room booking as Priority at all, because that part of the app hadn't been built.</p>
+  <p><b>The fix, in one line:</b> we built it: a Priority checkbox on room lines, the server call behind it, and a refusal for GPU lines.</p>
+</div>
 <ol>
   <li>Tab 2, #18 "TC-DRF-04 drf-line-options: a Draft line cannot be marked Priority".
     <span class="see">Labels bug, module:requests, web. Body fields: Case, Build, Step, Expected, Observed, Evidence, Notes.</span></li>
-  <li class="say">On 7 November, while automating test case TC-DRF-04, the test for step 6 failed: marking a line Priority answered 404, because the endpoint didn't exist yet. We disabled the test with a reason, and the run report showed the case as partial. Then we filed this issue.</li>
-  <li class="say">The report says which case, which build, which step, what was expected, and what we observed, with the error as evidence. Anyone can reproduce it from this alone.</li>
+  <li class="say"><b>The rule.</b> A Manager can mark a room booking as Priority. It costs twice as much, and in return it can take the room from an ordinary booking. Compute, like GPUs, can't be Priority. You saw this in Jai's demo.</li>
+  <li class="say"><b>What went wrong.</b> Test case TC-DRF-04 checks that rule from both sides: a room line can be marked Priority, and a GPU line is refused. When we automated it on 7 November, the test failed with "404 Not Found". The double price and the database field were already there, but nothing let a user mark a line Priority. There was no checkbox and no server call.</li>
+  <li class="say"><b>How we recorded it.</b> We switched off just that one test and gave the reason, so the run report showed the case as only partly passing instead of hiding the failure. Then we filed this issue. It names the test case, the build, the step, what we expected, and what we actually saw, with the error message as evidence. Anyone can reproduce it from the issue alone.</li>
+  <li class="say"><b>The fix.</b> We added the checkbox on room lines and the server call behind it. Ticking it doubles the Quote, 30 credits to 60. GPU lines get no checkbox, and if anyone tries through the server, it refuses with PRIORITY_NOT_OFFERED. We switched the test back on, and it passes.</li>
   <li>Scroll to the timeline.
     <span class="see">status: ready (7 Nov) → in progress (12 Nov) → in review (15 Nov) → closed (17 Nov).</span>
-    <span class="say">It's fixed now. The Priority line Jai bumped oscar with is this feature.</span></li>
+    <span class="say">Ready when filed, in progress while we built it, in review once it passed, and closed after the team discussed it. The Priority booking Jai used to bump oscar is this fix.</span></li>
 </ol>
 
-<h2>3. One bug through its whole life: #27 <span class="when">26:00–27:45</span></h2>
+<h2>3. One bug through its whole life: #27 <span class="when">26:15–28:00</span></h2>
+<div class="gist">
+  <p><b>The bug, in one line:</b> if a Request was bumped and then withdrawn, its GPUs stayed reserved for nobody, and the 60 credits paid for them were never refunded.</p>
+  <p><b>The fix, in one line:</b> withdrawing is now refused until the Manager releases the GPUs, which refunds them and frees them for others.</p>
+</div>
 <ol>
   <li>Tab 3, #27 "Withdrawing a Waiting Request after a Bump leaves its Allocated lines charged and holding capacity".
     <span class="see">Labels bug, module:allocation, module:requests.</span></li>
-  <li>Read the structure aloud, briefly.
-    <span class="say"><b>Found:</b> by code reading at the merge of the Bump feature. <b>How it happens:</b> three steps, the same ones Jai did with oscar. <b>Expected:</b> a defined outcome. <b>Observed:</b> withdrawing canceled the GPU line on paper, but its 60.00 Charge stood with no Refund and its 4 units stayed blocked.</span></li>
+  <li class="say"><b>The setup, which you saw live.</b> Oscar booked a room and 4 GPUs, and paid for both. Then alice took the room with a Priority booking. Oscar got the room's money back, and the Request went back to Waiting for a room. The GPUs stayed booked and paid for. All of that is correct.</li>
+  <li class="say"><b>What went wrong.</b> Before the fix, if Oscar then withdrew the Request, the screen said the GPU line was canceled. But the system never actually let go of the GPUs. The 4 GPUs stayed blocked for nobody, Oscar's 60 credits were never refunded, and nobody waiting for GPUs was offered them.</li>
+  <li class="say"><b>Why it happened.</b> Withdrawing was written for a Request that is Waiting, and a Waiting Request normally holds nothing for certain. So withdrawing only cleared tentative holds. A Bump is the one way a Waiting Request can still own a confirmed booking, and the code didn't handle that case.</li>
+  <li class="say"><b>How we found it.</b> Not by a test. We found it by reading the code when the Bump feature was merged. That's why the issue lists the three steps to reproduce it by hand, and says no test covered it yet.</li>
   <li>Point at "Decision needed".
-    <span class="say">The design didn't say what should happen, so we didn't guess. The issue offered two options, and it started as <b>blocked</b>, waiting for a decision.</span></li>
+    <span class="say">The design didn't say what should happen here, so we didn't guess. The issue offered two choices: refuse the withdrawal until the GPUs are released, or release them automatically with a refund. It stayed <b>blocked</b> until the team decided.</span></li>
+  <li class="say"><b>The fix.</b> We chose to refuse. Withdrawing now says "Release its allocated lines first". The Manager releases the GPU line, which refunds it under the normal refund rules and offers the GPUs to whoever is waiting. Then the withdrawal goes through. It's the smallest change, and Edit already refuses in exactly this situation, so the two now behave the same way.</li>
+  <li class="say"><b>How we know it's fixed.</b> We wrote a test that follows the same three steps. Before the fix, it failed: the withdrawal went through. Now the withdrawal is refused and nothing changes. After the GPUs are released, the withdrawal works. Jai showed that refusal live.</li>
   <li>Scroll the timeline and read the status changes.
     <div class="scroll"><table>
       <thead><tr><th>When (ET)</th><th>Status</th><th>Why</th></tr></thead>
       <tbody>
-        <tr><td>16 Nov, 10:45 pm</td><td>blocked</td><td>Filed; waiting for a decision on the rule</td></tr>
-        <tr><td>16 Nov, 11:02 pm</td><td>in progress</td><td>Decided: option 1, refuse with WRONG_STATE</td></tr>
-        <tr><td>16 Nov, 11:05 pm</td><td>in review</td><td>Fix and test written; comment with the new rule</td></tr>
+        <tr><td>16 Nov, 10:45 pm</td><td>blocked</td><td>Filed; waiting for the team to choose a rule</td></tr>
+        <tr><td>16 Nov, 11:02 pm</td><td>in progress</td><td>Decided: refuse the withdrawal (option 1)</td></tr>
+        <tr><td>16 Nov, 11:05 pm</td><td>in review</td><td>Fix and test written; comment states the new rule</td></tr>
         <tr><td>17 Nov, 3:01 pm</td><td>—</td><td>Commits pushed: <code>a252f40</code> fix, <code>5f3adbd</code> merge, <code>96cd79f</code> the test step</td></tr>
         <tr><td>17 Nov, 3:03 pm</td><td>closed</td><td>Closing comment names the merge commit</td></tr>
       </tbody>
     </table></div></li>
   <li>Click commit <code>a252f40</code> in the timeline.
     <span class="see">The commit message ends with "Refs #27".</span>
-    <span class="say">Every link from issue to code goes both ways. And the fix also added a step to test case TC-EXC-08, so this bug can't come back unnoticed. Jai showed that refusal live, and Brian's run covered it.</span></li>
+    <span class="say">The issue links to the code, and the code links back to the issue. The fix also added this step to test case TC-EXC-08, so if the bug ever comes back, the test suite will catch it. Brian's run included it.</span></li>
 </ol>
 
-<h2>4. Tracking the spec, too: #17 <span class="when">27:45–28:30</span></h2>
+<h2>4. Tracking the spec, too: #17 <span class="when">28:00–28:30</span></h2>
 <ol>
   <li>Tab 4, #17 "Spec drift to carry into swe_csds393".
     <span class="say">When the code had to decide something the spec didn't, we logged it here, one comment per merged feature. Then we updated the SRS and design and noted it here. It's the only open issue, because a few designed extras aren't built.</span></li>
