@@ -38,7 +38,7 @@
       </tbody>
     </table></div>
   </li>
-  <li><b>Date fields</b> are date-and-time pickers. Click the field and type the digits: in Chrome (US) <kbd>12 02 2026 10 00 AM</kbd> fills "12/02/2026, 10:00 AM". Start and End keep the previous line's values, so often you only change the hour.</li>
+  <li><b>Date fields</b> are date-and-time pickers. Click the field and type the digits: in Chrome (US) <kbd>12 02 2026 10 00 AM</kbd> fills "12/02/2026, 10:00 AM". Start and End keep the previous line's values, so often you only change the hour. The Person line's First day and Last day are plain dates: <kbd>12 02 2026</kbd>.</li>
   <li>Prices to remember: room 10.00 per hour, GPU 5.00 per unit-hour, microscope 40.00 per hour. Weekdays 09:00–17:00 cost ×1.5, other hours ×1.0, and Priority costs ×2.</li>
 </ol>
 
@@ -62,6 +62,9 @@
   <li>Add a line: <b>GPU</b>, <b>Units</b> 4 (the field is called Units for GPU), Dec 2 <b>16:00–18:00</b> → Add line.
     <span class="see">Quote 50.00. No Priority box on this row.</span>
     <span class="say">16:00 to 17:00 is a daytime hour: 4 × 5.00 × 1.5 = 30. 17:00 to 18:00 is not: 4 × 5.00 = 20. Total 50.00. Priority is offered only on Exclusive lines, so the GPU row has no Priority box.</span></li>
+  <li>Scroll to <b>Add a Person line</b>. Ask for "People with these skills", choose <b>Statistics</b> from the Skills dropdown, People 1, First day <b>Dec 2</b>, Last day <b>Dec 3</b> → <b>Add Person line</b>.
+    <span class="see">The dropdown offers Statistics, Java, Microscopy; Statistics then shows as a tag under it. Line 3: Person (Matched), Statistics, 1 Person, Dec 2, 2026 to Dec 3, 2026, Quote "No price", Required.</span>
+    <span class="say">The third class is People. A Person line asks for skills over whole days. It has no Quote: borrowing a person costs our Team nothing. On submission the system builds a Shortlist of people with those skills from other Teams, their Manager approves, and the lending Team earns the Day Rate, 400.00 credits per person-day.</span></li>
   <li>Point at <b>Totals</b>.
     <span class="see">Required lines 80.00 · Optional lines 0.00 · Available Balance 5,000.00 · "The Required lines fit the Available Balance."</span></li>
   <li>Leave it as a Draft. Don't submit.</li>
@@ -99,7 +102,7 @@
     <span class="say"><b>Expected:</b> Room A is taken from 10:00 to 12:00, so bob's 11:00 to 13:00 can't have it and he waits at position 1. <b>Observed:</b> Waiting, position 1, and nothing charged.</span></li>
   <li><b>Tab 4, erin:</b> Inventory → <b>Room A</b>. Under Timeline, From and To start at today; set From <b>Dec 2, 08:00</b> and To <b>Dec 2, 18:00</b> → <b>Show timeline</b>.
     <span class="see">"Wed Dec 2, 08:00 to 10:00 Free" · "10:00 to 12:00 Allocated, Platform, Request #3" · "12:00 to 18:00 Free". Bob holds nothing.</span></li>
-  <li><b>Tab 1, alice:</b> open Request #3 → line 1 → <b>Release…</b> → Give back "The whole line".
+  <li><b>Tab 1, alice:</b> open Request #3 → line 1 → <b>Release line</b> → Give back "The whole line".
     <span class="see">The form shows "Expected Refund: 22.50 credits of 30.00" and "75% of 30.00 = 22.50".</span>
     → <b>Release</b>.
     <span class="see">"The line is now Released. A Refund of 22.50 credits was posted." The line's state is Released.</span>
@@ -124,7 +127,7 @@
     <span class="see">Request #6 Allocated, on Room B.</span>
     <span class="say"><b>Expected:</b> each room needs one Bump, and oscar's line was submitted later, so oscar is bumped, not bob. <b>Observed:</b> alice got Room B.</span></li>
   <li><b>Tab 3, oscar:</b> <b>Notifications</b>.
-    <span class="see">"Line 7 (Room B, Wed 2 Dec 2026, 10:00 to 12:00) of Request 5 was Bumped by a Priority line. Full Refund of 30.00 credits; position 1 on the waitlist."</span></li>
+    <span class="see">"Line 8 (Room B, Wed 2 Dec 2026, 10:00 to 12:00) of Request 5 was Bumped by a Priority line. Full Refund of 30.00 credits; position 1 on the waitlist."</span></li>
   <li>Open Request #5.
     <span class="see">Request Waiting. Room line "Waiting, Bumped by a Priority line", Waitlist Position 1. GPU line still Allocated. History: "Alice Chen: Line 1 Allocated to Bumped … full Refund of 30.00 credits".</span></li>
   <li>Statement.
